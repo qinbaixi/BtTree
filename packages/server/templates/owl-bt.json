@@ -14,26 +14,26 @@
             "name": "Selector",
             "icon": "question",
             "isComposite": true,
-            "description": "Runs children in order until one succeeds"
+            "description": "依次执行子节点，直到有一个成功"
         },
         {
             "name": "Sequence",
             "icon": "arrow-right",
             "isComposite": true,
-            "description": "Runs children in order until one fails"
+            "description": "依次执行子节点，直到有一个失败"
         },
         {
             "name": "Parallel",
             "icon": "bars",
             "isComposite": true,
-            "description": "Runs all children at once",
+            "description": "同时执行所有子节点",
             "properties": [
                 {
                     "name": "Policy",
                     "type": "enum",
                     "values": ["RequireOne", "RequireAll"],
                     "default": "RequireOne",
-                    "description": "How many children must succeed"
+                    "description": "需要多少个子节点成功"
                 }
             ]
         },
@@ -42,13 +42,13 @@
             "icon": "shuffle",
             "color": "#c6a35c",
             "isComposite": true,
-            "description": "Runs children in random order, weighted by {{Weights}}",
+            "description": "按权重 {{Weights}} 随机顺序执行子节点",
             "properties": [
                 {
                     "name": "Weights",
                     "type": "string",
                     "default": "",
-                    "description": "Comma separated weights, one per child"
+                    "description": "逗号分隔的权重，每个子节点一个"
                 }
             ]
         },
@@ -61,7 +61,7 @@
                     "name": "Async",
                     "type": "bool",
                     "default": false,
-                    "description": "Action finishes in a later tick"
+                    "description": "动作在之后的 tick 中完成"
                 }
             ]
         },
@@ -69,7 +69,7 @@
             "name": "Wait",
             "base": "ActionBase",
             "icon": "hourglass-half",
-            "description": "Wait {{Duration}}s",
+            "description": "等待 {{Duration}} 秒",
             "properties": [
                 {
                     "name": "Duration",
@@ -84,7 +84,7 @@
             "name": "Log",
             "base": "ActionBase",
             "icon": "message",
-            "description": "Log [{{Level}}] {{Message}}",
+            "description": "输出日志 [{{Level}}] {{Message}}",
             "properties": [
                 {
                     "name": "Message",
@@ -103,7 +103,7 @@
             "name": "MoveTo",
             "base": "ActionBase",
             "icon": "person-walking",
-            "description": "Move to {{Target}} at speed {{Speed}}",
+            "description": "以速度 {{Speed}} 移动到 {{Target}}",
             "properties": [
                 {
                     "name": "Target",
@@ -129,7 +129,7 @@
             "name": "SetBlackboardValue",
             "base": "ActionBase",
             "icon": "pen",
-            "description": "{{Key}} = {{Value}}",
+            "description": "设置黑板值 {{Key}} = {{Value}}",
             "properties": [
                 {
                     "name": "Key",
@@ -147,19 +147,19 @@
             "name": "Succeed",
             "base": "ActionBase",
             "icon": "check",
-            "description": "Always succeeds"
+            "description": "总是成功"
         },
         {
             "name": "Fail",
             "base": "ActionBase",
             "icon": "xmark",
-            "description": "Always fails"
+            "description": "总是失败"
         },
         {
             "name": "RandomChance",
             "base": "ActionBase",
             "icon": "dice",
-            "description": "Succeeds with chance {{Chance}}",
+            "description": "以 {{Chance}} 的概率成功",
             "properties": [
                 {
                     "name": "Chance",
@@ -185,7 +185,7 @@
         {
             "name": "IsBlackboardValueSet",
             "icon": "table",
-            "description": "Is blackboard value \"{{Field}}\" set",
+            "description": "黑板值 \"{{Field}}\" 已设置",
             "properties": [
                 {
                     "name": "Field",
@@ -196,7 +196,7 @@
         {
             "name": "Cooldown",
             "icon": "clock",
-            "description": "Cooldown {{Seconds}}s",
+            "description": "冷却 {{Seconds}} 秒",
             "properties": [
                 {
                     "name": "Seconds",
@@ -210,7 +210,7 @@
             "name": "Loop",
             "icon": "repeat",
             "color": "#6fa8c6",
-            "description": "Loop {{Count}} times",
+            "description": "循环 {{Count}} 次",
             "properties": [
                 {
                     "name": "Count",
@@ -222,14 +222,14 @@
                     "name": "Infinite",
                     "type": "bool",
                     "default": false,
-                    "description": "Loop forever, ignoring Count"
+                    "description": "无限循环，忽略 Count"
                 }
             ]
         },
         {
             "name": "TimeLimit",
             "icon": "stopwatch",
-            "description": "Time limit {{Seconds}}s",
+            "description": "限时 {{Seconds}} 秒",
             "properties": [
                 {
                     "name": "Seconds",
@@ -244,7 +244,7 @@
         {
             "name": "Sample service",
             "icon": "gear",
-            "description": "Sample service",
+            "description": "示例服务",
             "properties": [
                 {
                     "name": "BlackboardKey",
@@ -256,7 +256,7 @@
         {
             "name": "UpdateTarget",
             "icon": "crosshairs",
-            "description": "Update {{Key}} within {{Range}}",
+            "description": "更新 {{Range}} 范围内的 {{Key}}",
             "properties": [
                 {
                     "name": "Key",
@@ -274,7 +274,7 @@
         {
             "name": "LogTick",
             "icon": "message",
-            "description": "Tick: {{Message}}",
+            "description": "每次 tick 输出：{{Message}}",
             "properties": [
                 {
                     "name": "Message",

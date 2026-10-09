@@ -18,16 +18,11 @@ import {
   type ZoomTransform,
 } from 'd3-zoom';
 import { forEachNode, type Selection, type TreeNode } from '@owlbt/shared';
+import { inspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import { CanvasController, TreeCanvasContext, type ContextMenuHandler } from './canvasController';
-import {
-  computeTreeLayout,
-  linkPath,
-  MIN_CANVAS_SIZE,
-  type Size,
-  type TreeLayout,
-} from './layout';
+import { computeTreeLayout, linkPath, MIN_CANVAS_SIZE, type Size, type TreeLayout } from './layout';
 import { TreeNodeView } from './TreeNodeView';
 import { viewportStore } from './viewportStore';
 import styles from './TreeCanvas.module.css';
@@ -35,6 +30,8 @@ import styles from './TreeCanvas.module.css';
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 2;
 export const FOCUS_MOVE_DURATION = 300;
+/** Spacing of the background dot grid at zoom 1 (CSS px). Matches TreeCanvas.module.css. */
+const GRID_SIZE = 16;
 /** Distance from the top of the canvas to a focused node. */
 export const FOCUS_TOP_OFFSET = 100;
 
@@ -91,10 +88,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const layoutRef = useRef<TreeLayout>(undefined);
   const centeredRef = useRef(false);
 
-  const layout = useMemo(
-    () => (root ? computeTreeLayout(root, sizes) : undefined),
-    [root, sizes],
-  );
+  const layout = useMemo(() => (root ? computeTreeLayout(root, sizes) : undefined), [root, sizes]);
 
   const nodes = useMemo(() => {
     const list: TreeNode[] = [];
@@ -103,7 +97,6 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     }
     return list;
   }, [root]);
-
 
   const centerOn = useCallback((nodeId: string, duration = 0) => {
     const container = containerRef.current;
@@ -140,6 +133,9 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
         const t = event.transform;
         transformRef.current = t;
         content.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.k})`;
+        // The dot grid moves and scales with the content.
+        container.style.backgroundPosition = `${t.x}px ${t.y}px`;
+        container.style.backgroundSize = `${GRID_SIZE * t.k}px ${GRID_SIZE * t.k}px`;
       });
     zoomRef.current = behavior;
     const containerSelection = select(container).call(behavior).on('dblclick.zoom', null);
@@ -209,6 +205,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const onBackgroundClick = () => {
     if (!controller.isPanned()) {
       treeStore.getState().select(undefined);
+      inspectStore.getState().clear();
     }
   };
 
@@ -216,6 +213,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     event.preventDefault();
     if (!controller.isPanned()) {
       treeStore.getState().select(undefined);
+      inspectStore.getState().clear();
       controller.openContextMenu(undefined, event.clientX, event.clientY);
     }
   };

@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
 import { fuzzyFilter, highlightMatches } from '@owlbt/shared';
 import { dialogStore, useDialogStore, type FuzzyItem } from '../../store/dialogStore';
 import styles from './FuzzyDialog.module.css';
@@ -117,10 +124,12 @@ export function FuzzyDialog({ items, onAccept, onClose, label = 'Select item' }:
               aria-selected={i === active}
               data-selected={i === active ? 'true' : undefined}
               className={`${styles.item} ${item.color ? styles.colored : ''} ${i === active ? styles.selected : ''}`}
-              style={item.color ? { borderLeftColor: item.color } : undefined}
+              style={item.color ? ({ '--item-color': item.color } as CSSProperties) : undefined}
               onClick={() => onAccept(item.id)}
             >
-              {item.icon && <i className={`fa-solid fa-${item.icon} ${styles.icon}`} aria-hidden="true" />}
+              {item.icon && (
+                <i className={`fa-solid fa-${item.icon} ${styles.icon}`} aria-hidden="true" />
+              )}
               <span className={styles.label}>
                 {highlightMatches(item.name, filter).map((part, partIndex) =>
                   part.match ? (
@@ -130,7 +139,7 @@ export function FuzzyDialog({ items, onAccept, onClose, label = 'Select item' }:
                   ),
                 )}
               </span>
-              {item.hint && <span className={styles.hint}>{item.hint}</span>}
+              {item.hint && <kbd className={styles.hint}>{item.hint}</kbd>}
             </li>
           ))}
         </ul>

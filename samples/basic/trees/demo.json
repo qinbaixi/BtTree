@@ -2,7 +2,7 @@
   "type": "Selector",
   "name": "rootNode",
   "label": "Root",
-  "comment": "Guard behaviour tree demo",
+  "comment": "守卫行为树示例",
   "services": [
     {
       "type": "Sample service",
@@ -21,7 +21,7 @@
     {
       "type": "Sequence",
       "label": "Patrol",
-      "comment": "Walk the route while points remain",
+      "comment": "还有巡逻点时沿路线行走",
       "decorators": [
         {
           "type": "IsBlackboardValueSet",
@@ -74,7 +74,7 @@
             {
               "type": "MoveTo",
               "label": "Back off",
-              "comment": "Retreat when hurt",
+              "comment": "受伤时撤退",
               "properties": [
                 { "name": "Target", "value": "Cover" },
                 { "name": "Speed", "value": 80 }
@@ -130,7 +130,7 @@
     {
       "type": "Wait",
       "label": "Idle",
-      "comment": "Fallback",
+      "comment": "兜底行为",
       "properties": [{ "name": "Timeout", "value": 1.5 }],
       "notes": "unknown field, kept as-is on save"
     }

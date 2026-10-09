@@ -23,6 +23,7 @@ import {
 } from '@owlbt/shared';
 import { focusNode } from '../components/TreeCanvas/viewportStore';
 import { readClipboard, writeClipboard } from '../lib/clipboard';
+import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
 import { getSelectedItem, selectCanRedo, selectCanUndo } from '../store/treeStore';
 import {
@@ -411,7 +412,10 @@ const setNodeTypeCommand: Command = {
     const node = target.node;
     const current = getItemType(project, 'node', node.type);
     const types = listNodeChoices(project)
-      .filter((choice) => choice.type.isComposite === current.isComposite && choice.type.name !== node.type)
+      .filter(
+        (choice) =>
+          choice.type.isComposite === current.isComposite && choice.type.name !== node.type,
+      )
       .sort((a, b) => compareStrings(a.type.name, b.type.name));
     const nodeId = node.id;
 
@@ -459,6 +463,28 @@ const commandPalette: Command = {
   },
 };
 
+export const THEME_COMMAND_IDS: Record<ThemeId, string> = {
+  light: 'core:ThemeLight',
+  classic: 'core:ThemeClassic',
+};
+
+/** Switches the color theme. Always executable, so they also appear in the command palette. */
+function themeCommand(theme: ThemeId, name: string): Command {
+  return {
+    id: THEME_COMMAND_IDS[theme],
+    name,
+    canExec() {
+      return true;
+    },
+    exec() {
+      setTheme(theme);
+    },
+  };
+}
+
+const themeLight = themeCommand('light', 'Theme: Light');
+const themeClassic = themeCommand('classic', 'Theme: Classic dark');
+
 /** All core commands. Registered in the command registry when this module is loaded. */
 export const coreCommands: Command[] = [
   add,
@@ -479,6 +505,8 @@ export const coreCommands: Command[] = [
   focusSelected,
   setNodeTypeCommand,
   commandPalette,
+  themeLight,
+  themeClassic,
 ];
 
 for (const command of coreCommands) {

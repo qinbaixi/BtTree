@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react';
 import {
   getEffectiveValue,
   getItemType,
@@ -10,15 +10,27 @@ import {
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
+import { useInspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
-import { getSelectedItem, treeStore, useSelectedItem, type SelectedItem } from '../../store/treeStore';
+import {
+  getSelectedItem,
+  treeStore,
+  useSelectedItem,
+  useTreeStore,
+  type SelectedItem,
+} from '../../store/treeStore';
+import { TreeOverview } from './TreeOverview';
+import { TypeDetails } from './TypeDetails';
 import styles from './PropertyPanel.module.css';
 
 /**
  * Applies a change to the selected item as one undoable step labelled `label`.
  * Returns false when nothing was selected or nothing changed.
  */
-export function commitToSelection(label: string, change: (target: TreeNode | SubItem) => void): boolean {
+export function commitToSelection(
+  label: string,
+  change: (target: TreeNode | SubItem) => void,
+): boolean {
   const { selection } = treeStore.getState();
   if (!selection) {
     return false;
@@ -40,12 +52,26 @@ function parseNumberInput(raw: string): number | null | undefined {
   return Number.isFinite(value) ? value : undefined;
 }
 
+/**
+ * Shows, in order of precedence: the definition of an inspected type (from the palette), the
+ * editor of the selected item, or the tree overview.
+ */
 export default function PropertyPanel() {
   const selected = useSelectedItem();
   const project = useProjectStore((state) => state.project);
+  const inspected = useInspectStore((state) => state.inspected);
+  const root = useTreeStore((state) => state.root);
 
+  if (inspected) {
+    if (!project) {
+      return <p className={styles.hint}>Loading project...</p>;
+    }
+    return (
+      <TypeDetails kind={inspected.kind} name={inspected.name} project={project} root={root} />
+    );
+  }
   if (!selected) {
-    return <p className={styles.hint}>Select a node in the tree view</p>;
+    return <TreeOverview project={project} root={root} />;
   }
   if (!project) {
     return <p className={styles.hint}>Loading project...</p>;
@@ -66,8 +92,10 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
 
   return (
     <div className={styles.details}>
-      <div className={styles.header} style={{ borderLeftColor: type.color }}>
-        {type.icon && <i className={`fa-solid fa-${type.icon} ${styles.icon}`} aria-hidden="true" />}
+      <div className={styles.header} style={{ '--item-color': type.color } as CSSProperties}>
+        <span className={styles.badge}>
+          {type.icon && <i className={`fa-solid fa-${type.icon}`} aria-hidden="true" />}
+        </span>
         <span className={styles.typeName}>{item.type}</span>
         <span className={styles.kind}>{selected.kind}</span>
       </div>
@@ -80,14 +108,34 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
 
         {selected.kind === 'decorator' && sub && (
           <>
-            <CheckRow itemId={itemId} field="inverseCheckCondition" label="Inverse check condition" checked={sub.inverseCheckCondition === true} />
-            <CheckRow itemId={itemId} field="periodic" label="Periodic check" checked={sub.periodic === true} />
+            <CheckRow
+              itemId={itemId}
+              field="inverseCheckCondition"
+              label="Inverse check condition"
+              checked={sub.inverseCheckCondition === true}
+            />
+            <CheckRow
+              itemId={itemId}
+              field="periodic"
+              label="Periodic check"
+              checked={sub.periodic === true}
+            />
           </>
         )}
         {selected.kind === 'service' && sub && (
           <>
-            <NumberRow itemId={itemId} field="timeBetweenTicks" label="Time Between Ticks" value={sub.timeBetweenTicks} />
-            <NumberRow itemId={itemId} field="firstTickTime" label="First Tick Time" value={sub.firstTickTime} />
+            <NumberRow
+              itemId={itemId}
+              field="timeBetweenTicks"
+              label="Time Between Ticks"
+              value={sub.timeBetweenTicks}
+            />
+            <NumberRow
+              itemId={itemId}
+              field="firstTickTime"
+              label="First Tick Time"
+              value={sub.firstTickTime}
+            />
           </>
         )}
       </fieldset>
@@ -96,7 +144,12 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
         <fieldset className={styles.fieldset}>
           <legend>Custom properties</legend>
           {type.properties.map((prop) => (
-            <PropertyField key={prop.name} itemId={itemId} prop={prop} properties={item.properties} />
+            <PropertyField
+              key={prop.name}
+              itemId={itemId}
+              prop={prop}
+              properties={item.properties}
+            />
           ))}
         </fieldset>
       )}
@@ -105,7 +158,10 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
 }
 
 /** Text input that commits on blur or Enter. The value is local until committed. */
-type CommitInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'defaultValue'> & {
+type CommitInputProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange' | 'onBlur' | 'defaultValue'
+> & {
   value: string;
   onCommit(raw: string): void;
 };
@@ -150,7 +206,9 @@ function TextRow({ itemId, field, label, value }: TextRowProps) {
         type="text"
         value={value ?? ''}
         onCommit={(raw) =>
-          commitToSelection(`Set ${label}`, (target) => setBaseProperty(target, field, raw === '' ? null : raw))
+          commitToSelection(`Set ${label}`, (target) =>
+            setBaseProperty(target, field, raw === '' ? null : raw),
+          )
         }
       />
     </div>
@@ -228,7 +286,11 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
   const commit = (value: unknown, label: string) =>
     commitToSelection(label, (target) => setPropertyValue(target, prop.name, value));
 
-  const className = [styles.control, valid ? '' : styles.invalid, explicit ? '' : styles.defaultValue]
+  const className = [
+    styles.control,
+    valid ? '' : styles.invalid,
+    explicit ? '' : styles.defaultValue,
+  ]
     .filter(Boolean)
     .join(' ');
   const flags = {
@@ -259,7 +321,9 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
         id={id}
         className={className}
         value={current}
-        onChange={(event) => commit(event.target.value === '' ? null : event.target.value, `Set ${prop.name}`)}
+        onChange={(event) =>
+          commit(event.target.value === '' ? null : event.target.value, `Set ${prop.name}`)
+        }
         {...flags}
       >
         <option value="" />
@@ -336,7 +400,7 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
           aria-label={`Reset ${prop.name}`}
           onClick={() => commit(null, `Reset ${prop.name}`)}
         >
-          Reset
+          <i className="fa-solid fa-rotate-left" aria-hidden="true" />
         </button>
       )}
     </div>

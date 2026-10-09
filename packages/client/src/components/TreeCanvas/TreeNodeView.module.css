@@ -1,78 +1,168 @@
-/* Ported from app/tree/tree.scss (.tree .tree-content .node). */
+/*
+ * Tree node card: a header item (the node) followed by its decorators and services.
+ * The type color reaches the rules through the --item-color custom property (set inline).
+ */
 
 .node {
   position: absolute;
   display: inline-block;
-  min-width: 100px;
-  max-width: 250px;
+  min-width: 160px;
+  max-width: 240px;
   /* default position needed for correct width and height measurement */
   left: 0;
   top: 0;
   cursor: pointer;
-  background-color: var(--node-background-color);
+  color: var(--node-text);
+  background: var(--node-bg);
+  border: 1px solid var(--node-border);
+  border-left: 4px solid var(--item-color, var(--item-color-default));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.node:hover {
+  border-top-color: var(--node-hover-border);
+  border-right-color: var(--node-hover-border);
+  border-bottom-color: var(--node-hover-border);
+  box-shadow: var(--node-hover-shadow);
+}
+
+/* Selected node: accent outline plus a soft halo. */
+.nodeSelected,
+.nodeSelected:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    var(--shadow-sm);
+}
+
+/* Invalid node: danger colored card. */
+.nodeInvalid {
+  --item-color: var(--danger);
+}
+
+.node > .item:first-child {
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+}
+
+.node > .item:last-child {
+  border-bottom-left-radius: 5px;
+  border-bottom-right-radius: 5px;
 }
 
 .item {
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--node-text);
+  background: var(--node-bg);
 }
 
-/* 5px outline for hover and selection */
-.item:hover::after,
-.item.selected::after {
-  content: '';
-  display: block;
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  outline: solid 5px var(--node-selected-border-color);
-  z-index: 21;
+/* Header row (the node itself). */
+.nodeDesc {
+  padding: 8px 10px;
 }
 
-.icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  margin: 0;
-  font-size: 1.5em;
-  color: var(--node-icon-color);
+/* Decorator and service rows. */
+.decorator,
+.service {
+  align-items: center;
+  padding: 6px 10px 6px 10px;
+  color: var(--node-text-secondary);
+  background: color-mix(in srgb, var(--item-color, var(--item-color-default)) 8%, var(--node-bg));
+  border-top: 1px solid var(--node-border);
+  border-left: 3px solid var(--item-color, var(--item-color-default));
+}
+
+.kindTag {
+  flex: 0 0 auto;
+  color: var(--node-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.badge {
+  display: inline-flex;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--item-color, var(--item-color-default));
+  background: color-mix(in srgb, var(--item-color, var(--item-color-default)) 16%, transparent);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.decorator .badge,
+.service .badge {
+  flex-basis: 16px;
+  width: 16px;
+  height: 16px;
+  background: none;
+  font-size: 13px;
 }
 
 .content {
-  overflow: hidden;
-  margin: 0;
-  min-height: 1.8em;
-  padding: 4px 8px 4px 4px;
-  color: var(--node-color);
-  border-left: 45px solid white;
+  flex: 1 1 auto;
+  min-width: 0;
   word-wrap: break-word;
 }
 
-.contentWithComment {
-  padding-right: 20px;
+.name {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--node-text);
 }
 
-.name {
-  font-weight: bold;
+.decorator .name,
+.service .name {
+  font-size: 12px;
 }
 
 .nameSub {
   display: block;
-  font-weight: normal;
-  font-size: 0.9em;
-  opacity: 0.7;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--node-text-muted);
+}
+
+.label {
+  display: block;
 }
 
 .desc {
   margin-top: 2px;
+  font-size: 12px;
+  color: var(--node-text-secondary);
+}
+
+.decorator .desc,
+.service .desc {
+  font-size: 11px;
+}
+
+.contentWithComment {
+  padding-right: 16px;
 }
 
 .commentIcon {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: 8px;
+  right: 8px;
+  color: var(--node-text-muted);
+  font-size: 11px;
+}
+
+.decorator .commentIcon,
+.service .commentIcon {
+  top: 6px;
 }
 
 .commentContent {
@@ -82,47 +172,111 @@
   left: 100%;
   z-index: 20;
   width: 250px;
-  padding: 15px;
-  color: var(--node-comment-color);
-  background: var(--node-background-color);
-  box-shadow: 0 5px 10px 0 rgba(0, 0, 0, 0.28);
-  transform: translate(15px, -50%);
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  transform: translate(12px, -50%);
   white-space: pre-wrap;
-}
-
-.commentContent::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 0;
-  display: block;
-  width: 0;
-  height: 0;
-  border-top: 10px solid transparent;
-  border-bottom: 10px solid transparent;
-  border-right: 10px solid var(--node-background-color);
-  transform: translate(-90%, -50%);
 }
 
 .item:hover .commentContent {
   display: block;
 }
 
-/* node header: the background color is set inline from the descriptor */
-.nodeDesc .content {
-  color: var(--node-color);
+/* Selected decorator or service: accent outline drawn inside the row. */
+.item.selected:not(.nodeDesc) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
-.decorator .content {
-  color: var(--node-decorator-color);
+.item.invalid {
+  --item-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
-.service .content {
-  color: var(--node-service-color);
+.item.invalid .name,
+.item.invalid .desc {
+  color: var(--danger);
 }
 
-.item.invalid .content {
-  color: var(--node-color);
-  background: var(--invalid-node-item-background-color);
-  border-left-color: var(--invalid-node-item-background-color);
+.item.invalid .nameSub {
+  color: var(--danger);
+  opacity: 0.8;
+}
+
+/*
+ * Classic dark theme: the original owl-bt look. The node header is filled with the type color
+ * (white text), sub items are light rows with a colored left border, selection is a thick outline.
+ */
+:global([data-theme='classic']) .node {
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+}
+
+:global([data-theme='classic']) .node:hover {
+  outline: 5px solid var(--surface-hover);
+  box-shadow: none;
+}
+
+:global([data-theme='classic']) .nodeSelected,
+:global([data-theme='classic']) .nodeSelected:hover {
+  outline: 5px solid var(--accent);
+  outline-offset: 0;
+  box-shadow: none;
+}
+
+:global([data-theme='classic']) .nodeDesc {
+  color: #fff;
+  background: var(--item-color, var(--item-color-default));
+}
+
+:global([data-theme='classic']) .nodeDesc .name,
+:global([data-theme='classic']) .nodeDesc .desc,
+:global([data-theme='classic']) .nodeDesc .commentIcon {
+  color: #fff;
+}
+
+:global([data-theme='classic']) .nodeDesc .nameSub {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+:global([data-theme='classic']) .nodeDesc .badge {
+  color: #fff;
+  background: none;
+}
+
+:global([data-theme='classic']) .decorator,
+:global([data-theme='classic']) .service {
+  color: #333;
+  background: #ececec;
+  border-top: 1px solid #d6d6d6;
+  border-left: 5px solid var(--item-color, var(--item-color-default));
+}
+
+:global([data-theme='classic']) .decorator .name,
+:global([data-theme='classic']) .service .name {
+  color: #333;
+}
+
+:global([data-theme='classic']) .item.selected:not(.nodeDesc) {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+
+:global([data-theme='classic']) .item.invalid,
+:global([data-theme='classic']) .nodeDesc.invalid {
+  color: #fff;
+  background: var(--danger);
+}
+
+:global([data-theme='classic']) .item.invalid .name,
+:global([data-theme='classic']) .item.invalid .desc,
+:global([data-theme='classic']) .item.invalid .nameSub {
+  color: #fff;
 }

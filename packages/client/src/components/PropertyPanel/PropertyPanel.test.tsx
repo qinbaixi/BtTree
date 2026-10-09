@@ -9,6 +9,7 @@ import {
 } from '@owlbt/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { PROJECT_JSON, TREE_JSON } from '../../test/fixtures';
+import { inspectStore } from '../../store/inspectStore';
 import { projectStore } from '../../store/projectStore';
 import { treeStore } from '../../store/treeStore';
 import PropertyPanel from './PropertyPanel';
@@ -47,15 +48,47 @@ describe('PropertyPanel', () => {
   beforeEach(() => {
     projectStore.getState().applyContent(PROJECT_JSON);
     loadTree();
+    inspectStore.getState().clear();
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it('asks for a selection when nothing is selected', () => {
+  it('shows the tree overview when nothing is selected', () => {
     renderPanel();
-    expect(screen.getByText('Select a node in the tree view')).toBeTruthy();
+    expect(screen.getByText('Select a node to edit its properties')).toBeTruthy();
+    expect(screen.getByText('Statistics')).toBeTruthy();
+  });
+
+  it('shows the inspected type over the selection, then the selection again when closed', () => {
+    const wait = rootNode().childNodes[0];
+    select({ kind: 'node', nodeId: wait.id });
+    renderPanel();
+    expect(screen.getByLabelText('Label')).toBeTruthy();
+
+    act(() => {
+      inspectStore.getState().inspect('node', 'Sequence');
+    });
+    expect(screen.queryByLabelText('Label')).toBeNull();
+    expect(screen.getByText('Description')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.getByLabelText('Label')).toBeTruthy();
+  });
+
+  it('clears the inspected type when a tree item is selected', () => {
+    renderPanel();
+    act(() => {
+      inspectStore.getState().inspect('service', 'Logger');
+    });
+    expect(screen.getByText('Used in this tree: 1')).toBeTruthy();
+
+    act(() => {
+      select({ kind: 'node', nodeId: rootNode().id });
+    });
+    expect(screen.queryByText('Used in this tree: 1')).toBeNull();
+    expect(screen.getByLabelText('Label')).toBeTruthy();
   });
 
   it('commits a label as one undoable change and re-syncs the input on undo', () => {
@@ -150,10 +183,13 @@ describe('PropertyPanel', () => {
     expect(inverse.checked).toBe(true);
     fireEvent.click(inverse);
     expect(
-      (findNode(rootNode(), wait.id)?.decorators[0] as { inverseCheckCondition?: boolean }).inverseCheckCondition,
+      (findNode(rootNode(), wait.id)?.decorators[0] as { inverseCheckCondition?: boolean })
+        .inverseCheckCondition,
     ).toBeUndefined();
     expect(treeStore.getState().undoStack.at(-1)?.label).toBe('Set Inverse check condition');
-    expect((screen.getByLabelText('Inverse check condition') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText('Inverse check condition') as HTMLInputElement).checked).toBe(
+      false,
+    );
   });
 
   it('shows an error for a node whose type is missing from the project', () => {

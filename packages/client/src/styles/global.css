@@ -1,66 +1,119 @@
 /*
- * Global styles. Colors mirror the original AngularJS app (app/app.scss) and are exposed as
- * CSS variables so CSS Modules can reference them.
+ * Global styles and theme tokens.
+ *
+ * Components only use the semantic tokens declared here. The default theme (light) is declared
+ * on :root and [data-theme='light']; [data-theme='classic'] maps the same tokens to the original
+ * dark palette. Theme switching is handled by src/lib/theme.ts (sets data-theme on <html>).
  */
 
-:root {
-  --main-background-color: #243342;
-  --dlg-light-background-color: #507295;
-  --dlg-background-color: #2c3e50;
-  --ctrl-color: #cccccc;
-  --ctrl-focus-color: #e4e4e4;
-  --ctrl-input-color: #161b20;
-  --ctrl-border-color: #2c3e50;
-  --ctrl-background-color: #243342;
-  --ctrl-hover-color: #3d566f;
-  --ctrl-highlight-background-color: #c65c5c;
-  --text-light-color: #777777;
-  --ctrl-input-err-border-color: #c65c5c;
-  --ctrl-input-err-background-color: #ffd2d2;
+:root,
+[data-theme='light'] {
+  color-scheme: light;
 
-  /* tree */
-  --node-selected-border-color: #c65c5c;
-  --node-background-color: #ececec;
-  --line-color: #ececec;
-  --node-icon-color: white;
-  --composite-node-background-color: #d08038;
-  --action-node-background-color: #955cc6;
-  --node-decorator-background-color: #5c90c6;
-  --node-service-background-color: #5cc690;
-  --node-color: white;
-  --node-service-color: #333333;
-  --node-decorator-color: #333333;
-  --node-comment-color: #333333;
-  --invalid-node-item-background-color: #c65c5c;
+  /* surfaces */
+  --app-bg: #f5f6f8;
+  --surface: #ffffff;
+  --surface-muted: #f9fafb;
+  --surface-hover: #f1f3f6;
+  --border: #e4e6ea;
+  --border-strong: #d3d7de;
 
-  /* menus */
-  --context-menu-border-color: #1c2732;
-  --context-menu-background-color: #2c3e50;
-  --context-menu-color: #cccccc;
-  --context-menu-hover-background-color: #3d566f;
-  --dropdown-border-color: #1c2732;
-  --dropdown-background-color: #2c3e50;
-  --dropdown-color: #cccccc;
-  --dropdown-hover-background-color: #3d566f;
-  --top-menu-border-color: #1c2732;
-  --top-menu-background-color: #2c3e50;
-  --top-menu-color: #cccccc;
-  --top-menu-hover-background-color: #3d566f;
+  /* text */
+  --text: #1f232b;
+  --text-secondary: #5b616e;
+  --text-muted: #8a8f98;
 
-  /* alerts (bootstrap 3 palette) */
-  --alert-danger-bg: #f2dede;
-  --alert-danger-text: #a94442;
-  --alert-warning-bg: #fcf8e3;
-  --alert-warning-text: #8a6d3b;
-  --alert-info-bg: #d9edf7;
-  --alert-info-text: #31708f;
-  --alert-success-bg: #dff0d8;
-  --alert-success-text: #3c763d;
+  /* accent and status */
+  --accent: #3b6cf6;
+  --accent-hover: #2f5ae0;
+  --accent-soft: #eef2fe;
+  --on-accent: #ffffff;
+  --danger: #d9473f;
+  --danger-soft: #fdecea;
+  --warning: #b7791f;
+  --warning-soft: #fdf6e3;
+  --success: #1f7a4d;
+  --success-soft: #e3f6ec;
+  --info: #2b6cb0;
+  --info-soft: #e8f1fb;
+
+  /* shape and elevation */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.14);
+
+  /* canvas */
+  --canvas-bg: #f5f6f8;
+  --canvas-dot: #d9dce2;
+  --link-color: #b8bec8;
+
+  /* tree nodes (cards) */
+  --node-bg: var(--surface);
+  --node-text: var(--text);
+  --node-text-secondary: var(--text-secondary);
+  --node-text-muted: var(--text-muted);
+  --node-border: var(--border);
+  --node-hover-border: var(--border-strong);
+  --node-hover-shadow: var(--shadow-md);
+
+  /* fallback item color used when a type has no color */
+  --item-color-default: #8a8f98;
+
+  --font-sans:
+    Inter, 'Segoe UI', system-ui, -apple-system, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
 }
 
-/* Bootstrap 3 uses 10px root size, so the rem values from the original styles still apply. */
+[data-theme='classic'] {
+  color-scheme: dark;
+
+  --app-bg: #243342;
+  --surface: #2c3e50;
+  --surface-muted: #243342;
+  --surface-hover: #3d566f;
+  --border: #1c2732;
+  --border-strong: #3d566f;
+
+  --text: #cccccc;
+  --text-secondary: #b4bcc6;
+  --text-muted: #777777;
+
+  --accent: #c65c5c;
+  --accent-hover: #d46a6a;
+  --accent-soft: rgba(198, 92, 92, 0.28);
+  --on-accent: #ffffff;
+  --danger: #e07a7a;
+  --danger-soft: rgba(198, 92, 92, 0.22);
+  --warning: #e0b35a;
+  --warning-soft: rgba(224, 179, 90, 0.18);
+  --success: #6fcf97;
+  --success-soft: rgba(111, 207, 151, 0.18);
+  --info: #6aa9e0;
+  --info-soft: rgba(106, 169, 224, 0.18);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  --canvas-bg: #243342;
+  --canvas-dot: transparent;
+  --link-color: #ececec;
+
+  --node-bg: #ececec;
+  --node-text: #333333;
+  --node-text-secondary: #444444;
+  --node-text-muted: #666666;
+  --node-border: #1c2732;
+  --node-hover-border: #ffffff;
+  --node-hover-shadow: var(--shadow-md);
+
+  --item-color-default: #777777;
+}
+
 html {
-  font-size: 10px;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -72,46 +125,87 @@ html {
 
 body {
   margin: 0;
-  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 14px;
-  line-height: 1.42857;
-  color: var(--ctrl-color);
-  background: var(--main-background-color);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text);
+  background: var(--app-bg);
+  -webkit-font-smoothing: antialiased;
 }
 
 a,
 a:visited,
 a:focus {
-  color: var(--ctrl-color);
+  color: inherit;
   text-decoration: none;
 }
 
 a:hover,
 a:active {
-  color: var(--ctrl-color);
-  text-decoration: underline;
+  color: inherit;
+  text-decoration: none;
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
-}
-
-input[type='text'] {
-  padding: 6px 12px;
-  color: var(--ctrl-color);
-  background: var(--ctrl-input-color);
-  border: 1px solid var(--ctrl-border-color);
-  border-radius: 0;
-}
-
-input[type='text']:focus {
-  outline: none;
-  border-color: var(--ctrl-hover-color);
+  color: inherit;
 }
 
 button {
   cursor: pointer;
+}
+
+:where(input[type='text'], input[type='number'], select) {
+  height: 32px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  outline: none;
+}
+
+:where(input[type='text'], input[type='number'], select):focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Thin neutral scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+  background-clip: padding-box;
 }
 
 .visually-hidden {

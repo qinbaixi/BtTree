@@ -41,7 +41,13 @@ export default function SidePanel({ title, name, position, children }: SidePanel
             if (e.key === 'Enter' || e.key === ' ') setAndPersist(true);
           }}
         >
-          <i className={`fa-solid ${isLeft ? 'fa-angle-right' : 'fa-angle-left'}`} aria-hidden="true" />
+          <i
+            className={`fa-solid ${isLeft ? 'fa-angle-right' : 'fa-angle-left'}`}
+            aria-hidden="true"
+          />
+          <span className={styles.railTitle} aria-hidden="true">
+            {title}
+          </span>
         </div>
       </div>
     );

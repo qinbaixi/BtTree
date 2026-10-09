@@ -2,7 +2,7 @@
     "type": "Selector",
     "name": "rootNode",
     "label": "Root",
-    "comment": "Example tree: patrols when idle, fights when an enemy is known",
+    "comment": "示例树：空闲时巡逻，发现敌人时战斗",
     "services": [
         {
             "type": "Sample service",
@@ -17,7 +17,7 @@
         {
             "type": "Sequence",
             "label": "Patrol",
-            "comment": "Walk the route while points remain",
+            "comment": "还有巡逻点时沿路线行走",
             "decorators": [
                 {
                     "type": "IsBlackboardValueSet",
@@ -65,7 +65,7 @@
         {
             "type": "Sequence",
             "label": "Combat",
-            "comment": "Engage the enemy for at most ten seconds",
+            "comment": "与敌人交战最多十秒",
             "decorators": [
                 {
                     "type": "TimeLimit",
@@ -140,7 +140,7 @@
         {
             "type": "RandomSelector",
             "label": "Idle",
-            "comment": "Pick one idle behaviour at random",
+            "comment": "随机选择一种空闲行为",
             "properties": [
                 { "name": "Weights", "value": "3,1" }
             ],

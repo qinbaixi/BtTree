@@ -65,6 +65,8 @@ export interface CompiledItemType {
   /** Always set: explicit color or the default for the kind. */
   color: string;
   description?: string;
+  /** Direct bases as written in the project file. Omitted when the type has none. */
+  bases?: string[];
   /** Nodes only; false for decorators/services. */
   isComposite: boolean;
   properties: CompiledProperty[];

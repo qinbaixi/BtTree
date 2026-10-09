@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { commandContext, commandRegistry, execCommand } from '../../commands/registry';
+import { THEME_COMMAND_IDS } from '../../commands/coreCommands';
 import { useProjectStore } from '../../store/projectStore';
 import { useTreeStore } from '../../store/treeStore';
+import { useTheme, type ThemeId } from '../../lib/theme';
 import styles from './TopMenu.module.css';
 
 export interface TopMenuItem {
@@ -9,6 +11,8 @@ export interface TopMenuItem {
   /** Command id in the command registry. */
   commandId: string;
   hotkey?: string;
+  /** Theme this item switches to; the item shows a check mark while that theme is active. */
+  themeId?: ThemeId;
 }
 
 export interface TopMenuSection {
@@ -16,7 +20,7 @@ export interface TopMenuSection {
   items: TopMenuItem[];
 }
 
-/** Menu layout. Items stay disabled until Phase 5 registers their commands. */
+/** Menu layout. Items stay disabled until their commands can execute. */
 export const TOP_MENU_SECTIONS: TopMenuSection[] = [
   {
     name: 'File',
@@ -33,6 +37,8 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
     name: 'View',
     items: [
       { title: 'Command Palette', commandId: 'core:CommandPalette', hotkey: 'Ctrl+Shift+P' },
+      { title: 'Theme: Light', commandId: THEME_COMMAND_IDS.light, themeId: 'light' },
+      { title: 'Theme: Classic dark', commandId: THEME_COMMAND_IDS.classic, themeId: 'classic' },
     ],
   },
 ];
@@ -45,6 +51,7 @@ function isEnabled(commandId: string): boolean {
 export default function TopMenu() {
   const [openSection, setOpenSection] = useState<string | undefined>();
   const rootRef = useRef<HTMLUListElement>(null);
+  const theme = useTheme();
 
   // Re-evaluate enabled state when the tree (incl. undo/redo) or the project changes.
   useTreeStore((state) => state.version);
@@ -74,6 +81,10 @@ export default function TopMenu() {
 
   return (
     <ul className={styles.menu} ref={rootRef}>
+      <li className={styles.brand}>
+        <span className={styles.brandDot} aria-hidden="true" />
+        owl-bt
+      </li>
       {TOP_MENU_SECTIONS.map((section) => {
         const isOpen = openSection === section.name;
         return (
@@ -91,6 +102,7 @@ export default function TopMenu() {
               <ul className={styles.dropdown} role="menu">
                 {section.items.map((item) => {
                   const enabled = isEnabled(item.commandId);
+                  const checked = item.themeId !== undefined && item.themeId === theme;
                   return (
                     <li key={item.commandId} role="none">
                       <button
@@ -103,6 +115,12 @@ export default function TopMenu() {
                           void execCommand(item.commandId);
                         }}
                       >
+                        {item.themeId !== undefined && (
+                          <i
+                            className={`fa-solid fa-check ${styles.check} ${checked ? '' : styles.checkHidden}`}
+                            aria-hidden="true"
+                          />
+                        )}
                         {item.title}
                         {item.hotkey && <span className={styles.hotkey}>{item.hotkey}</span>}
                       </button>

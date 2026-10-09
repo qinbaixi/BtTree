@@ -110,7 +110,12 @@ function EditorPage({ treePath }: { treePath: string }) {
           </li>
           <li className={styles.active} title={treePath}>
             {fileName}
-            {dirty ? '*' : ''}
+            {dirty && (
+              <span className={styles.unsaved}>
+                <span className={styles.dot} aria-hidden="true" />
+                Unsaved
+              </span>
+            )}
           </li>
         </ol>
         <AlertPanel />

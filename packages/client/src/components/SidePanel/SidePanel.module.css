@@ -1,34 +1,62 @@
 .panel {
   display: flex;
   flex-direction: column;
-  flex: 0 0 250px;
+  flex: 0 0 240px;
+  min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.panel:last-child {
+  border-right: 0;
+  border-left: 1px solid var(--border);
 }
 
 .title {
-  font-size: 1.6rem;
-  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
   margin: 0;
-  padding: 10px 15px;
-  background: var(--dlg-background-color);
-  color: var(--ctrl-color);
+  padding: 0 12px 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   user-select: none;
+  border-bottom: 1px solid var(--border);
 }
 
 .title:hover,
-.title:focus {
-  color: var(--ctrl-focus-color);
-  background: color-mix(in srgb, var(--dlg-background-color) 85%, white);
+.title:focus-visible {
+  color: var(--text-secondary);
+}
+
+.title:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent-soft);
 }
 
 .hideIcon {
-  float: right;
-  margin-top: 3px;
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  line-height: 22px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+.title:hover .hideIcon {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .body {
   position: relative;
   flex: 1 1;
+  min-height: 0;
 }
 
 .scroll {
@@ -38,14 +66,14 @@
   bottom: 0;
   left: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 6px 10px 10px;
 }
 
 .collapsed {
-  flex-basis: 50px;
+  flex: 0 0 32px;
   flex-direction: row;
   align-items: stretch;
-  background: var(--dlg-background-color);
+  background: var(--surface);
 }
 
 .collapsed .title,
@@ -56,14 +84,27 @@
 .expand {
   display: flex;
   flex: 1 1;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  color: var(--ctrl-color);
+  gap: 14px;
+  padding-top: 10px;
+  color: var(--text-muted);
   cursor: pointer;
-  font-size: 3.5rem;
+  font-size: 11px;
 }
 
 .expand:hover,
-.expand:focus {
-  color: var(--ctrl-focus-color);
+.expand:focus-visible {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.railTitle {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }

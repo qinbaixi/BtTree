@@ -296,6 +296,27 @@ describe('compileProject', () => {
     expect(project.nodes['n'].description).toBe('Wait {{ Time }}');
   });
 
+  it('records the direct bases as written, normalized to an array', () => {
+    const project = compileProject({
+      nodes: [
+        { name: 'Root', isAbstract: true, isComposite: true },
+        { name: 'Mid', base: 'Root', isAbstract: true, isComposite: true },
+        { name: 'Leaf', base: 'Mid', isComposite: true },
+        { name: 'Other', base: ['Root', 'Mid'], isComposite: true },
+        { name: 'Plain' },
+      ],
+      decorators: [
+        { name: 'DBase', isAbstract: true },
+        { name: 'DLeaf', base: 'DBase' },
+      ],
+    });
+    expect(project.nodes['Leaf'].bases).toEqual(['Mid']);
+    expect(project.nodes['Other'].bases).toEqual(['Root', 'Mid']);
+    expect(project.nodes['Plain'].bases).toBeUndefined();
+    expect(Object.hasOwn(project.nodes['Plain'], 'bases')).toBe(false);
+    expect(project.decorators['DLeaf'].bases).toEqual(['DBase']);
+  });
+
   it('handles an empty project', () => {
     expect(compileProject({})).toEqual({ nodes: {}, decorators: {}, services: {} });
   });

@@ -1,11 +1,32 @@
 .menu {
   display: flex;
+  align-items: center;
+  height: 40px;
   margin: 0;
-  padding: 0 10px;
+  padding: 0 8px;
   list-style: none;
-  color: var(--top-menu-color);
-  background: var(--top-menu-background-color);
-  border-bottom: 1px solid var(--top-menu-border-color);
+  color: var(--text-secondary);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 8px;
+  padding: 0 8px 0 6px;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.brandDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .section {
@@ -14,60 +35,95 @@
 
 .toggle {
   display: block;
-  padding: 5px 8px;
-  color: var(--top-menu-color);
+  height: 28px;
+  padding: 0 10px;
+  color: var(--text-secondary);
   background: none;
   border: 0;
+  border-radius: var(--radius);
   outline: 0;
+  font-size: 13px;
 }
 
 .toggle:hover,
 .toggle:focus,
 .toggle[aria-expanded='true'] {
-  background: var(--top-menu-hover-background-color);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.toggle:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .dropdown {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 4px);
   left: 0;
   z-index: 1000;
-  min-width: 180px;
+  min-width: 220px;
   margin: 0;
-  padding: 5px 0;
+  padding: 4px;
   list-style: none;
-  color: var(--dropdown-color);
-  background: var(--dropdown-background-color);
-  border: 1px solid var(--dropdown-border-color);
-  box-shadow: 0 5px 10px 0 rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+.dropdown li {
+  margin: 0;
 }
 
 .item {
   position: relative;
   display: block;
   width: 100%;
-  padding: 5px 120px 5px 15px;
-  color: var(--dropdown-color);
+  height: 30px;
+  padding: 0 100px 0 28px;
+  color: var(--text);
   background: none;
   border: 0;
+  border-radius: var(--radius);
   text-align: left;
   white-space: nowrap;
 }
 
 .item:hover:not(:disabled),
 .item:focus:not(:disabled) {
-  background: var(--dropdown-hover-background-color);
+  background: var(--surface-hover);
   outline: 0;
+  box-shadow: none;
 }
 
 .item:disabled {
-  color: var(--text-light-color);
+  color: var(--text-muted);
   cursor: default;
+}
+
+.check {
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.checkHidden {
+  visibility: hidden;
 }
 
 .hotkey {
   position: absolute;
-  right: 15px;
-  margin-left: 20px;
-  color: var(--text-light-color);
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
 }

@@ -13,10 +13,29 @@ import { getMruList, getPathLastSegment, removeMru, type MruItem } from '../lib/
 import { joinPath, isJsonPath } from '../lib/paths';
 import { getStorageItem, removeStorageItem, setStorageItem } from '../lib/storage';
 import { alerts } from '../store/alertStore';
+import { setTheme, themeLabel, useTheme, type ThemeId } from '../lib/theme';
 import styles from './Home.module.css';
 
 /** Folder restored when the page opens. */
 export const LAST_DIR_STORAGE_KEY = 'owlbt.lastDir';
+
+/** Switches between the light and classic dark themes. */
+function ThemeToggle() {
+  const theme = useTheme();
+  const next: ThemeId = theme === 'light' ? 'classic' : 'light';
+  const label = `Switch to ${themeLabel(next)} theme`;
+  return (
+    <button
+      type="button"
+      className={styles.themeToggle}
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(next)}
+    >
+      <i className={`fa-solid ${theme === 'light' ? 'fa-moon' : 'fa-sun'}`} aria-hidden="true" />
+    </button>
+  );
+}
 
 /** Editor URL for a tree path. */
 export function editorUrl(treePath: string): string {
@@ -158,8 +177,11 @@ function WorkspacePanel({
               {workspace.trees.map((tree) => (
                 <li key={tree.path}>
                   <Link to={editorUrl(tree.path)} className={styles.treeLink}>
-                    <div className={styles.treeName}>{tree.relPath}</div>
-                    <div className={styles.treePath}>{tree.path}</div>
+                    <i className={`fa-regular fa-file ${styles.fileIcon}`} aria-hidden="true" />
+                    <div className={styles.treeText}>
+                      <div className={styles.treeName}>{tree.relPath}</div>
+                      <div className={styles.treePath}>{tree.path}</div>
+                    </div>
                   </Link>
                 </li>
               ))}
@@ -317,23 +339,26 @@ export default function Home() {
   return (
     <div className={styles.page}>
       <div className={styles.head}>
-        <form className={styles.form} onSubmit={onSubmit}>
-          <input
-            type="text"
-            className={styles.input}
-            value={treePath}
-            onChange={(event) => setTreePath(event.target.value)}
-            placeholder="Tree file or folder path…"
-            aria-label="Tree file or folder path"
-          />
-          <button type="submit" className={styles.open}>
-            Open
-          </button>
-        </form>
+        <div className={styles.bar}>
+          <form className={styles.form} onSubmit={onSubmit}>
+            <input
+              type="text"
+              className={styles.input}
+              value={treePath}
+              onChange={(event) => setTreePath(event.target.value)}
+              placeholder="Tree file or folder path…"
+              aria-label="Tree file or folder path"
+            />
+            <button type="submit" className={styles.open}>
+              Open
+            </button>
+          </form>
+          <ThemeToggle />
+        </div>
         <div className={styles.actions}>
           <button
             type="button"
-            className={styles.action}
+            className={`${styles.action} ${styles.primary}`}
             onClick={() => void onPick('folder')}
             disabled={dialogsBusy}
           >
@@ -383,8 +408,11 @@ export default function Home() {
               {items.map((item) => (
                 <li key={item.path} className={styles.mruItem}>
                   <Link to={editorUrl(item.path)} className={styles.mruLink}>
-                    <div className={styles.mruName}>{getPathLastSegment(item.path)}</div>
-                    <div className={styles.mruPath}>{item.path}</div>
+                    <i className={`fa-regular fa-file ${styles.fileIcon}`} aria-hidden="true" />
+                    <div className={styles.mruText}>
+                      <div className={styles.mruName}>{getPathLastSegment(item.path)}</div>
+                      <div className={styles.mruPath}>{item.path}</div>
+                    </div>
                   </Link>
                   <button
                     type="button"
@@ -403,6 +431,7 @@ export default function Home() {
 
         {showEmptyState && (
           <div className={styles.empty}>
+            <i className={`fa-solid fa-diagram-project ${styles.emptyIcon}`} aria-hidden="true" />
             <h2 className={styles.emptyTitle}>Open a behavior tree</h2>
             <div className={styles.bigActions}>
               <button

@@ -37,6 +37,12 @@ interface ItemViewProps {
   selected: boolean;
 }
 
+const KIND_TAG: Record<ItemViewProps['kind'], string | undefined> = {
+  node: undefined,
+  decorator: 'DEC',
+  service: 'SVC',
+};
+
 function selectionOf(kind: ItemViewProps['kind'], nodeId: string, itemId?: string): Selection {
   if (kind === 'node' || itemId === undefined) {
     return { kind: 'node', nodeId };
@@ -60,14 +66,10 @@ function ItemView({
   const invalid = !validateItem(type, properties).isValid;
   const defaultName = `${inverseCheckCondition ? '[not] ' : ''}${type.name}`;
   const description = type.description ? describeItem(type, properties) : undefined;
-
-  // Invalid items are painted red by the stylesheet; valid ones use the descriptor color.
-  let contentStyle: CSSProperties = {};
-  if (!invalid) {
-    contentStyle = kind === 'node'
-      ? { background: type.color, borderLeftColor: type.color }
-      : { borderLeftColor: type.color };
-  }
+  // Invalid items are painted red by the stylesheet; valid ones take the type color from the variable.
+  const style = invalid ? undefined : ({ '--item-color': type.color } as CSSProperties);
+  const iconName = invalid ? 'triangle-exclamation' : type.icon;
+  const tag = KIND_TAG[kind];
 
   const onClick = (event: MouseEvent) => {
     event.stopPropagation();
@@ -98,25 +100,24 @@ function ItemView({
   return (
     <div
       className={className}
+      style={style}
       data-item-kind={kind}
       data-item-invalid={invalid ? 'true' : undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
-      {type.icon !== undefined && (
-        <span className={styles.icon}>
-          <i className={`fa-solid fa-${type.icon}`} aria-hidden="true" />
+      {tag && <span className={styles.kindTag}>{tag}</span>}
+      {iconName !== undefined && (
+        <span className={styles.badge}>
+          <i className={`fa-solid fa-${iconName}`} aria-hidden="true" />
         </span>
       )}
-      <div
-        className={`${styles.content} ${comment ? styles.contentWithComment : ''}`}
-        style={contentStyle}
-      >
+      <div className={`${styles.content} ${comment ? styles.contentWithComment : ''}`}>
         <div className={styles.name}>
           {label ? (
             <>
               <span className={styles.nameSub}>({defaultName})</span>
-              <span>{label}</span>
+              <span className={styles.label}>{label}</span>
             </>
           ) : (
             defaultName
@@ -152,13 +153,27 @@ export const TreeNodeView = memo(function TreeNodeView({
   );
 
   const nodeType = getItemType(project, 'node', node.type);
+  const nodeInvalid = !validateItem(nodeType, node.properties).isValid;
+  const cardClass = [
+    styles.node,
+    selected ? styles.nodeSelected : '',
+    nodeInvalid ? styles.nodeInvalid : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
       ref={registerRef}
-      className={styles.node}
+      className={cardClass}
       data-node-id={node.id}
-      style={{ left: x, top: y }}
+      style={
+        {
+          left: x,
+          top: y,
+          ...(nodeInvalid ? {} : { '--item-color': nodeType.color }),
+        } as CSSProperties
+      }
     >
       <ItemView
         kind="node"

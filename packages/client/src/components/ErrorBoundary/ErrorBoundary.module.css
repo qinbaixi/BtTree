@@ -1,12 +1,14 @@
 .page {
-  padding: 20px;
+  padding: 24px;
+  color: var(--text);
 }
 
 .alert {
-  padding: 15px;
-  color: var(--alert-danger-text);
-  background: var(--alert-danger-bg);
-  border: 1px solid #ebccd1;
+  padding: 14px 16px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--radius-lg);
 }
 
 .details {

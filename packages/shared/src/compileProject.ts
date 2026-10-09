@@ -144,6 +144,7 @@ function compileItem(
   kind: ItemKind,
   desc: ItemTypeDescJson,
   customTypes: Record<string, CustomTypeJson>,
+  bases: string[],
 ): CompiledItemType {
   const isComposite = kind === 'node' ? !!desc.isComposite : false;
   const item: CompiledItemType = {
@@ -155,6 +156,7 @@ function compileItem(
   };
   if (desc.icon !== undefined) item.icon = desc.icon;
   if (desc.description !== undefined) item.description = desc.description;
+  if (bases.length > 0) item.bases = bases;
   return item;
 }
 
@@ -189,7 +191,9 @@ function compileKind(
     if (desc.isAbstract) {
       continue;
     }
-    result[name] = compileItem(kind, desc, customTypes);
+    // Bases come from the descriptor as written: inheritance overwrites `base` in the resolved one.
+    const original = descs.get(name);
+    result[name] = compileItem(kind, desc, customTypes, original ? basesOf(original) : []);
   }
   return result;
 }
