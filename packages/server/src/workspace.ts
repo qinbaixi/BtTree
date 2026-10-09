@@ -1,0 +1,190 @@
+import type { Dirent, Stats } from 'node:fs';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { HttpError, isErrno } from './errors';
+import { findProjectFile, PROJECT_FILE_NAME } from './project';
+
+/** Templates shipped with the package. Resolves from both src/ and the bundled dist/. */
+export const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
+
+export const MAX_TREE_RESULTS = 500;
+/** Directory levels below the scan root that are searched. */
+export const MAX_SCAN_DEPTH = 6;
+export const MAX_TREE_FILE_BYTES = 5 * 1024 * 1024;
+
+const SKIPPED_DIRS = new Set(['node_modules']);
+const SKIPPED_FILES = new Set(['owl-bt.json', 'package.json', 'package-lock.json']);
+const SKIPPED_TSCONFIG = /^tsconfig.*\.json$/i;
+
+export interface WorkspaceTree {
+  /** Absolute path of the tree file. */
+  path: string;
+  /** Path relative to the scan root, with forward slashes. */
+  relPath: string;
+}
+
+export interface Workspace {
+  /** Absolute folder the listing was made for. */
+  dir: string;
+  /** owl-bt.json found by walking up from dir. */
+  projectPath?: string;
+  projectDir?: string;
+  trees: WorkspaceTree[];
+  truncated: boolean;
+}
+
+export function readTemplate(name: string): Promise<string> {
+  return readFile(join(TEMPLATES_DIR, name), 'utf8');
+}
+
+/** Creates the file with `content`. Returns false (and leaves the file alone) when it already exists. */
+export async function writeNewFile(path: string, content: string): Promise<boolean> {
+  try {
+    await writeFile(path, content, { encoding: 'utf8', flag: 'wx' });
+    return true;
+  } catch (err) {
+    if (isErrno(err, 'EEXIST')) {
+      return false;
+    }
+    throw err;
+  }
+}
+
+async function statOrUndefined(path: string): Promise<Stats | undefined> {
+  try {
+    return await stat(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/** A tree is a JSON object with a string `type` field. */
+function isTreeObject(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    typeof (value as { type?: unknown }).type === 'string'
+  );
+}
+
+function isSkippedDir(name: string): boolean {
+  return name.startsWith('.') || SKIPPED_DIRS.has(name);
+}
+
+function isCandidateFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.endsWith('.json') && !SKIPPED_FILES.has(lower) && !SKIPPED_TSCONFIG.test(name);
+}
+
+async function isTreeFile(path: string): Promise<boolean> {
+  try {
+    const info = await stat(path);
+    if (info.size > MAX_TREE_FILE_BYTES) {
+      return false;
+    }
+    return isTreeObject(JSON.parse(await readFile(path, 'utf8')));
+  } catch {
+    return false; // Unreadable or not JSON.
+  }
+}
+
+interface ScanState {
+  root: string;
+  trees: WorkspaceTree[];
+  truncated: boolean;
+}
+
+async function scanDir(dirPath: string, depth: number, state: ScanState): Promise<void> {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return; // Unreadable folders are skipped.
+  }
+
+  for (const entry of entries) {
+    if (state.truncated) {
+      return;
+    }
+    const full = join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      if (depth < MAX_SCAN_DEPTH && !isSkippedDir(entry.name)) {
+        await scanDir(full, depth + 1, state);
+      }
+    } else if (entry.isFile() && isCandidateFile(entry.name) && (await isTreeFile(full))) {
+      if (state.trees.length >= MAX_TREE_RESULTS) {
+        state.truncated = true;
+        return;
+      }
+      state.trees.push({ path: full, relPath: relative(state.root, full).split(sep).join('/') });
+    }
+  }
+}
+
+/**
+ * Lists the tree files for a folder, or for the folder that contains the given file.
+ * The scan covers the project directory when one exists, otherwise the folder itself.
+ */
+export async function loadWorkspace(rawPath: string): Promise<Workspace> {
+  const target = resolve(rawPath);
+  const info = await statOrUndefined(target);
+  let dir: string;
+  if (info?.isDirectory()) {
+    dir = target;
+  } else if (info?.isFile()) {
+    dir = dirname(target);
+  } else {
+    throw new HttpError(404, 'Path not found');
+  }
+
+  // A child path makes findProjectFile start its walk at dir itself.
+  const projectPath = await findProjectFile(join(dir, 'probe'));
+  const projectDir = projectPath ? dirname(projectPath) : undefined;
+  const root = projectDir ?? dir;
+
+  const state: ScanState = { root, trees: [], truncated: false };
+  await scanDir(root, 0, state);
+  state.trees.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
+
+  const workspace: Workspace = { dir, trees: state.trees, truncated: state.truncated };
+  if (projectPath && projectDir) {
+    workspace.projectPath = projectPath;
+    workspace.projectDir = projectDir;
+  }
+  return workspace;
+}
+
+/** Writes owl-bt.json and trees/example.json into an existing folder that is not inside a project. */
+export async function initProject(rawDir: string): Promise<Workspace> {
+  const dir = resolve(rawDir);
+  const info = await statOrUndefined(dir);
+  if (!info?.isDirectory()) {
+    throw new HttpError(404, 'Directory not found');
+  }
+  if (await findProjectFile(join(dir, 'probe'))) {
+    throw new HttpError(409, 'Directory is already inside a project');
+  }
+
+  const created = await writeNewFile(
+    join(dir, PROJECT_FILE_NAME),
+    await readTemplate('owl-bt.json'),
+  );
+  if (!created) {
+    throw new HttpError(409, `${PROJECT_FILE_NAME} already exists`);
+  }
+
+  const examplePath = join(dir, 'trees', 'example.json');
+  if (!(await statOrUndefined(examplePath))) {
+    await mkdir(dirname(examplePath), { recursive: true });
+    await writeNewFile(examplePath, await readTemplate('example-tree.json'));
+  }
+
+  return loadWorkspace(dir);
+}
+
+/** Appends .json unless the path already ends with it (case-insensitive). */
+export function withJsonExtension(path: string): string {
+  return /\.json$/i.test(path) ? path : `${path}.json`;
+}

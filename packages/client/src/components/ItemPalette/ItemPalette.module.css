@@ -54,8 +54,20 @@
   cursor: pointer;
 }
 
-.item:hover {
+.item:hover:not(:disabled) {
   background: var(--ctrl-hover-color);
+}
+
+.item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.groupHint {
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 0.9em;
+  color: var(--text-light-color);
 }
 
 .icon {

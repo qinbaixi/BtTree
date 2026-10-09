@@ -8,7 +8,7 @@
   right: 0;
   left: 0;
   z-index: 1;
-  padding: 20px 10px;
+  padding: 12px 10px;
   background: var(--top-menu-background-color);
   border-bottom: 1px solid var(--top-menu-border-color);
 }
@@ -22,6 +22,11 @@
   flex: 1 1;
   min-width: 0;
   height: 34px;
+}
+
+.input::placeholder {
+  color: #8c9bab;
+  opacity: 1;
 }
 
 .open {
@@ -40,11 +45,216 @@
   outline: 0;
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action {
+  padding: 6px 14px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-background-color);
+  border: 1px solid var(--ctrl-border-color);
+  border-radius: 0;
+}
+
+.action:hover,
+.action:focus {
+  color: var(--ctrl-focus-color);
+  background: var(--ctrl-hover-color);
+  outline: 0;
+}
+
+.action:disabled,
+.bigAction:disabled,
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status {
+  color: var(--ctrl-color);
+  font-style: italic;
+}
+
 .body {
-  padding: 100px 15px 0;
+  padding: 150px 15px 0;
   max-width: 1170px;
   margin: 0 auto;
 }
+
+.notice {
+  margin-bottom: 15px;
+  padding: 8px 12px;
+  color: var(--alert-danger-text);
+  background: var(--alert-danger-bg);
+}
+
+.error {
+  margin-top: 8px;
+  padding: 6px 10px;
+  color: var(--alert-danger-text);
+  background: var(--alert-danger-bg);
+}
+
+.button {
+  padding: 5px 12px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-background-color);
+  border: 1px solid var(--ctrl-border-color);
+  border-radius: 0;
+}
+
+.button:hover,
+.button:focus {
+  color: var(--ctrl-focus-color);
+  background: var(--ctrl-hover-color);
+  outline: 0;
+}
+
+.label {
+  font-size: 1.3rem;
+  color: #929292;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.muted {
+  font-size: 1.4rem;
+  color: #929292;
+}
+
+.heading,
+.subheading {
+  margin: 0 0 10px;
+  font-size: 1.4rem;
+  color: #929292;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.subheading {
+  margin-top: 20px;
+}
+
+.section {
+  margin-top: 25px;
+}
+
+/* Workspace panel */
+
+.panel {
+  margin-bottom: 25px;
+  padding: 15px;
+  background: #202e3c;
+  border-left: solid 10px var(--top-menu-border-color);
+}
+
+.panelHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panelTitle {
+  min-width: 0;
+}
+
+.panelName {
+  font-size: 1.8rem;
+  color: var(--ctrl-color);
+}
+
+.panelPath {
+  font-size: 1.4rem;
+  color: #929292;
+  word-break: break-all;
+}
+
+.panelButtons {
+  display: flex;
+  gap: 8px;
+}
+
+.project {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 1.4rem;
+}
+
+.projectPath {
+  color: var(--ctrl-color);
+  word-break: break-all;
+}
+
+.notProject {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.warning {
+  color: #f0b26a;
+  font-size: 1.4rem;
+}
+
+.trees {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trees li {
+  margin-bottom: 8px;
+}
+
+.treeLink {
+  display: block;
+  padding: 5px 15px;
+  background: #243342;
+  border-left: solid 6px var(--top-menu-border-color);
+}
+
+.treeLink:hover,
+.treeLink:focus {
+  border-left-color: var(--ctrl-highlight-background-color);
+  text-decoration: none;
+}
+
+.treeName {
+  font-size: 1.5rem;
+  color: var(--ctrl-color);
+}
+
+.treePath {
+  font-size: 1.2rem;
+  color: #929292;
+  word-break: break-all;
+}
+
+.newTree {
+  margin-top: 18px;
+}
+
+.newTreeRow {
+  display: flex;
+  margin-top: 6px;
+}
+
+.newTreeRow .input {
+  margin-right: -1px;
+}
+
+/* Recent trees */
 
 .mru {
   margin: 0;
@@ -94,4 +304,56 @@
 .remove:hover,
 .remove:focus {
   color: var(--ctrl-focus-color);
+}
+
+/* Empty state */
+
+.empty {
+  margin-top: 60px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0 0 25px;
+  font-size: 2.2rem;
+  font-weight: normal;
+  color: var(--ctrl-focus-color);
+}
+
+.bigActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+
+.bigAction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  padding: 30px 25px;
+  font-size: 1.6rem;
+  color: var(--ctrl-color);
+  background: #202e3c;
+  border: 1px solid var(--ctrl-border-color);
+  border-radius: 0;
+}
+
+.bigAction i {
+  font-size: 3.2rem;
+}
+
+.bigAction:hover,
+.bigAction:focus {
+  color: var(--ctrl-focus-color);
+  background: var(--ctrl-hover-color);
+  outline: 0;
+}
+
+.hint {
+  margin-top: 20px;
+  font-size: 1.4rem;
+  color: #929292;
 }

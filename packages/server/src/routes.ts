@@ -1,33 +1,47 @@
-import { readFile, writeFile } from 'node:fs/promises';
-import { isAbsolute } from 'node:path';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import type { ErrorRequestHandler } from 'express';
 import express, { Router } from 'express';
 import type { ProjectFile, TreeNodeJson } from '@owlbt/shared';
+import { HttpError, isErrno } from './errors';
+import {
+  createPicker,
+  DialogBusyError,
+  DialogUnsupportedError,
+  type PickKind,
+  type Picker,
+} from './picker';
 import { getProject, isPathInDir, type PluginContext, type Project } from './project';
+import {
+  initProject,
+  loadWorkspace,
+  readTemplate,
+  withJsonExtension,
+  writeNewFile,
+} from './workspace';
 
-/** Error with an HTTP status; rendered as text by {@link apiErrorHandler}. */
-export class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'HttpError';
-  }
+export { HttpError } from './errors';
+
+export interface RouterOptions {
+  /** Native dialog runner. Defaults to a picker for the current platform. */
+  picker?: Picker;
 }
 
-function isErrno(err: unknown, code: string): boolean {
-  return typeof err === 'object' && err !== null && (err as NodeJS.ErrnoException).code === code;
-}
-
-function requireAbsolutePath(raw: unknown): string {
+function requireAbsolutePath(raw: unknown, name = 'path'): string {
   if (typeof raw !== 'string' || raw === '') {
-    throw new HttpError(400, 'Missing path');
+    throw new HttpError(400, `Missing ${name}`);
   }
   if (!isAbsolute(raw)) {
-    throw new HttpError(400, 'Path must be absolute');
+    throw new HttpError(400, `${name[0].toUpperCase()}${name.slice(1)} must be absolute`);
   }
   return raw;
+}
+
+function objectBody(body: unknown): Record<string, unknown> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new HttpError(400, 'Body must be a JSON object');
+  }
+  return body as Record<string, unknown>;
 }
 
 async function requireProjectFor(treePath: string): Promise<Project> {
@@ -36,6 +50,26 @@ async function requireProjectFor(treePath: string): Promise<Project> {
     throw new HttpError(403, 'Path must be in project');
   }
   return project;
+}
+
+/** Optional starting folder for a dialog. A file is replaced by its folder; anything unusable is ignored. */
+async function resolveInitialDir(raw: unknown): Promise<string | undefined> {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  const path = requireAbsolutePath(raw, 'initialDir');
+  try {
+    const info = await stat(path);
+    if (info.isDirectory()) {
+      return resolve(path);
+    }
+    if (info.isFile()) {
+      return dirname(resolve(path));
+    }
+  } catch {
+    // Missing starting folder: let the dialog pick its default.
+  }
+  return undefined;
 }
 
 function buildContext(project: Project, treePath: string, tree: TreeNodeJson): PluginContext {
@@ -47,8 +81,9 @@ function buildContext(project: Project, treePath: string, tree: TreeNodeJson): P
   };
 }
 
-export function createApiRouter(): Router {
+export function createApiRouter(options: RouterOptions = {}): Router {
   const router = Router();
+  const picker = options.picker ?? createPicker();
 
   router.get('/health', (_req, res) => {
     res.json({ ok: true });
@@ -68,6 +103,11 @@ export function createApiRouter(): Router {
       throw new HttpError(404, 'No project found');
     }
     res.type('application/json').send(project.content);
+  });
+
+  router.get('/workspace', async (req, res) => {
+    const dir = requireAbsolutePath(req.query.dir, 'dir');
+    res.json(await loadWorkspace(dir));
   });
 
   // Media type check for writes, before the body is parsed.
@@ -134,6 +174,47 @@ export function createApiRouter(): Router {
       throw err;
     }
     res.json({ ok: true });
+  });
+
+  router.post('/dialog/pick', async (req, res) => {
+    const body = objectBody(req.body ?? {});
+    const kind = body.kind;
+    if (kind !== 'folder' && kind !== 'file') {
+      throw new HttpError(400, 'kind must be "folder" or "file"');
+    }
+    const initialDir = await resolveInitialDir(body.initialDir);
+    try {
+      const result = await picker.pick(kind as PickKind, initialDir);
+      res.json(result);
+    } catch (err) {
+      if (err instanceof DialogUnsupportedError) {
+        res.status(501).json({ message: err.message });
+        return;
+      }
+      if (err instanceof DialogBusyError) {
+        throw new HttpError(409, err.message);
+      }
+      throw err;
+    }
+  });
+
+  router.post('/project/init', async (req, res) => {
+    const body = objectBody(req.body);
+    const dir = requireAbsolutePath(body.dir, 'dir');
+    res.json(await initProject(dir));
+  });
+
+  router.post('/tree/create', async (req, res) => {
+    const body = objectBody(req.body);
+    const treePath = withJsonExtension(resolve(requireAbsolutePath(body.path, 'path')));
+    await requireProjectFor(treePath);
+
+    await mkdir(dirname(treePath), { recursive: true });
+    const created = await writeNewFile(treePath, await readTemplate('tree.json'));
+    if (!created) {
+      throw new HttpError(409, 'File already exists');
+    }
+    res.json({ path: treePath });
   });
 
   return router;

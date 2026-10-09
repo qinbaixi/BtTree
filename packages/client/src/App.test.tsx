@@ -11,6 +11,6 @@ describe('App', () => {
 
   it('renders the home page at /', () => {
     render(<App />);
-    expect(screen.getByPlaceholderText('Enter full tree path')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Tree file or folder path…')).toBeTruthy();
   });
 });

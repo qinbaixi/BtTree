@@ -92,6 +92,34 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 无效的端口（非整数、超出 1–65535）会被忽略。
 
+## 首页（打开树与项目）
+
+首页（`/`）用于找到要编辑的树。顶部有三个入口：
+
+- **路径输入框**：输入树文件的完整路径（以 `.json` 结尾）会直接打开编辑器；输入文件夹路径则列出该文件夹中的树。
+- **Open folder…**：调用本机的系统文件夹选择框，选中后列出该文件夹中的树。
+- **Open tree file…**：调用本机的系统文件选择框（过滤为 `*.json`），选中后直接打开编辑器。
+
+选择框在运行服务的机器上弹出，因此只适用于本地使用。若当前系统没有可用的选择框（例如 Linux 上未安装 `zenity` 或 `kdialog`），页面会显示提示，此时请直接在输入框中输入路径。选择框打开期间按钮会被禁用，并显示 `Waiting for the file dialog…`。
+
+选择文件夹后，页面下方会出现工作区面板：
+
+- **项目**：显示该文件夹所属的 `owl-bt.json`。若文件夹不在任何项目中，会显示提示，并可点击 **Initialize project here**，在该文件夹中写入 `owl-bt.json`（使用[默认模板](#默认模板)）和示例树 `trees/example.json`。
+- **树列表**：列出该项目（或文件夹）中的所有树，点击即可打开编辑器。列表最多显示 500 个。
+- **New tree**：输入相对于所选文件夹的文件名（例如 `trees/my-tree.json`，省略 `.json` 时会自动补上），点击 **Create** 会创建一棵由模板生成的树并打开。
+- **Refresh**：重新扫描文件夹。**Close folder**：关闭工作区面板并忘记该文件夹。
+
+所选文件夹会记在浏览器的 `localStorage`（键名 `owlbt.lastDir`）中，下次打开首页时自动恢复。
+
+下方的 **Recent** 列表显示最近打开过的树。若没有最近记录，也没有打开的文件夹，首页中央会显示两个大按钮。
+
+命令行同样可以创建项目和树：
+
+```sh
+owlbt init ./my-project                    # 只写入 owl-bt.json
+owlbt create ./my-project/trees/patrol.json --no-open
+```
+
 ## 项目文件（owl-bt.json）
 
 项目文件定义树中可以使用的节点、装饰器、服务及其属性。CLI 会从树文件所在目录开始向上查找最近的 `owl-bt.json`，树文件必须位于项目目录之内。
@@ -176,6 +204,19 @@ owlbt create ./my-project/trees/patrol.json --no-open
 描述模板只做属性值替换：`{{Name}}` 会被替换为该属性的当前值（未设置时使用默认值），不执行任何表达式。引用不存在的属性时，占位符会被替换为空字符串。
 
 属性值不合法时（例如超出 `min` / `max`、不在 `values` 中、不匹配 `pattern`），树中对应的节点会显示为无效。类型不存在于项目文件中时，属性面板会显示 `Missing descriptor in project file` 错误。
+
+## 默认模板
+
+`owlbt init` 和首页的 **Initialize project here** 使用 `packages/server/templates/owl-bt.json` 作为 `owl-bt.json`。模板包含可以直接使用的类型，可作为编写自己项目的起点：
+
+- **自定义类型**：`blackboardKey`（以字母或下划线开头的标识符，用于黑板键名）、`probability`（0 到 1 之间的小数）。
+- **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`。
+- **装饰器**：`Failure`、`Invert`、`Success`、`IsBlackboardValueSet`、`Cooldown`、`Loop`、`TimeLimit`。
+- **服务**：`Sample service`、`UpdateTarget`、`LogTick`。
+
+图标全部使用 Font Awesome 6 Free Solid 的图标名。`RandomSelector` 与 `Loop` 设置了自定义颜色，其余类型使用默认颜色。
+
+Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节点的示例树，演示标签、注释、装饰器（含 `periodic` 与 `inverseCheckCondition`）以及带 `timeBetweenTicks` 的服务。模板中的 `templates/tree.json` 是只有一个 `Selector` 根节点的最小树，**New tree** 使用它。
 
 ## 树文件（tree）格式
 
@@ -266,6 +307,46 @@ module.exports = {
 | `Shift+↑` / `Shift+↓` | 上移 / 下移装饰器或服务 |
 
 「聚焦选中节点」和「设置节点类型」没有默认快捷键，可在命令面板（`Ctrl+Shift+P`）中执行。
+
+## 本地 HTTP API
+
+服务端在 `/api` 下提供以下接口，全部为本机使用的 JSON / 纯文本接口。写入请求的 `Content-Type` 必须是 `application/json`，否则返回 415。错误响应为纯文本（除非另有说明）。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `GET` | `/api/health` | 健康检查，返回 `{ "ok": true }` |
+| `GET` | `/api/project?path=<树文件绝对路径>` | 返回该树所属 `owl-bt.json` 的原始内容。无项目时 404 |
+| `GET` | `/api/tree?path=<树文件绝对路径>` | 返回树（经 `onTreeLoad` 处理）。路径不在项目内时 403 |
+| `POST` | `/api/tree?path=<树文件绝对路径>` | 保存树。可能被 `onTreeSave` 拒绝（409） |
+| `GET` | `/api/workspace?dir=<绝对目录或文件>` | 列出树文件，见下文 |
+| `POST` | `/api/project/init` | 初始化项目，见下文 |
+| `POST` | `/api/tree/create` | 创建树文件，见下文 |
+| `POST` | `/api/dialog/pick` | 打开本机的系统文件 / 文件夹选择框，见下文 |
+
+**`GET /api/workspace?dir=...`**
+
+- `dir` 必须是绝对路径；若是文件，则使用它所在的文件夹。文件夹不存在时 404，`dir` 不是绝对路径时 400。
+- 若能从 `dir` 向上找到 `owl-bt.json`，返回 `projectPath` 与 `projectDir`，并以项目目录为扫描根目录；否则以 `dir` 为根。
+- 递归扫描至多 6 层子目录，跳过 `node_modules`、以 `.` 开头的目录，以及 `owl-bt.json`、`package.json`、`package-lock.json`、`tsconfig*.json`。只有顶层为对象且含字符串 `type` 字段的 JSON 才算树；超过 5 MB 或无法解析的文件忽略。
+- 响应：`{ "dir", "projectPath?", "projectDir?", "trees": [{ "path", "relPath" }], "truncated" }`。`trees` 按 `relPath` 排序，最多 500 项，超出时 `truncated` 为 `true`。
+
+**`POST /api/project/init`**，请求体 `{ "dir": "<绝对目录>" }`
+
+- 在已存在的目录中写入 `owl-bt.json`（使用默认模板）和 `trees/example.json`（已存在则保留）。
+- 目录不存在返回 404；目录已在项目中，或已存在 `owl-bt.json`，返回 409。
+- 成功时返回该目录的工作区信息（同 `GET /api/workspace`）。
+
+**`POST /api/tree/create`**，请求体 `{ "path": "<绝对路径>" }`
+
+- 路径不以 `.json` 结尾时自动补上。路径必须位于某个项目内（否则 403 `Path must be in project`），文件已存在返回 409。
+- 自动创建父目录，内容为 `templates/tree.json`。成功时返回 `{ "path": "<实际写入的路径>" }`。
+
+**`POST /api/dialog/pick`**，请求体 `{ "kind": "folder" | "file", "initialDir?": "<绝对路径>" }`
+
+- 在运行服务的机器上打开系统选择框。用户取消时返回 `{ "cancelled": true }`，否则返回 `{ "path": "<所选路径>" }`。
+- `initialDir` 为起始文件夹；若是文件则取其所在文件夹，不存在时忽略。
+- Windows 使用 PowerShell 的 WinForms 对话框，macOS 使用 `osascript`，Linux 依次尝试 `zenity` 与 `kdialog`。
+- 没有可用的选择框时返回 `501 { "message": "..." }`；已有选择框打开时返回 409；超过 10 分钟视为取消。
 
 ## 与原版 owl-bt 的主要差异
 

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { FileWatcherRegistry } from './fileWatcher';
+import type { Picker } from './picker';
 import { apiErrorHandler, createApiRouter } from './routes';
 import { attachProjectWatch } from './socket';
 
@@ -19,6 +20,8 @@ export const BUNDLED_CLIENT_DIST = join(moduleDir, 'public');
 export interface AppOptions {
   /** Directory with the client build. Defaults to OWLBT_CLIENT_DIST, then the bundled client, then the monorepo build. */
   clientDist?: string;
+  /** Native file dialog runner used by POST /api/dialog/pick. Defaults to the platform picker. */
+  picker?: Picker;
 }
 
 export function resolveClientDist(options: AppOptions = {}): string {
@@ -33,7 +36,7 @@ export function createApp(options: AppOptions = {}): express.Express {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use('/api', createApiRouter());
+  app.use('/api', createApiRouter({ picker: options.picker }));
 
   const clientDist = resolveClientDist(options);
   const indexHtml = join(clientDist, 'index.html');
