@@ -1,0 +1,97 @@
+.page {
+  min-height: 100vh;
+}
+
+.head {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  padding: 20px 10px;
+  background: var(--top-menu-background-color);
+  border-bottom: 1px solid var(--top-menu-border-color);
+}
+
+.form {
+  display: flex;
+  margin: 0;
+}
+
+.input {
+  flex: 1 1;
+  min-width: 0;
+  height: 34px;
+}
+
+.open {
+  margin-left: -1px;
+  padding: 6px 16px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-background-color);
+  border: 1px solid var(--ctrl-border-color);
+  border-radius: 0;
+}
+
+.open:hover,
+.open:focus {
+  color: var(--ctrl-focus-color);
+  background: var(--ctrl-hover-color);
+  outline: 0;
+}
+
+.body {
+  padding: 100px 15px 0;
+  max-width: 1170px;
+  margin: 0 auto;
+}
+
+.mru {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mruItem {
+  position: relative;
+}
+
+.mruLink {
+  display: block;
+  margin-bottom: 15px;
+  padding: 5px 15px;
+  border-left: solid 10px var(--top-menu-border-color);
+  background: #202e3c;
+}
+
+.mruLink:hover,
+.mruLink:focus {
+  border-left-color: var(--ctrl-highlight-background-color);
+  text-decoration: none;
+}
+
+.mruName {
+  font-size: 1.6rem;
+  color: var(--ctrl-color);
+}
+
+.mruPath {
+  font-size: 1.4rem;
+  color: #929292;
+  word-break: break-all;
+}
+
+.remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  padding: 2px 6px;
+  color: var(--ctrl-color);
+  background: none;
+  border: 0;
+}
+
+.remove:hover,
+.remove:focus {
+  color: var(--ctrl-focus-color);
+}

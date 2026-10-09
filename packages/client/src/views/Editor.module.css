@@ -1,0 +1,57 @@
+.page {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  position: relative;
+  z-index: 100;
+}
+
+.breadcrumb {
+  display: flex;
+  margin: 0;
+  padding: 8px 15px;
+  list-style: none;
+  background: var(--main-background-color);
+}
+
+.breadcrumb li + li::before {
+  content: '>';
+  padding: 0 5px 0 8px;
+  color: var(--text-light-color);
+}
+
+.breadcrumb .active {
+  color: var(--text-light-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main {
+  display: flex;
+  flex: 1 1;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.treeArea {
+  position: relative;
+  flex: 1 1;
+  min-width: 0;
+}
+
+.placeholder {
+  margin: 0;
+  color: var(--ctrl-color);
+}
+
+.missingPath {
+  padding: 20px;
+}

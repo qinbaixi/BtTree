@@ -1,0 +1,104 @@
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 5px 0;
+}
+
+.hint {
+  margin: 0;
+  padding: 10px 15px;
+  color: var(--text-light-color);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-left: solid 5px;
+  background: var(--dlg-light-background-color);
+}
+
+.icon {
+  width: 1.28571em;
+  text-align: center;
+}
+
+.typeName {
+  font-weight: bold;
+}
+
+.kind {
+  margin-left: auto;
+  color: var(--ctrl-color);
+  font-size: 1.2rem;
+  text-transform: uppercase;
+}
+
+.error {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--alert-danger-text);
+  background: var(--alert-danger-bg);
+}
+
+.fieldset {
+  margin: 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--ctrl-border-color);
+}
+
+.fieldset legend {
+  padding: 0 5px;
+  font-size: 1.3rem;
+  color: var(--text-light-color);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-bottom: 8px;
+}
+
+.row > label:first-child {
+  flex: 0 0 100%;
+}
+
+.control {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.invalid {
+  color: var(--ctrl-input-color);
+  background: var(--ctrl-input-err-background-color);
+  border-color: var(--ctrl-input-err-border-color);
+}
+
+.defaultValue {
+  color: var(--text-light-color);
+  font-style: italic;
+}
+
+.reset {
+  padding: 2px 8px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-background-color);
+  border: 1px solid var(--ctrl-border-color);
+  font-size: 1.2rem;
+}
+
+.reset:hover {
+  background: var(--ctrl-hover-color);
+}

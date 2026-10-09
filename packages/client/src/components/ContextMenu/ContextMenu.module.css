@@ -1,0 +1,38 @@
+.menu {
+  position: fixed;
+  z-index: 5000;
+  min-width: 150px;
+  color: var(--context-menu-color);
+  background: var(--context-menu-background-color);
+  border: solid 1px var(--context-menu-border-color);
+  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.28);
+}
+
+.menu ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: block;
+  width: 100%;
+  padding: 5px 10px 5px 10px;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.item:hover,
+.item:focus {
+  background: var(--context-menu-hover-background-color);
+  outline: none;
+}
+
+.hotkey {
+  float: right;
+  margin-left: 20px;
+  color: var(--text-light-color);
+}

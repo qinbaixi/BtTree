@@ -1,0 +1,89 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.dialog {
+  width: 450px;
+  max-width: calc(100vw - 40px);
+  padding: 15px;
+  color: var(--ctrl-color);
+  background: var(--dlg-background-color);
+  border: 1px solid var(--context-menu-border-color);
+  box-shadow: 0 0 10px 0 rgba(0, 0, 0, 0.28);
+}
+
+.input {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.list {
+  max-height: 300px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+  padding: 10px;
+  padding-left: 15px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-background-color);
+  word-break: break-all;
+  cursor: pointer;
+  list-style: none;
+}
+
+.colored {
+  padding-left: 10px;
+  border-left: solid 5px;
+}
+
+.item:hover {
+  background: var(--ctrl-hover-color);
+}
+
+.selected {
+  background: var(--ctrl-highlight-background-color);
+}
+
+.icon {
+  margin-right: 5px;
+  width: 1.28571em;
+  text-align: center;
+}
+
+.label {
+  flex: 1 1 auto;
+}
+
+.label mark {
+  color: white;
+  background: none;
+  font-weight: bold;
+}
+
+.hint {
+  margin-left: auto;
+  padding: 0 3px;
+  color: var(--ctrl-color);
+  background: rgba(70, 98, 125, 0.3);
+  border: solid 1px var(--ctrl-color);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 10px 0 0;
+  color: var(--text-light-color);
+}

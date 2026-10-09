@@ -1,0 +1,124 @@
+/*
+ * Global styles. Colors mirror the original AngularJS app (app/app.scss) and are exposed as
+ * CSS variables so CSS Modules can reference them.
+ */
+
+:root {
+  --main-background-color: #243342;
+  --dlg-light-background-color: #507295;
+  --dlg-background-color: #2c3e50;
+  --ctrl-color: #cccccc;
+  --ctrl-focus-color: #e4e4e4;
+  --ctrl-input-color: #161b20;
+  --ctrl-border-color: #2c3e50;
+  --ctrl-background-color: #243342;
+  --ctrl-hover-color: #3d566f;
+  --ctrl-highlight-background-color: #c65c5c;
+  --text-light-color: #777777;
+  --ctrl-input-err-border-color: #c65c5c;
+  --ctrl-input-err-background-color: #ffd2d2;
+
+  /* tree */
+  --node-selected-border-color: #c65c5c;
+  --node-background-color: #ececec;
+  --line-color: #ececec;
+  --node-icon-color: white;
+  --composite-node-background-color: #d08038;
+  --action-node-background-color: #955cc6;
+  --node-decorator-background-color: #5c90c6;
+  --node-service-background-color: #5cc690;
+  --node-color: white;
+  --node-service-color: #333333;
+  --node-decorator-color: #333333;
+  --node-comment-color: #333333;
+  --invalid-node-item-background-color: #c65c5c;
+
+  /* menus */
+  --context-menu-border-color: #1c2732;
+  --context-menu-background-color: #2c3e50;
+  --context-menu-color: #cccccc;
+  --context-menu-hover-background-color: #3d566f;
+  --dropdown-border-color: #1c2732;
+  --dropdown-background-color: #2c3e50;
+  --dropdown-color: #cccccc;
+  --dropdown-hover-background-color: #3d566f;
+  --top-menu-border-color: #1c2732;
+  --top-menu-background-color: #2c3e50;
+  --top-menu-color: #cccccc;
+  --top-menu-hover-background-color: #3d566f;
+
+  /* alerts (bootstrap 3 palette) */
+  --alert-danger-bg: #f2dede;
+  --alert-danger-text: #a94442;
+  --alert-warning-bg: #fcf8e3;
+  --alert-warning-text: #8a6d3b;
+  --alert-info-bg: #d9edf7;
+  --alert-info-text: #31708f;
+  --alert-success-bg: #dff0d8;
+  --alert-success-text: #3c763d;
+}
+
+/* Bootstrap 3 uses 10px root size, so the rem values from the original styles still apply. */
+html {
+  font-size: 10px;
+  -webkit-text-size-adjust: 100%;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.42857;
+  color: var(--ctrl-color);
+  background: var(--main-background-color);
+}
+
+a,
+a:visited,
+a:focus {
+  color: var(--ctrl-color);
+  text-decoration: none;
+}
+
+a:hover,
+a:active {
+  color: var(--ctrl-color);
+  text-decoration: underline;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+input[type='text'] {
+  padding: 6px 12px;
+  color: var(--ctrl-color);
+  background: var(--ctrl-input-color);
+  border: 1px solid var(--ctrl-border-color);
+  border-radius: 0;
+}
+
+input[type='text']:focus {
+  outline: none;
+  border-color: var(--ctrl-hover-color);
+}
+
+button {
+  cursor: pointer;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

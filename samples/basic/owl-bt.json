@@ -1,0 +1,190 @@
+{
+  "types": {
+    "identifier": {
+      "type": "string",
+      "pattern": "[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "seconds": {
+      "type": "number"
+    }
+  },
+  "nodes": [
+    {
+      "name": "Selector",
+      "icon": "question",
+      "color": "#d08038",
+      "isComposite": true,
+      "description": "Runs children in order until one succeeds"
+    },
+    {
+      "name": "Sequence",
+      "icon": "arrow-right",
+      "color": "#d08038",
+      "isComposite": true,
+      "description": "Runs children in order until one fails"
+    },
+    {
+      "name": "Parallel",
+      "icon": "layer-group",
+      "isComposite": true,
+      "description": "Runs all children at once",
+      "properties": [
+        {
+          "name": "Policy",
+          "type": "enum",
+          "values": ["RequireOne", "RequireAll"],
+          "default": "RequireAll",
+          "description": "How many children must succeed"
+        }
+      ]
+    },
+    {
+      "name": "ActionBase",
+      "icon": "gear",
+      "isAbstract": true,
+      "properties": [
+        {
+          "name": "Timeout",
+          "type": "number",
+          "min": 0,
+          "max": 60,
+          "default": 5,
+          "description": "Seconds before the action gives up"
+        }
+      ]
+    },
+    {
+      "name": "Targetable",
+      "isAbstract": true,
+      "properties": [
+        {
+          "name": "Target",
+          "type": "identifier",
+          "default": "Enemy"
+        }
+      ]
+    },
+    {
+      "name": "MoveTo",
+      "base": "ActionBase",
+      "icon": "person-walking",
+      "color": "#955cc6",
+      "description": "Move to {{Target}} at speed {{Speed}}",
+      "properties": [
+        {
+          "name": "Target",
+          "type": "string"
+        },
+        {
+          "name": "Speed",
+          "type": "number",
+          "min": 0,
+          "max": 100,
+          "default": 50
+        },
+        {
+          "name": "Mode",
+          "type": "enum",
+          "values": ["Walk", "Run", "Sprint"],
+          "default": "Walk"
+        }
+      ]
+    },
+    {
+      "name": "Attack",
+      "base": ["ActionBase", "Targetable"],
+      "icon": "crosshairs",
+      "color": "#955cc6",
+      "description": "Attack {{Target}}",
+      "properties": [
+        {
+          "name": "Damage",
+          "type": "number",
+          "min": 1,
+          "max": 999
+        },
+        {
+          "name": "Melee",
+          "type": "bool",
+          "default": true
+        },
+        {
+          "name": "Id",
+          "type": "identifier"
+        }
+      ]
+    },
+    {
+      "name": "Wait",
+      "base": "ActionBase",
+      "icon": "hourglass-half",
+      "color": "#955cc6",
+      "description": "Wait {{Timeout}} seconds"
+    }
+  ],
+  "decorators": [
+    {
+      "name": "Failure",
+      "icon": "thumbs-down"
+    },
+    {
+      "name": "Invert",
+      "icon": "right-left"
+    },
+    {
+      "name": "Success",
+      "icon": "thumbs-up"
+    },
+    {
+      "name": "IsBlackboardValueSet",
+      "icon": "table",
+      "description": "Is blackboard value \"{{Field}}\" set",
+      "properties": [
+        {
+          "name": "Field",
+          "type": "identifier"
+        }
+      ]
+    },
+    {
+      "name": "Cooldown",
+      "icon": "clock",
+      "description": "Cooldown {{Seconds}}s",
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "seconds",
+          "min": 0,
+          "default": 1
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "Sample service",
+      "icon": "gear",
+      "description": "Sample service",
+      "properties": [
+        {
+          "name": "BlackboardKey",
+          "type": "string",
+          "default": "Target"
+        }
+      ]
+    },
+    {
+      "name": "UpdateTarget",
+      "icon": "bullseye",
+      "color": "#5cc690",
+      "description": "Updates {{Key}} every tick",
+      "properties": [
+        {
+          "name": "Key",
+          "type": "identifier",
+          "default": "Target"
+        }
+      ]
+    }
+  ]
+}

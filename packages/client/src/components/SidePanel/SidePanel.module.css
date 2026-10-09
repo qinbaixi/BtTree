@@ -1,0 +1,69 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 250px;
+}
+
+.title {
+  font-size: 1.6rem;
+  font-weight: 500;
+  margin: 0;
+  padding: 10px 15px;
+  background: var(--dlg-background-color);
+  color: var(--ctrl-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.title:hover,
+.title:focus {
+  color: var(--ctrl-focus-color);
+  background: color-mix(in srgb, var(--dlg-background-color) 85%, white);
+}
+
+.hideIcon {
+  float: right;
+  margin-top: 3px;
+}
+
+.body {
+  position: relative;
+  flex: 1 1;
+}
+
+.scroll {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.collapsed {
+  flex-basis: 50px;
+  flex-direction: row;
+  align-items: stretch;
+  background: var(--dlg-background-color);
+}
+
+.collapsed .title,
+.collapsed .body {
+  display: none;
+}
+
+.expand {
+  display: flex;
+  flex: 1 1;
+  align-items: center;
+  justify-content: center;
+  color: var(--ctrl-color);
+  cursor: pointer;
+  font-size: 3.5rem;
+}
+
+.expand:hover,
+.expand:focus {
+  color: var(--ctrl-focus-color);
+}

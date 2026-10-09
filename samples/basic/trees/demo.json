@@ -1,0 +1,138 @@
+{
+  "type": "Selector",
+  "name": "rootNode",
+  "label": "Root",
+  "comment": "Guard behaviour tree demo",
+  "services": [
+    {
+      "type": "Sample service",
+      "properties": [{ "name": "BlackboardKey", "value": "Target" }],
+      "timeBetweenTicks": 0.5,
+      "firstTickTime": 0
+    },
+    {
+      "type": "UpdateTarget",
+      "label": "Refresh target",
+      "properties": [{ "name": "Key", "value": "Target" }],
+      "timeBetweenTicks": 0.2
+    }
+  ],
+  "childNodes": [
+    {
+      "type": "Sequence",
+      "label": "Patrol",
+      "comment": "Walk the route while points remain",
+      "decorators": [
+        {
+          "type": "IsBlackboardValueSet",
+          "properties": [{ "name": "Field", "value": "PatrolPoints" }]
+        }
+      ],
+      "childNodes": [
+        {
+          "type": "MoveTo",
+          "label": "Go to waypoint",
+          "properties": [
+            { "name": "Target", "value": "Waypoint" },
+            { "name": "Speed", "value": 250 },
+            { "name": "Mode", "value": "Run" }
+          ],
+          "decorators": [
+            {
+              "type": "Cooldown",
+              "properties": [{ "name": "Seconds", "value": 2 }],
+              "periodic": true
+            }
+          ]
+        },
+        {
+          "type": "Wait",
+          "label": "Look around",
+          "properties": [{ "name": "Timeout", "value": 3 }]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "Combat",
+      "decorators": [{ "type": "Failure", "label": "Never fails" }],
+      "childNodes": [
+        {
+          "type": "Parallel",
+          "label": "Attack and retreat",
+          "properties": [{ "name": "Policy", "value": "RequireOne" }],
+          "childNodes": [
+            {
+              "type": "Attack",
+              "label": "Strike",
+              "properties": [
+                { "name": "Damage", "value": 25 },
+                { "name": "Melee", "value": true },
+                { "name": "Target", "value": "Enemy" }
+              ]
+            },
+            {
+              "type": "MoveTo",
+              "label": "Back off",
+              "comment": "Retreat when hurt",
+              "properties": [
+                { "name": "Target", "value": "Cover" },
+                { "name": "Speed", "value": 80 }
+              ],
+              "decorators": [{ "type": "Invert", "inverseCheckCondition": true }]
+            }
+          ]
+        },
+        {
+          "type": "Attack",
+          "label": "Finish",
+          "properties": [
+            { "name": "Damage", "value": 100 },
+            { "name": "Melee", "value": false },
+            { "name": "Target", "value": "Enemy" }
+          ],
+          "decorators": [{ "type": "Success" }]
+        }
+      ]
+    },
+    {
+      "type": "Sequence",
+      "label": "Investigate",
+      "childNodes": [
+        {
+          "type": "MoveTo",
+          "label": "Walk to noise",
+          "properties": [
+            { "name": "Target", "value": "NoisePosition" },
+            { "name": "Speed", "value": 40 },
+            { "name": "Mode", "value": "Walk" }
+          ]
+        },
+        {
+          "type": "Parallel",
+          "label": "Listen and watch",
+          "properties": [{ "name": "Policy", "value": "RequireAll" }],
+          "childNodes": [
+            { "type": "Wait", "label": "Listen", "properties": [{ "name": "Timeout", "value": 4 }] },
+            { "type": "Wait", "label": "Scan", "properties": [{ "name": "Timeout", "value": 2 }] }
+          ]
+        },
+        {
+          "type": "MoveTo",
+          "label": "Return home",
+          "properties": [
+            { "name": "Target", "value": "Home" },
+            { "name": "Speed", "value": 60 }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Wait",
+      "label": "Idle",
+      "comment": "Fallback",
+      "properties": [{ "name": "Timeout", "value": 1.5 }],
+      "notes": "unknown field, kept as-is on save"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "@owlbt/server",
+  "version": "0.1.0",
+  "description": "owl-bt behavior tree editor: local server and owlbt CLI",
+  "type": "module",
+  "bin": {
+    "owlbt": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup src/index.ts src/cli.ts --format esm --clean && node scripts/copy-client.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "express": "^5.2.1",
+    "open": "^11.0.4",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@owlbt/shared": "0.1.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/supertest": "^7.2.1",
+    "socket.io-client": "^4.8.4",
+    "supertest": "^7.3.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.23.15"
+  }
+}
