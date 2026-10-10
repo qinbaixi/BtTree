@@ -9,8 +9,14 @@ export interface PropertyDescJson {
   min?: number;
   max?: number;
   description?: string;
+  /** Erlang/Lua export name of the property (default: the property name). */
+  exportName?: string;
+  /** Where the exported value goes (default 'properties'). 'node' puts it at the node's top level. */
+  exportTo?: PropertyExportTarget;
   [key: string]: unknown;
 }
+
+export type PropertyExportTarget = 'properties' | 'node';
 
 export interface CustomTypeJson {
   type: 'string' | 'number';
@@ -28,7 +34,32 @@ export interface ItemTypeDescJson {
   properties?: PropertyDescJson[];
   /** Nodes only. */
   isComposite?: boolean;
+  /** Erlang/Lua export settings. */
+  export?: ItemExportJson;
   [key: string]: unknown;
+}
+
+/** Per-type export settings (`export` of an item type in owl-bt.json). */
+export interface ItemExportJson {
+  /** Exported `type`. Default: composite / task / decorator / service. */
+  type?: string;
+  /** Exported `sub_type`. Default: the type name in snake_case. Numbers stay numbers. */
+  subType?: string | number;
+  /** Constant top-level fields added to every export of the type. */
+  fields?: Record<string, unknown>;
+}
+
+/** Output settings of one export format. Paths are relative to the project directory. */
+export interface FormatExportJson {
+  /** Default: 'export/erlang' or 'export/lua'. */
+  outDir?: string;
+  /** File name template; `{name}` is the tree file name without extension. Default: '{name}'. */
+  fileName?: string;
+}
+
+export interface ProjectExportJson {
+  erlang?: FormatExportJson;
+  lua?: FormatExportJson;
 }
 
 export interface ProjectFile {
@@ -36,6 +67,7 @@ export interface ProjectFile {
   nodes?: ItemTypeDescJson[];
   decorators?: ItemTypeDescJson[];
   services?: ItemTypeDescJson[];
+  export?: ProjectExportJson;
 }
 
 // ---------- Compiled project ----------
@@ -56,6 +88,10 @@ export interface CompiledProperty {
   /** Regex source from the custom type (not anchored). */
   pattern?: string;
   description?: string;
+  /** Export name (default: the property name). */
+  exportName?: string;
+  /** Export target (default: 'properties'). */
+  exportTo?: PropertyExportTarget;
 }
 
 export interface CompiledItemType {
@@ -70,6 +106,8 @@ export interface CompiledItemType {
   /** Nodes only; false for decorators/services. */
   isComposite: boolean;
   properties: CompiledProperty[];
+  /** Erlang/Lua export settings. */
+  export?: ItemExportJson;
   /** True for fallback descriptors of types missing from the project file. */
   isInvalid?: boolean;
 }

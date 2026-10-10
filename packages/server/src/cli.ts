@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from '@owlbt/shared';
 import { Command } from 'commander';
 import open from 'open';
+import { exportProject, exportTree, parseExportFormats, type ExportTreeResult } from './export';
 import { run } from './run';
 import { findProjectFile, PROJECT_FILE_NAME } from './project';
 
@@ -103,6 +104,59 @@ program
   .action(async (pathArg: string) => {
     const treePath = resolve(pathArg);
     await serveAndOpen(`/tree?path=${encodeURIComponent(treePath)}`);
+  });
+
+/** Prints one export result. Returns true when the tree failed. */
+function reportExport(result: ExportTreeResult & { relPath?: string }): boolean {
+  const label = result.relPath ?? result.treePath;
+  for (const file of result.files) {
+    console.log(`Wrote ${file.path}`);
+  }
+  for (const warning of result.warnings) {
+    console.warn(`owlbt: warning: ${label}: ${warning}`);
+  }
+  if (result.error !== undefined) {
+    console.error(`owlbt: error: ${label}: ${result.error}`);
+    return true;
+  }
+  return false;
+}
+
+program
+  .command('export <path>')
+  .description('export trees to Erlang and/or Lua: a tree file, or every tree of a project folder')
+  .option('--format <formats>', 'comma separated formats: erlang, lua', 'erlang,lua')
+  .option('--out <dir>', 'output folder for every format (default: the project export settings)')
+  .action(async (pathArg: string, options: { format: string; out?: string }) => {
+    const target = resolve(pathArg);
+    const formats = parseExportFormats(
+      options.format
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name !== ''),
+    );
+    const outDir = options.out === undefined ? undefined : resolve(options.out);
+
+    const info = await stat(target);
+    let failed = false;
+    if (info.isDirectory()) {
+      const batch = await exportProject(target, formats, { outDir });
+      if (batch.results.length === 0) {
+        console.log('No tree files found in the project.');
+      }
+      for (const result of batch.results) {
+        failed = reportExport(result) || failed;
+      }
+      if (batch.truncated) {
+        console.warn('owlbt: warning: only the first 500 tree files were exported');
+      }
+      console.log(`Exported ${batch.results.length} tree(s) from ${batch.projectDir}`);
+    } else {
+      failed = reportExport(await exportTree(target, formats, { outDir }));
+    }
+    if (failed) {
+      process.exitCode = 1;
+    }
   });
 
 program.parseAsync(process.argv).catch(fail);

@@ -3,21 +3,48 @@ import { Link, useNavigate } from 'react-router';
 import {
   ApiError,
   createTree,
+  EXPORT_FORMATS,
+  exportProject,
   fetchWorkspace,
   initProject,
   pickPath,
+  type ExportFormat,
+  type ExportProjectResult,
   type PickKind,
   type Workspace,
 } from '../lib/api';
 import { getMruList, getPathLastSegment, removeMru, type MruItem } from '../lib/mru';
 import { joinPath, isJsonPath } from '../lib/paths';
-import { getStorageItem, removeStorageItem, setStorageItem } from '../lib/storage';
+import {
+  getJson,
+  getStorageItem,
+  removeStorageItem,
+  setJson,
+  setStorageItem,
+} from '../lib/storage';
 import { alerts } from '../store/alertStore';
 import { setTheme, themeLabel, useTheme, type ThemeId } from '../lib/theme';
 import styles from './Home.module.css';
 
 /** Folder restored when the page opens. */
 export const LAST_DIR_STORAGE_KEY = 'owlbt.lastDir';
+
+/** Export formats last chosen in the workspace panel. */
+export const EXPORT_FORMATS_STORAGE_KEY = 'owlbt.exportFormats';
+
+const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  erlang: 'Erlang',
+  lua: 'Lua',
+};
+
+/** Stored formats in canonical order. Anything unknown falls back to both formats. */
+function readStoredFormats(): ExportFormat[] {
+  const stored = getJson<unknown>(EXPORT_FORMATS_STORAGE_KEY, EXPORT_FORMATS);
+  if (!Array.isArray(stored)) {
+    return [...EXPORT_FORMATS];
+  }
+  return EXPORT_FORMATS.filter((format) => stored.includes(format));
+}
 
 /** Switches between the light and classic dark themes. */
 function ThemeToggle() {
@@ -61,6 +88,46 @@ function readStoredFolder(): string | null {
   return getStorageItem(LAST_DIR_STORAGE_KEY) || null;
 }
 
+/** Per-tree outcome of an export: written file names, warnings, or the error. */
+function ExportResults({ result }: { result: ExportProjectResult }) {
+  if (result.results.length === 0) {
+    return <p className={styles.muted}>No tree files to export.</p>;
+  }
+  const exported = result.results.filter((tree) => tree.error === undefined).length;
+  return (
+    <>
+      <p className={styles.muted}>
+        Exported {exported} of {result.results.length} trees.
+      </p>
+      <ul className={styles.exportList} aria-label="Export results">
+        {result.results.map((tree) => (
+          <li key={tree.treePath} className={styles.exportItem}>
+            <div className={styles.exportName}>{tree.relPath}</div>
+            {tree.error !== undefined ? (
+              <div className={styles.exportFailure}>{tree.error}</div>
+            ) : (
+              tree.files.map((file) => (
+                <div key={file.path} className={styles.exportFile} title={file.path}>
+                  <span className={styles.exportFormat}>{EXPORT_FORMAT_LABELS[file.format]}</span>
+                  {getPathLastSegment(file.path)}
+                </div>
+              ))
+            )}
+            {tree.warnings.map((warning, index) => (
+              <div key={index} className={styles.exportWarning}>
+                {warning}
+              </div>
+            ))}
+          </li>
+        ))}
+      </ul>
+      {result.truncated && (
+        <p className={styles.muted}>Only the first 500 tree files were exported.</p>
+      )}
+    </>
+  );
+}
+
 interface WorkspacePanelProps {
   folder: string;
   workspace: Workspace | null;
@@ -86,8 +153,33 @@ function WorkspacePanel({
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [exportFormats, setExportFormats] = useState<ExportFormat[]>(readStoredFormats);
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState<ExportProjectResult | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const dir = workspace?.dir ?? folder;
+
+  const toggleExportFormat = (format: ExportFormat) => {
+    const next = EXPORT_FORMATS.filter((item) =>
+      item === format ? !exportFormats.includes(item) : exportFormats.includes(item),
+    );
+    setExportFormats(next);
+    setJson(EXPORT_FORMATS_STORAGE_KEY, next);
+  };
+
+  const onExportAll = async () => {
+    setExporting(true);
+    setExportError(null);
+    setExportResult(null);
+    try {
+      setExportResult(await exportProject(dir, exportFormats));
+    } catch (err) {
+      setExportError(errorMessage(err));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const onInit = async () => {
     setInitializing(true);
@@ -190,6 +282,47 @@ function WorkspacePanel({
           {workspace.truncated && (
             <p className={styles.muted}>Only the first 500 tree files are listed.</p>
           )}
+
+          <section className={styles.export} aria-labelledby="export-heading">
+            <h3 id="export-heading" className={styles.subheading}>
+              Export
+            </h3>
+            <div className={styles.exportRow}>
+              {EXPORT_FORMATS.map((format) => (
+                <label key={format} className={styles.checkLabel}>
+                  <input
+                    type="checkbox"
+                    checked={exportFormats.includes(format)}
+                    onChange={() => toggleExportFormat(format)}
+                  />
+                  {EXPORT_FORMAT_LABELS[format]}
+                </label>
+              ))}
+              <button
+                type="button"
+                className={styles.button}
+                onClick={() => void onExportAll()}
+                disabled={
+                  exporting ||
+                  exportFormats.length === 0 ||
+                  workspace.projectPath === undefined ||
+                  workspace.trees.length === 0
+                }
+              >
+                Export all
+              </button>
+            </div>
+            {workspace.projectPath === undefined && (
+              <p className={styles.muted}>Initialize a project to export its trees.</p>
+            )}
+            {exporting && <p className={styles.muted}>Exporting…</p>}
+            {exportError !== null && (
+              <div role="alert" className={styles.error}>
+                {exportError}
+              </div>
+            )}
+            {exportResult !== null && <ExportResults result={exportResult} />}
+          </section>
 
           <form className={styles.newTree} onSubmit={onCreate}>
             <label className={styles.label} htmlFor="new-tree-name">

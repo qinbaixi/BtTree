@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MRU_STORAGE_KEY } from '../lib/mru';
-import Home, { LAST_DIR_STORAGE_KEY } from './Home';
+import Home, { EXPORT_FORMATS_STORAGE_KEY, LAST_DIR_STORAGE_KEY } from './Home';
 
 function LocationProbe() {
   const location = useLocation();
@@ -387,6 +387,99 @@ describe('Home', () => {
 
       expect(await screen.findByText('trees/new.json')).toBeTruthy();
       expect(calls.filter((c) => c.method === 'GET')).toHaveLength(2);
+    });
+  });
+
+  describe('export all', () => {
+    const BATCH = {
+      projectDir: '/work',
+      truncated: false,
+      results: [
+        {
+          relPath: 'trees/a.json',
+          treePath: '/work/trees/a.json',
+          files: [
+            { format: 'erlang', path: '/work/export/erlang/a.erl' },
+            { format: 'lua', path: '/work/export/lua/a.lua' },
+          ],
+          warnings: ["root: invalid value for property 'duration'"],
+        },
+        {
+          relPath: 'trees/sub/b.json',
+          treePath: '/work/trees/sub/b.json',
+          files: [],
+          warnings: [],
+          error: "Missing node type 'Nope' at root",
+        },
+      ],
+    };
+
+    function renderWorkspace(batch: () => Response = () => json(BATCH)) {
+      window.localStorage.setItem(LAST_DIR_STORAGE_KEY, '/work/trees');
+      const calls = mockApi({
+        'GET /api/workspace': () => json(WORKSPACE),
+        'POST /api/export/batch': batch,
+      });
+      renderHome();
+      return calls;
+    }
+
+    it('defaults to both formats', async () => {
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      expect((screen.getByRole('checkbox', { name: 'Erlang' }) as HTMLInputElement).checked).toBe(
+        true,
+      );
+      expect((screen.getByRole('checkbox', { name: 'Lua' }) as HTMLInputElement).checked).toBe(
+        true,
+      );
+    });
+
+    it('exports the folder with the ticked formats and lists the results per tree', async () => {
+      const calls = renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Lua' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
+
+      const list = await screen.findByRole('list', { name: 'Export results' });
+      const batchCall = calls.find((c) => c.url.pathname === '/api/export/batch');
+      expect(batchCall?.body).toEqual({ dir: '/work/trees', formats: ['erlang'] });
+      expect(screen.getByText('Exported 1 of 2 trees.')).toBeTruthy();
+      expect(within(list).getByText('a.erl')).toBeTruthy();
+      expect(within(list).getByText("root: invalid value for property 'duration'")).toBeTruthy();
+      expect(within(list).getByText("Missing node type 'Nope' at root")).toBeTruthy();
+    });
+
+    it('remembers the chosen formats', async () => {
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Erlang' }));
+
+      expect(window.localStorage.getItem(EXPORT_FORMATS_STORAGE_KEY)).toBe('["lua"]');
+    });
+
+    it('disables the button when no format is ticked', async () => {
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Erlang' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Lua' }));
+
+      expect(
+        (screen.getByRole('button', { name: 'Export all' }) as HTMLButtonElement).disabled,
+      ).toBe(true);
+    });
+
+    it('shows a server error inline', async () => {
+      renderWorkspace(() => text('No project found', 404));
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
+
+      expect((await screen.findByRole('alert')).textContent).toBe('No project found');
     });
   });
 });

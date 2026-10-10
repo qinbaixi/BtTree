@@ -101,3 +101,43 @@ export async function createTree(path: string): Promise<{ path: string }> {
   const response = await request('/api/tree/create', postJson({ path }));
   return (await response.json()) as { path: string };
 }
+
+export type ExportFormat = 'erlang' | 'lua';
+
+export const EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua'];
+
+export interface ExportedFile {
+  format: ExportFormat;
+  path: string;
+}
+
+export interface ExportTreeResult {
+  treePath: string;
+  files: ExportedFile[];
+  warnings: string[];
+  error?: string;
+}
+
+export interface ExportProjectResult {
+  projectDir: string;
+  truncated: boolean;
+  results: Array<ExportTreeResult & { relPath: string }>;
+}
+
+/** Exports one tree. A failing tree is reported in `error` (the request itself succeeds). */
+export async function exportTree(
+  treePath: string,
+  formats: readonly ExportFormat[],
+): Promise<ExportTreeResult> {
+  const response = await request('/api/export', postJson({ path: treePath, formats }));
+  return (await response.json()) as ExportTreeResult;
+}
+
+/** Exports every tree of the project that contains the folder. */
+export async function exportProject(
+  dir: string,
+  formats: readonly ExportFormat[],
+): Promise<ExportProjectResult> {
+  const response = await request('/api/export/batch', postJson({ dir, formats }));
+  return (await response.json()) as ExportProjectResult;
+}

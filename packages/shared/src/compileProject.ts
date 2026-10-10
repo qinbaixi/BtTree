@@ -137,6 +137,8 @@ function resolveProperty(
   if (prop.min !== undefined) out.min = prop.min;
   if (prop.max !== undefined) out.max = prop.max;
   if (prop.description !== undefined) out.description = prop.description;
+  if (prop.exportName !== undefined) out.exportName = prop.exportName;
+  if (prop.exportTo !== undefined) out.exportTo = prop.exportTo;
   return out;
 }
 
@@ -156,6 +158,7 @@ function compileItem(
   };
   if (desc.icon !== undefined) item.icon = desc.icon;
   if (desc.description !== undefined) item.description = desc.description;
+  if (desc.export !== undefined) item.export = desc.export;
   if (bases.length > 0) item.bases = bases;
   return item;
 }

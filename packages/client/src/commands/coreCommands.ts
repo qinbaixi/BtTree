@@ -22,6 +22,7 @@ import {
   type TreeNode,
 } from '@owlbt/shared';
 import { focusNode } from '../components/TreeCanvas/viewportStore';
+import { exportTree, type ExportFormat, type ExportTreeResult } from '../lib/api';
 import { readClipboard, writeClipboard } from '../lib/clipboard';
 import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
@@ -463,6 +464,71 @@ const commandPalette: Command = {
   },
 };
 
+export const EXPORT_COMMAND_IDS = {
+  erlang: 'core:ExportErlang',
+  lua: 'core:ExportLua',
+  all: 'core:ExportAll',
+} as const;
+
+/** How long the list of written files stays on screen. */
+export const EXPORT_SUCCESS_ALERT_MS = 15000;
+
+/**
+ * Exports the open tree to the given formats. Unsaved changes are saved first; the export is
+ * cancelled when the user declines or the save fails. Written files, warnings and errors are shown as alerts.
+ */
+function exportCommand(id: string, name: string, formats: ExportFormat[]): Command {
+  return {
+    id,
+    name,
+    canExec(ctx) {
+      const tree = ctx.tree.getState();
+      return tree.root !== undefined && tree.treePath !== undefined;
+    },
+    async exec(ctx) {
+      const tree = ctx.tree.getState();
+      const { treePath, root } = tree;
+      if (!treePath || !root) {
+        return;
+      }
+      if (tree.dirty) {
+        if (!window.confirm('Save changes before exporting?')) {
+          return;
+        }
+        if (!(await tree.save())) {
+          return;
+        }
+      }
+
+      let result: ExportTreeResult;
+      try {
+        result = await exportTree(treePath, formats);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        ctx.alerts.getState().push('error', `Export failed: ${message}`);
+        return;
+      }
+      const alertStore = ctx.alerts.getState();
+      if (result.warnings.length > 0) {
+        alertStore.push('warning', result.warnings.join('\n'));
+      }
+      if (result.error !== undefined) {
+        alertStore.push('error', `Export failed: ${result.error}`);
+      }
+      if (result.files.length > 0) {
+        const paths = result.files.map((file) => file.path).join('\n');
+        alertStore.push('success', `Exported:\n${paths}`, {
+          autoHideMs: EXPORT_SUCCESS_ALERT_MS,
+        });
+      }
+    },
+  };
+}
+
+const exportErlang = exportCommand(EXPORT_COMMAND_IDS.erlang, 'Export: Erlang', ['erlang']);
+const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, 'Export: Lua', ['lua']);
+const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: Erlang + Lua', ['erlang', 'lua']);
+
 export const THEME_COMMAND_IDS: Record<ThemeId, string> = {
   light: 'core:ThemeLight',
   classic: 'core:ThemeClassic',
@@ -494,6 +560,9 @@ export const coreCommands: Command[] = [
   undo,
   redo,
   save,
+  exportErlang,
+  exportLua,
+  exportAll,
   moveNodeCommand('Move Left', 'shift+left', -1, 100),
   moveNodeCommand('Move Right', 'shift+right', 1, 101),
   moveSubItemCommand('Move Up', 'shift+up', -1, 100),

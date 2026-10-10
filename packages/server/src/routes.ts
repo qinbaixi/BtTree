@@ -11,6 +11,7 @@ import {
   type PickKind,
   type Picker,
 } from './picker';
+import { exportProject, exportTree, parseExportFormats } from './export';
 import { getProject, isPathInDir, type PluginContext, type Project } from './project';
 import {
   initProject,
@@ -215,6 +216,20 @@ export function createApiRouter(options: RouterOptions = {}): Router {
       throw new HttpError(409, 'File already exists');
     }
     res.json({ path: treePath });
+  });
+
+  router.post('/export', async (req, res) => {
+    const body = objectBody(req.body);
+    const treePath = requireAbsolutePath(body.path, 'path');
+    const formats = parseExportFormats(body.formats);
+    res.json(await exportTree(treePath, formats));
+  });
+
+  router.post('/export/batch', async (req, res) => {
+    const body = objectBody(req.body);
+    const dir = requireAbsolutePath(body.dir, 'dir');
+    const formats = parseExportFormats(body.formats);
+    res.json(await exportProject(dir, formats));
   });
 
   return router;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { commandContext, commandRegistry, execCommand } from '../../commands/registry';
-import { THEME_COMMAND_IDS } from '../../commands/coreCommands';
+import { EXPORT_COMMAND_IDS, THEME_COMMAND_IDS } from '../../commands/coreCommands';
 import { useProjectStore } from '../../store/projectStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTheme, type ThemeId } from '../../lib/theme';
@@ -24,7 +24,12 @@ export interface TopMenuSection {
 export const TOP_MENU_SECTIONS: TopMenuSection[] = [
   {
     name: 'File',
-    items: [{ title: 'Save', commandId: 'core:Save', hotkey: 'Ctrl+S' }],
+    items: [
+      { title: 'Save', commandId: 'core:Save', hotkey: 'Ctrl+S' },
+      { title: 'Export: Erlang', commandId: EXPORT_COMMAND_IDS.erlang },
+      { title: 'Export: Lua', commandId: EXPORT_COMMAND_IDS.lua },
+      { title: 'Export: Erlang + Lua', commandId: EXPORT_COMMAND_IDS.all },
+    ],
   },
   {
     name: 'Edit',
