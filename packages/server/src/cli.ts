@@ -124,8 +124,10 @@ function reportExport(result: ExportTreeResult & { relPath?: string }): boolean 
 
 program
   .command('export <path>')
-  .description('export trees to Erlang and/or Lua: a tree file, or every tree of a project folder')
-  .option('--format <formats>', 'comma separated formats: erlang, lua', 'erlang,lua')
+  .description(
+    'export trees to Erlang, Lua, TypeScript and/or C#: a tree file, or every tree of a project folder',
+  )
+  .option('--format <formats>', 'comma separated formats: erlang, lua, ts, cs', 'erlang,lua')
   .option('--out <dir>', 'output folder for every format (default: the project export settings)')
   .action(async (pathArg: string, options: { format: string; out?: string }) => {
     const target = resolve(pathArg);

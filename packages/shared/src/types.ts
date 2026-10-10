@@ -51,15 +51,19 @@ export interface ItemExportJson {
 
 /** Output settings of one export format. Paths are relative to the project directory. */
 export interface FormatExportJson {
-  /** Default: 'export/erlang' or 'export/lua'. */
+  /** Default: 'export/erlang', 'export/lua', 'export/ts' or 'export/cs'. */
   outDir?: string;
   /** File name template; `{name}` is the tree file name without extension. Default: '{name}'. */
   fileName?: string;
+  /** C# only: namespace of the generated class. Dotted C# identifiers. Default: 'BehaviorTrees'. */
+  namespace?: string;
 }
 
 export interface ProjectExportJson {
   erlang?: FormatExportJson;
   lua?: FormatExportJson;
+  ts?: FormatExportJson;
+  cs?: FormatExportJson;
 }
 
 export interface ProjectFile {

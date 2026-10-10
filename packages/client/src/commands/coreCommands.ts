@@ -467,6 +467,8 @@ const commandPalette: Command = {
 export const EXPORT_COMMAND_IDS = {
   erlang: 'core:ExportErlang',
   lua: 'core:ExportLua',
+  ts: 'core:ExportTs',
+  cs: 'core:ExportCs',
   all: 'core:ExportAll',
 } as const;
 
@@ -527,7 +529,14 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
 
 const exportErlang = exportCommand(EXPORT_COMMAND_IDS.erlang, 'Export: Erlang', ['erlang']);
 const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, 'Export: Lua', ['lua']);
-const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: Erlang + Lua', ['erlang', 'lua']);
+const exportTs = exportCommand(EXPORT_COMMAND_IDS.ts, 'Export: TypeScript', ['ts']);
+const exportCs = exportCommand(EXPORT_COMMAND_IDS.cs, 'Export: C#', ['cs']);
+const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: All formats', [
+  'erlang',
+  'lua',
+  'ts',
+  'cs',
+]);
 
 export const THEME_COMMAND_IDS: Record<ThemeId, string> = {
   light: 'core:ThemeLight',
@@ -562,6 +571,8 @@ export const coreCommands: Command[] = [
   save,
   exportErlang,
   exportLua,
+  exportTs,
+  exportCs,
   exportAll,
   moveNodeCommand('Move Left', 'shift+left', -1, 100),
   moveNodeCommand('Move Right', 'shift+right', 1, 101),

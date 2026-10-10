@@ -28,7 +28,9 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
       { title: 'Save', commandId: 'core:Save', hotkey: 'Ctrl+S' },
       { title: 'Export: Erlang', commandId: EXPORT_COMMAND_IDS.erlang },
       { title: 'Export: Lua', commandId: EXPORT_COMMAND_IDS.lua },
-      { title: 'Export: Erlang + Lua', commandId: EXPORT_COMMAND_IDS.all },
+      { title: 'Export: TypeScript', commandId: EXPORT_COMMAND_IDS.ts },
+      { title: 'Export: C#', commandId: EXPORT_COMMAND_IDS.cs },
+      { title: 'Export: All formats', commandId: EXPORT_COMMAND_IDS.all },
     ],
   },
   {

@@ -102,9 +102,9 @@ export async function createTree(path: string): Promise<{ path: string }> {
   return (await response.json()) as { path: string };
 }
 
-export type ExportFormat = 'erlang' | 'lua';
+export type ExportFormat = 'erlang' | 'lua' | 'ts' | 'cs';
 
-export const EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua'];
+export const EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua', 'ts', 'cs'];
 
 export interface ExportedFile {
   format: ExportFormat;

@@ -35,13 +35,21 @@ export const EXPORT_FORMATS_STORAGE_KEY = 'owlbt.exportFormats';
 const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
   erlang: 'Erlang',
   lua: 'Lua',
+  ts: 'TypeScript',
+  cs: 'C#',
 };
 
-/** Stored formats in canonical order. Anything unknown falls back to both formats. */
+/** Formats ticked when nothing is stored yet. TypeScript and C# are opt-in. */
+const DEFAULT_EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua'];
+
+/**
+ * Stored formats in canonical order. Without a valid stored list the default formats are used;
+ * unknown entries in a stored list are ignored.
+ */
 function readStoredFormats(): ExportFormat[] {
-  const stored = getJson<unknown>(EXPORT_FORMATS_STORAGE_KEY, EXPORT_FORMATS);
+  const stored = getJson<unknown>(EXPORT_FORMATS_STORAGE_KEY, DEFAULT_EXPORT_FORMATS);
   if (!Array.isArray(stored)) {
-    return [...EXPORT_FORMATS];
+    return [...DEFAULT_EXPORT_FORMATS];
   }
   return EXPORT_FORMATS.filter((format) => stored.includes(format));
 }

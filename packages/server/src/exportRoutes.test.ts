@@ -90,6 +90,29 @@ describe('export routes', () => {
       expect(existsSync(res.body.files[1].path)).toBe(true);
     });
 
+    it('writes TypeScript and C# files when requested', async () => {
+      const res = await request(app())
+        .post('/api/export')
+        .send({ path: join(root, 'trees', 'good.json'), formats: ['ts', 'cs'] });
+
+      expect(res.status).toBe(200);
+      expect(res.body.error).toBeUndefined();
+      expect(res.body.files).toEqual([
+        { format: 'ts', path: join(root, 'export', 'ts', 'good.ts') },
+        { format: 'cs', path: join(root, 'export', 'cs', 'good.cs') },
+      ]);
+      expect(existsSync(res.body.files[0].path)).toBe(true);
+      expect(existsSync(res.body.files[1].path)).toBe(true);
+    });
+
+    it('rejects an unknown format next to the new ones', async () => {
+      const res = await request(app())
+        .post('/api/export')
+        .send({ path: join(root, 'trees', 'good.json'), formats: ['ts', 'json'] });
+      expect(res.status).toBe(400);
+      expect(res.text).toBe('Unknown export format: json');
+    });
+
     it('reports a failing tree in the body with status 200', async () => {
       const res = await request(app())
         .post('/api/export')

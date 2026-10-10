@@ -139,3 +139,187 @@ export function sanitizeModuleName(name: string): string {
   const sanitized = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
   return /^[a-z]/.test(sanitized) ? sanitized : `m_${sanitized}`;
 }
+
+/** TypeScript string literal with single quotes. Control characters use `\uXXXX`. */
+export function tsString(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === '\\' || ch === "'") {
+      out += `\\${ch}`;
+    } else if (ch === '\n') {
+      out += '\\n';
+    } else if (ch === '\r') {
+      out += '\\r';
+    } else if (ch === '\t') {
+      out += '\\t';
+    } else if (code < 0x20 || code === 0x7f) {
+      out += `\\u${code.toString(16).padStart(4, '0')}`;
+    } else {
+      out += ch;
+    }
+  }
+  return `'${out}'`;
+}
+
+/** TypeScript object key: bare when it is a valid identifier, a single-quoted string otherwise. */
+export function tsKey(name: string): string {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : tsString(name);
+}
+
+const CSHARP_KEYWORDS: ReadonlySet<string> = new Set([
+  'abstract',
+  'as',
+  'base',
+  'bool',
+  'break',
+  'byte',
+  'case',
+  'catch',
+  'char',
+  'checked',
+  'class',
+  'const',
+  'continue',
+  'decimal',
+  'default',
+  'delegate',
+  'do',
+  'double',
+  'else',
+  'enum',
+  'event',
+  'explicit',
+  'extern',
+  'false',
+  'finally',
+  'fixed',
+  'float',
+  'for',
+  'foreach',
+  'goto',
+  'if',
+  'implicit',
+  'in',
+  'int',
+  'interface',
+  'internal',
+  'is',
+  'lock',
+  'long',
+  'namespace',
+  'new',
+  'null',
+  'object',
+  'operator',
+  'out',
+  'override',
+  'params',
+  'private',
+  'protected',
+  'public',
+  'readonly',
+  'ref',
+  'return',
+  'sbyte',
+  'sealed',
+  'short',
+  'sizeof',
+  'stackalloc',
+  'static',
+  'string',
+  'struct',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'uint',
+  'ulong',
+  'unchecked',
+  'unsafe',
+  'ushort',
+  'using',
+  'virtual',
+  'void',
+  'volatile',
+  'while',
+]);
+
+/** C# string literal with double quotes. Control characters use `\uXXXX`. */
+export function csharpString(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === '\\' || ch === '"') {
+      out += `\\${ch}`;
+    } else if (ch === '\n') {
+      out += '\\n';
+    } else if (ch === '\r') {
+      out += '\\r';
+    } else if (ch === '\t') {
+      out += '\\t';
+    } else if (code < 0x20 || code === 0x7f) {
+      out += `\\u${code.toString(16).padStart(4, '0')}`;
+    } else {
+      out += ch;
+    }
+  }
+  return `"${out}"`;
+}
+
+/**
+ * Makes a valid C# identifier: non [A-Za-z0-9_] characters are removed, a leading digit gets a `_`
+ * prefix and C# keywords get the `@` prefix (`@class`).
+ */
+export function csharpIdentifier(name: string): string {
+  let id = name.replace(/[^A-Za-z0-9_]/g, '');
+  if (id === '') {
+    id = '_';
+  } else if (/^[0-9]/.test(id)) {
+    id = `_${id}`;
+  }
+  return CSHARP_KEYWORDS.has(id) ? `@${id}` : id;
+}
+
+/**
+ * C# class name from a file name: words separated by any non-alphanumeric character, each with an
+ * upper case first letter (`bt_mon_1000` -> `BtMon1000`). Passed through csharpIdentifier.
+ */
+export function csharpClassName(fileName: string): string {
+  const pascal = fileName
+    .split(/[^A-Za-z0-9]+/)
+    .filter((word) => word !== '')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+  return csharpIdentifier(pascal === '' ? 'BehaviorTree' : pascal);
+}
+
+export const DEFAULT_CS_NAMESPACE = 'BehaviorTrees';
+
+const CSHARP_NAMESPACE_SEGMENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** True for dotted C# identifiers without keywords, e.g. `Game.BehaviorTrees`. */
+function isCsNamespace(name: string): boolean {
+  return name
+    .split('.')
+    .every((segment) => CSHARP_NAMESPACE_SEGMENT.test(segment) && !CSHARP_KEYWORDS.has(segment));
+}
+
+/**
+ * Validates the `export.cs.namespace` setting: dotted C# identifiers. Anything else falls back to
+ * DEFAULT_CS_NAMESPACE and comes back with a warning.
+ */
+export function parseCsNamespace(raw: unknown): { namespace: string; warning?: string } {
+  if (raw === undefined) {
+    return { namespace: DEFAULT_CS_NAMESPACE };
+  }
+  if (typeof raw === 'string' && isCsNamespace(raw)) {
+    return { namespace: raw };
+  }
+  return {
+    namespace: DEFAULT_CS_NAMESPACE,
+    warning: `Invalid C# namespace ${JSON.stringify(raw)}, using ${DEFAULT_CS_NAMESPACE}`,
+  };
+}

@@ -3,11 +3,15 @@ import { basename, dirname, relative, resolve, sep } from 'node:path';
 import {
   buildExportModel,
   createIdGen,
+  csharpClassName,
   nodeFromJson,
   parseAndCompileProject,
+  parseCsNamespace,
   sanitizeModuleName,
+  toCSharp,
   toErlang,
   toLua,
+  toTypeScript,
   type ProjectFile,
   type TreeNodeJson,
 } from '@owlbt/shared';
@@ -15,12 +19,14 @@ import { HttpError, isErrno } from './errors';
 import { getProject } from './project';
 import { loadWorkspace } from './workspace';
 
-export const EXPORT_FORMATS = ['erlang', 'lua'] as const;
+export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 const FORMAT_DEFAULTS: Record<ExportFormat, { outDir: string; extension: string }> = {
   erlang: { outDir: 'export/erlang', extension: '.erl' },
   lua: { outDir: 'export/lua', extension: '.lua' },
+  ts: { outDir: 'export/ts', extension: '.ts' },
+  cs: { outDir: 'export/cs', extension: '.cs' },
 };
 
 export interface ExportedFile {
@@ -136,13 +142,25 @@ export async function exportTree(
       : `${fileName}${defaults.extension}`;
     const path = resolve(outDir, withExtension);
 
-    const content =
-      format === 'erlang'
-        ? toErlang(model, {
-            module: sanitizeModuleName(basename(withExtension, defaults.extension)),
-            sourcePath,
-          })
-        : toLua(model, { sourcePath });
+    const baseName = basename(withExtension, defaults.extension);
+    let content: string;
+    if (format === 'erlang') {
+      content = toErlang(model, { module: sanitizeModuleName(baseName), sourcePath });
+    } else if (format === 'lua') {
+      content = toLua(model, { sourcePath });
+    } else if (format === 'ts') {
+      content = toTypeScript(model, { sourcePath });
+    } else {
+      const namespace = parseCsNamespace(config.namespace);
+      if (namespace.warning !== undefined) {
+        result.warnings.push(namespace.warning);
+      }
+      content = toCSharp(model, {
+        sourcePath,
+        className: csharpClassName(baseName),
+        namespace: namespace.namespace,
+      });
+    }
 
     try {
       await mkdir(dirname(path), { recursive: true });

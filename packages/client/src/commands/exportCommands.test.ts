@@ -68,11 +68,31 @@ afterEach(() => {
 });
 
 describe('export commands', () => {
-  it('registers the three export commands with their names', () => {
+  it('registers the export commands with their names', () => {
     expect(cmd(EXPORT_COMMAND_IDS.erlang).name).toBe('Export: Erlang');
     expect(cmd(EXPORT_COMMAND_IDS.lua).name).toBe('Export: Lua');
-    expect(cmd(EXPORT_COMMAND_IDS.all).name).toBe('Export: Erlang + Lua');
-    expect(commandRegistry[EXPORT_COMMAND_IDS.all]).toBeDefined();
+    expect(cmd(EXPORT_COMMAND_IDS.ts).name).toBe('Export: TypeScript');
+    expect(cmd(EXPORT_COMMAND_IDS.cs).name).toBe('Export: C#');
+    expect(cmd(EXPORT_COMMAND_IDS.all).name).toBe('Export: All formats');
+    expect(EXPORT_COMMAND_IDS.ts).toBe('core:ExportTs');
+    expect(EXPORT_COMMAND_IDS.cs).toBe('core:ExportCs');
+    expect(EXPORT_COMMAND_IDS.all).toBe('core:ExportAll');
+    for (const id of Object.values(EXPORT_COMMAND_IDS)) {
+      expect(commandRegistry[id]).toBeDefined();
+    }
+  });
+
+  it('exports TypeScript and C# with their own commands', async () => {
+    const { ctx } = await loadedSetup();
+    exportTreeMock.mockResolvedValue({ treePath: 'tree.json', files: [], warnings: [] });
+
+    await cmd(EXPORT_COMMAND_IDS.ts).exec(ctx);
+    await cmd(EXPORT_COMMAND_IDS.cs).exec(ctx);
+
+    expect(exportTreeMock.mock.calls).toEqual([
+      ['tree.json', ['ts']],
+      ['tree.json', ['cs']],
+    ]);
   });
 
   it('cannot run until a tree is loaded', async () => {
@@ -102,11 +122,11 @@ describe('export commands', () => {
     expect(success.autoHideMs).toBe(EXPORT_SUCCESS_ALERT_MS);
   });
 
-  it('exports both formats for the combined command', async () => {
+  it('exports all four formats for the combined command', async () => {
     const { ctx } = await loadedSetup();
     exportTreeMock.mockResolvedValue({ treePath: 'tree.json', files: [], warnings: [] });
     await cmd(EXPORT_COMMAND_IDS.all).exec(ctx);
-    expect(exportTreeMock).toHaveBeenCalledWith('tree.json', ['erlang', 'lua']);
+    expect(exportTreeMock).toHaveBeenCalledWith('tree.json', ['erlang', 'lua', 'ts', 'cs']);
   });
 
   it('asks before saving a dirty tree and does nothing when the user declines', async () => {

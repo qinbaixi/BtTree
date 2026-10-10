@@ -424,16 +424,64 @@ describe('Home', () => {
       return calls;
     }
 
-    it('defaults to both formats', async () => {
+    const isChecked = (name: string) =>
+      (screen.getByRole('checkbox', { name }) as HTMLInputElement).checked;
+
+    it('shows four format checkboxes and defaults to Erlang and Lua', async () => {
       renderWorkspace();
       await screen.findByText('trees/a.json');
 
-      expect((screen.getByRole('checkbox', { name: 'Erlang' }) as HTMLInputElement).checked).toBe(
-        true,
-      );
-      expect((screen.getByRole('checkbox', { name: 'Lua' }) as HTMLInputElement).checked).toBe(
-        true,
-      );
+      expect(isChecked('Erlang')).toBe(true);
+      expect(isChecked('Lua')).toBe(true);
+      expect(isChecked('TypeScript')).toBe(false);
+      expect(isChecked('C#')).toBe(false);
+    });
+
+    it('keeps the default when the stored value is not valid JSON', async () => {
+      window.localStorage.setItem(EXPORT_FORMATS_STORAGE_KEY, '{oops');
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      expect(isChecked('Erlang')).toBe(true);
+      expect(isChecked('Lua')).toBe(true);
+      expect(isChecked('TypeScript')).toBe(false);
+    });
+
+    it('reads stored lists written before TypeScript and C# existed', async () => {
+      window.localStorage.setItem(EXPORT_FORMATS_STORAGE_KEY, '["lua"]');
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      expect(isChecked('Erlang')).toBe(false);
+      expect(isChecked('Lua')).toBe(true);
+      expect(isChecked('TypeScript')).toBe(false);
+      expect(isChecked('C#')).toBe(false);
+    });
+
+    it('ignores unknown stored formats', async () => {
+      window.localStorage.setItem(EXPORT_FORMATS_STORAGE_KEY, '["ts","python"]');
+      renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      expect(isChecked('TypeScript')).toBe(true);
+      expect(isChecked('Erlang')).toBe(false);
+      expect(isChecked('C#')).toBe(false);
+    });
+
+    it('stores and exports TypeScript and C# when they are ticked', async () => {
+      const calls = renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Erlang' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Lua' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'TypeScript' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: 'C#' }));
+      expect(window.localStorage.getItem(EXPORT_FORMATS_STORAGE_KEY)).toBe('["ts","cs"]');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
+      await screen.findByRole('list', { name: 'Export results' });
+      const batchCall = calls.find((c) => c.url.pathname === '/api/export/batch');
+      expect(batchCall?.body).toEqual({ dir: '/work/trees', formats: ['ts', 'cs'] });
     });
 
     it('exports the folder with the ticked formats and lists the results per tree', async () => {
