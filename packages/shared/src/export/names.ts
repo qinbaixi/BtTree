@@ -393,20 +393,24 @@ export function goString(text: string): string {
 }
 
 /**
- * Exported Go identifier prefix from a file name: words separated by any non-alphanumeric
- * character, each with an upper case first letter (`bt_mon_1000` -> `BtMon1000`). A leading digit
- * gets a `Bt` prefix so the name stays exported.
+ * Exported Go identifier prefix from a file name: words separated by anything that is not a letter
+ * or digit, each with an upper case first letter (`bt_mon_1000` -> `BtMon1000`). Go identifiers may
+ * hold any Unicode letter, so non-ASCII names keep their text (`巡逻_a` -> `Bt巡逻A`). A `Bt` prefix
+ * is added when the result does not start with an upper case letter, so the name stays exported.
  */
 export function goNamePrefix(fileName: string): string {
   const pascal = fileName
-    .split(/[^A-Za-z0-9]+/)
+    .split(/[^\p{L}\p{Nd}]+/u)
     .filter((word) => word !== '')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .map((word) => {
+      const [first, ...rest] = word;
+      return first.toUpperCase() + rest.join('');
+    })
     .join('');
   if (pascal === '') {
     return 'BehaviorTree';
   }
-  return /^[0-9]/.test(pascal) ? `Bt${pascal}` : pascal;
+  return /^\p{Lu}/u.test(pascal) ? pascal : `Bt${pascal}`;
 }
 
 export const DEFAULT_GO_PACKAGE = 'behaviortrees';

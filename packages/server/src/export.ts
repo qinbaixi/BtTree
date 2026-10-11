@@ -21,7 +21,7 @@ import {
 } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
 import { findProjectFile } from './project';
-import { loadWorkspace } from './workspace';
+import { loadWorkspace, type WorkspaceTree } from './workspace';
 
 export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs', 'go'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
@@ -108,8 +108,88 @@ async function loadExportProject(
   if (!pending) {
     pending = readExportProject(path);
     cache.set(path, pending);
+    // A failed read (e.g. too many open files) is not cached: the next tree tries again.
+    pending.catch(() => cache.delete(path));
   }
   return pending;
+}
+
+/** Where one format of a tree is written, from the project's export settings. */
+function outputFile(
+  project: ExportProject,
+  treePath: string,
+  format: ExportFormat,
+  options: ExportOptions,
+): { path: string; baseName: string } {
+  const defaults = FORMAT_DEFAULTS[format];
+  const config = project.file.export?.[format] ?? {};
+  const treeName = basename(treePath).replace(/\.json$/i, '');
+  const outDir = resolve(project.dir, options.outDir ?? config.outDir ?? defaults.outDir);
+  const fileName = (config.fileName ?? '{name}').replace(/\{name\}/g, treeName);
+  const withExtension = fileName.toLowerCase().endsWith(defaults.extension)
+    ? fileName
+    : `${fileName}${defaults.extension}`;
+  return {
+    path: resolve(outDir, withExtension),
+    baseName: basename(withExtension, defaults.extension),
+  };
+}
+
+/**
+ * Splits the trees of a batch into groups that can run at the same time: trees that write the same
+ * output file (e.g. trees/a.json and trees/sub/a.json both write a.lua) share a group and run one
+ * after the other in listing order, so the last one in the listing wins as before and two writes
+ * never interleave. Groups are ordered by their first tree.
+ */
+async function writeGroups(
+  trees: WorkspaceTree[],
+  formats: ExportFormat[],
+  options: ExportOptions,
+  cache: ProjectCache,
+): Promise<number[][]> {
+  // Union-find over trees: two trees are linked when they write the same file.
+  const parent = trees.map((_, index) => index);
+  const find = (index: number): number => {
+    let root = index;
+    while (parent[root] !== root) {
+      root = parent[root];
+    }
+    parent[index] = root;
+    return root;
+  };
+  const firstWriter = new Map<string, number>();
+  for (const [index, tree] of trees.entries()) {
+    let project: ExportProject | undefined;
+    try {
+      project = await loadExportProject(tree.path, cache);
+    } catch {
+      continue; // Reported by the tree's own export.
+    }
+    if (!project) {
+      continue;
+    }
+    for (const format of formats) {
+      const { path } = outputFile(project, tree.path, format, options);
+      const key = process.platform === 'win32' ? path.toLowerCase() : path;
+      const other = firstWriter.get(key);
+      if (other === undefined) {
+        firstWriter.set(key, index);
+      } else {
+        parent[find(index)] = find(other);
+      }
+    }
+  }
+  const groups = new Map<number, number[]>();
+  for (let index = 0; index < trees.length; index++) {
+    const root = find(index);
+    const group = groups.get(root);
+    if (group) {
+      group.push(index);
+    } else {
+      groups.set(root, [index]);
+    }
+  }
+  return [...groups.values()];
 }
 
 function messageOf(err: unknown): string {
@@ -194,19 +274,10 @@ async function exportTreeIn(
 
   const projectFile = project.file;
   const sourcePath = relative(project.dir, treePath).split(sep).join('/');
-  const treeName = basename(treePath).replace(/\.json$/i, '');
 
   for (const format of formats) {
-    const defaults = FORMAT_DEFAULTS[format];
     const config = projectFile.export?.[format] ?? {};
-    const outDir = resolve(project.dir, options.outDir ?? config.outDir ?? defaults.outDir);
-    const fileName = (config.fileName ?? '{name}').replace(/\{name\}/g, treeName);
-    const withExtension = fileName.toLowerCase().endsWith(defaults.extension)
-      ? fileName
-      : `${fileName}${defaults.extension}`;
-    const path = resolve(outDir, withExtension);
-
-    const baseName = basename(withExtension, defaults.extension);
+    const { path, baseName } = outputFile(project, treePath, format, options);
     let content: string;
     if (format === 'erlang') {
       content = toErlang(model, { module: sanitizeModuleName(baseName), sourcePath });
@@ -266,30 +337,32 @@ export async function exportProject(
   // I/O overlaps. Results keep the order of the workspace listing.
   const cache: ProjectCache = new Map();
   const { trees } = workspace;
+  const groups = await writeGroups(trees, formats, options, cache);
   const results: ExportProjectResult['results'] = new Array(trees.length);
   let next = 0;
   const worker = async (): Promise<void> => {
-    while (next < trees.length) {
-      const index = next++;
-      const tree = trees[index];
-      try {
-        results[index] = {
-          relPath: tree.relPath,
-          ...(await exportTreeIn(tree.path, formats, options, cache)),
-        };
-      } catch (err) {
-        results[index] = {
-          relPath: tree.relPath,
-          treePath: tree.path,
-          files: [],
-          warnings: [],
-          error: messageOf(err),
-        };
+    while (next < groups.length) {
+      for (const index of groups[next++]) {
+        const tree = trees[index];
+        try {
+          results[index] = {
+            relPath: tree.relPath,
+            ...(await exportTreeIn(tree.path, formats, options, cache)),
+          };
+        } catch (err) {
+          results[index] = {
+            relPath: tree.relPath,
+            treePath: tree.path,
+            files: [],
+            warnings: [],
+            error: messageOf(err),
+          };
+        }
       }
     }
   };
   await Promise.all(
-    Array.from({ length: Math.min(EXPORT_CONCURRENCY, trees.length) }, () => worker()),
+    Array.from({ length: Math.min(EXPORT_CONCURRENCY, groups.length) }, () => worker()),
   );
   return { projectDir: workspace.projectDir, truncated: workspace.truncated, results };
 }

@@ -179,6 +179,46 @@ describe('toGo', () => {
     expect(go).toContain('\t// Selector - Root Next line\n\t1: {');
   });
 
+  it('keeps the last value of a repeated key, since Go rejects duplicate map keys', () => {
+    const go = render([
+      ['type', atom('task')],
+      ['type', atom('custom')],
+      [
+        'properties',
+        {
+          map: [
+            ['k', 1],
+            ['k', 2],
+          ],
+        },
+      ],
+    ]);
+    expect(go).toContain('\t\t"type":    "custom",\n');
+    expect(go).not.toContain('"task"');
+    expect(go).toContain('\t\t"properties": map[string]any{\n\t\t\t"k": 2,\n\t\t},');
+    expect(
+      fieldValue([
+        {
+          map: [
+            ['x', 1],
+            ['x', 2],
+          ],
+        },
+      ]),
+    ).toBe('[]any{map[string]any{"x": 2}},');
+  });
+
+  it('writes id-list names that do not hold int32 integers as any slices', () => {
+    const go = render([
+      ['children', ['a', 'b']],
+      ['services', [1.5]],
+      ['decorators', [2147483648]],
+    ]);
+    expect(go).toContain('"children":   []any{"a", "b"},');
+    expect(go).toContain('"services":   []any{1.5},');
+    expect(go).toContain('"decorators": []any{int64(2147483648)},');
+  });
+
   it('renders very large trees without hitting argument-count limits', () => {
     const count = 60000;
     const model: ExportModel = {

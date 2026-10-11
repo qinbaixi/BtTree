@@ -286,6 +286,22 @@ describe('exportTree and exportProject', () => {
     }
   });
 
+  it('writes a file shared by several trees in listing order, so the last tree wins', async () => {
+    // a.json in four folders all write export/lua/a.lua; other trees run alongside them.
+    for (const folder of ['t1', 't2', 't3', 't4']) {
+      writeTree(`trees/${folder}/a.json`, { ...GOOD_TREE, label: folder });
+      writeTree(`trees/${folder}/b${folder}.json`, GOOD_TREE);
+    }
+
+    for (let round = 0; round < 5; round++) {
+      const batch = await exportProject(root, ['lua']);
+      expect(batch.results.every((r) => r.error === undefined)).toBe(true);
+      const lua = readFileSync(join(root, 'export', 'lua', 'a.lua'), 'utf8');
+      expect(lua).toContain('trees/t4/a.json');
+      expect(lua.endsWith('\n')).toBe(true);
+    }
+  });
+
   it('uses the nearest owl-bt.json of each tree in a batch', async () => {
     writeTree('trees/a.json', GOOD_TREE);
     mkdirSync(join(root, 'sub'), { recursive: true });

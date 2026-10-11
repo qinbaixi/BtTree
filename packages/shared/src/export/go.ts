@@ -103,7 +103,9 @@ function inline(value: ExportValue, ctx: Context): string {
   if (isExportAtom(value)) {
     return goString(value.atom);
   }
-  const pairs = value.map.map(([key, inner]) => `${goString(key)}: ${inline(inner, ctx)}`);
+  const pairs = lastWins(value.map).map(
+    ([key, inner]) => `${goString(key)}: ${inline(inner, ctx)}`,
+  );
   return `map[string]any{${pairs.join(', ')}}`;
 }
 
@@ -182,22 +184,45 @@ function writePairs(out: string[], pairs: Pair[], depth: number): void {
         writePairs(out, pair.inner, depth + 1);
         out.push(`${indent}},`);
       } else {
-        const gap = n > 1 ? ' '.repeat(width - widths[j] + 1) : ' ';
-        out.push(`${indent}${pair.key}:${gap}${pair.value}`);
+        out.push(`${indent}${pair.key}:${' '.repeat(width - widths[j] + 1)}${pair.value}`);
       }
     }
     i = end;
   }
 }
 
-/** Element of one top-level entry field. Id lists become `[]int`, non-empty maps span several lines. */
+/**
+ * Go rejects duplicate keys in a map literal. A key can repeat when a type's `export.fields` or a
+ * property's export name reuses a generated field; the last value wins (at the position of the
+ * first one), as it does in the C# and Lua output.
+ */
+function lastWins(pairs: Array<[string, ExportValue]>): Array<[string, ExportValue]> {
+  const byKey = new Map<string, ExportValue>();
+  for (const [key, value] of pairs) {
+    byKey.set(key, value);
+  }
+  return byKey.size === pairs.length ? pairs : [...byKey];
+}
+
+/** True for a list that fits `[]int`: int32 integers only. */
+function isIntList(values: ExportValue[]): boolean {
+  return values.every(
+    (item) =>
+      typeof item === 'number' && Number.isInteger(item) && item >= INT32_MIN && item <= INT32_MAX,
+  );
+}
+
+/**
+ * Element of one top-level entry field. Id lists become `[]int` (other values under those names
+ * stay `[]any`), non-empty maps span several lines.
+ */
 function fieldPair(key: string, value: ExportValue, ctx: Context): Pair {
   const goKey = goString(key);
-  if (Array.isArray(value) && ID_LIST_FIELDS.has(key)) {
+  if (Array.isArray(value) && ID_LIST_FIELDS.has(key) && isIntList(value)) {
     return { key: goKey, value: `[]int{${value.map((item) => inline(item, ctx)).join(', ')}},` };
   }
   if (isExportMap(value) && value.map.length > 0) {
-    const inner = value.map.map(([innerKey, innerValue]) => ({
+    const inner = lastWins(value.map).map(([innerKey, innerValue]) => ({
       key: goString(innerKey),
       value: `${inline(innerValue, ctx)},`,
     }));
@@ -211,7 +236,7 @@ function writeEntry(out: string[], entry: ExportEntry, ctx: Context): void {
   out.push(comment === '' ? '\t//' : `\t// ${comment}`, `\t${entry.id}: {`);
   writePairs(
     out,
-    entry.fields.map(([key, value]) => fieldPair(key, value, ctx)),
+    lastWins(entry.fields).map(([key, value]) => fieldPair(key, value, ctx)),
     2,
   );
   out.push('\t},');

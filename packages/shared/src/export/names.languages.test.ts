@@ -140,6 +140,14 @@ describe('goNamePrefix', () => {
     expect(goNamePrefix('1_patrol')).toBe('Bt1Patrol');
     expect(goNamePrefix('---')).toBe('BehaviorTree');
   });
+
+  it('keeps non-ASCII letters, which Go identifiers allow', () => {
+    expect(goNamePrefix('巡逻')).toBe('Bt巡逻');
+    expect(goNamePrefix('巡逻_a')).toBe('Bt巡逻A');
+    expect(goNamePrefix('boss_巡逻')).toBe('Boss巡逻');
+    expect(goNamePrefix('élite')).toBe('Élite');
+    expect(goNamePrefix('巡逻')).not.toBe(goNamePrefix('攻击'));
+  });
 });
 
 describe('parseGoPackage', () => {
