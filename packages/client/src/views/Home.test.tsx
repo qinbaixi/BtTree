@@ -23,6 +23,15 @@ function renderHome() {
             </>
           }
         />
+        <Route
+          path="/project"
+          element={
+            <>
+              <div>Project editor page</div>
+              <LocationProbe />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -131,6 +140,30 @@ describe('Home', () => {
 
     fireEvent.click(screen.getByText('second.json'));
     expect(screen.getByTestId('location').textContent).toBe('/tree?path=%2Fb%2Fsecond.json');
+  });
+
+  it('links each recent tree to the project editor', () => {
+    window.localStorage.setItem(MRU_STORAGE_KEY, JSON.stringify([{ path: '/a/first.json' }]));
+    renderHome();
+
+    fireEvent.click(screen.getByLabelText('Edit project types of /a/first.json'));
+    expect(screen.getByText('Project editor page')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe(
+      '/project?path=%2Fa%2Ffirst.json&from=%2Fa%2Ffirst.json',
+    );
+  });
+
+  it('opens the project editor for a file picked with "Edit project types…"', async () => {
+    const calls = mockApi({
+      'POST /api/dialog/pick': () => json({ path: '/work/owl-bt.json' }),
+    });
+    renderHome();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Edit project types/ })[0]);
+
+    expect(await screen.findByText('Project editor page')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/project?path=%2Fwork%2Fowl-bt.json');
+    expect(calls[0].body).toMatchObject({ kind: 'file' });
   });
 
   it('removes an item from the list and from storage', () => {

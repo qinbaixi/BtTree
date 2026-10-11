@@ -13,6 +13,7 @@ import {
   type PickKind,
   type Workspace,
 } from '../lib/api';
+import { projectEditorUrl } from '../lib/appNavigation';
 import { getMruList, getPathLastSegment, removeMru, type MruItem } from '../lib/mru';
 import { joinPath, isJsonPath } from '../lib/paths';
 import {
@@ -248,6 +249,13 @@ function WorkspacePanel({
               <>
                 <span className={styles.label}>Project</span>
                 <span className={styles.projectPath}>{workspace.projectPath}</span>
+                <button
+                  type="button"
+                  className={styles.button}
+                  onClick={() => navigate(projectEditorUrl({ path: workspace.projectPath ?? dir }))}
+                >
+                  Edit project types
+                </button>
               </>
             ) : (
               <div className={styles.notProject}>
@@ -442,7 +450,7 @@ export default function Home() {
     }
   };
 
-  const onPick = async (kind: PickKind) => {
+  const onPick = async (kind: PickKind, target: 'open' | 'project' = 'open') => {
     setPending(kind);
     setNotice(null);
     try {
@@ -450,7 +458,9 @@ export default function Home() {
       if ('cancelled' in result) {
         return;
       }
-      if (kind === 'file') {
+      if (target === 'project') {
+        navigate(projectEditorUrl({ path: result.path }));
+      } else if (kind === 'file') {
         navigate(editorUrl(result.path));
       } else {
         loadFolder(result.path);
@@ -513,6 +523,15 @@ export default function Home() {
           >
             <i className="fa-solid fa-file" aria-hidden="true" /> Open tree file…
           </button>
+          <button
+            type="button"
+            className={styles.action}
+            title="Edit the node, decorator and service types of a project (pick its owl-bt.json or any tree in it)"
+            onClick={() => void onPick('file', 'project')}
+            disabled={dialogsBusy}
+          >
+            <i className="fa-solid fa-sliders" aria-hidden="true" /> Edit project types…
+          </button>
           {pending !== null && (
             <span role="status" className={styles.status}>
               Waiting for the file dialog…
@@ -555,6 +574,15 @@ export default function Home() {
                       <div className={styles.mruPath}>{item.path}</div>
                     </div>
                   </Link>
+                  <Link
+                    to={projectEditorUrl({ path: item.path, from: item.path })}
+                    className={styles.editProject}
+                    aria-label={`Edit project types of ${item.path}`}
+                    title="Edit project types"
+                  >
+                    <i className="fa-solid fa-sliders" aria-hidden="true" />
+                    <span>Edit types</span>
+                  </Link>
                   <button
                     type="button"
                     className={styles.remove}
@@ -593,9 +621,19 @@ export default function Home() {
                 <i className="fa-solid fa-file" aria-hidden="true" />
                 <span>Open tree file…</span>
               </button>
+              <button
+                type="button"
+                className={styles.bigAction}
+                onClick={() => void onPick('file', 'project')}
+                disabled={dialogsBusy}
+              >
+                <i className="fa-solid fa-sliders" aria-hidden="true" />
+                <span>Edit project types…</span>
+              </button>
             </div>
             <p className={styles.hint}>
-              Pick a folder to browse its trees, or a single tree file to edit it directly.
+              Pick a folder to browse its trees, a single tree file to edit it directly, or a
+              project's owl-bt.json to edit its types.
             </p>
           </div>
         )}

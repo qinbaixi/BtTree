@@ -23,6 +23,8 @@ export interface TreeNodeViewProps {
   selected: boolean;
   /** Id of the selected decorator or service of this node, if any. */
   selectedSubId?: string;
+  /** False renders a static card: no selection and no context menu (project editor preview). */
+  interactive?: boolean;
 }
 
 interface ItemViewProps {
@@ -35,6 +37,7 @@ interface ItemViewProps {
   properties: Record<string, unknown>;
   inverseCheckCondition?: boolean;
   selected: boolean;
+  interactive: boolean;
 }
 
 const KIND_TAG: Record<ItemViewProps['kind'], string | undefined> = {
@@ -61,6 +64,7 @@ function ItemView({
   properties,
   inverseCheckCondition,
   selected,
+  interactive,
 }: ItemViewProps) {
   const canvas = useContext(TreeCanvasContext);
   const invalid = !validateItem(type, properties).isValid;
@@ -73,7 +77,7 @@ function ItemView({
 
   const onClick = (event: MouseEvent) => {
     event.stopPropagation();
-    if (!canvas.isPanned()) {
+    if (interactive && !canvas.isPanned()) {
       treeStore.getState().select(selectionOf(kind, nodeId, itemId));
     }
   };
@@ -81,7 +85,7 @@ function ItemView({
   const onContextMenu = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    if (!canvas.isPanned()) {
+    if (interactive && !canvas.isPanned()) {
       const sel = selectionOf(kind, nodeId, itemId);
       treeStore.getState().select(sel);
       canvas.openContextMenu(sel, event.clientX, event.clientY);
@@ -144,6 +148,7 @@ export const TreeNodeView = memo(function TreeNodeView({
   y,
   selected,
   selectedSubId,
+  interactive = true,
 }: TreeNodeViewProps) {
   const canvas = useContext(TreeCanvasContext);
   // The element is registered for measuring; the controller is stable so this callback is too.
@@ -183,6 +188,7 @@ export const TreeNodeView = memo(function TreeNodeView({
         comment={node.comment}
         properties={node.properties}
         selected={selected}
+        interactive={interactive}
       />
       {node.decorators.map((decorator: SubItem) => (
         <ItemView
@@ -196,6 +202,7 @@ export const TreeNodeView = memo(function TreeNodeView({
           properties={decorator.properties}
           inverseCheckCondition={decorator.inverseCheckCondition}
           selected={selectedSubId === decorator.id}
+          interactive={interactive}
         />
       ))}
       {node.services.map((service: SubItem) => (
@@ -210,6 +217,7 @@ export const TreeNodeView = memo(function TreeNodeView({
           properties={service.properties}
           inverseCheckCondition={service.inverseCheckCondition}
           selected={selectedSubId === service.id}
+          interactive={interactive}
         />
       ))}
     </div>

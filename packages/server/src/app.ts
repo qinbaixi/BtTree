@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server } from 'socket.io';
 import { FileWatcherRegistry } from './fileWatcher';
+import { allowedHostnames, localGuard, socketRequestAllowed } from './localGuard';
 import type { Picker } from './picker';
 import { apiErrorHandler, createApiRouter } from './routes';
 import { attachProjectWatch } from './socket';
@@ -22,6 +23,13 @@ export interface AppOptions {
   clientDist?: string;
   /** Native file dialog runner used by POST /api/dialog/pick. Defaults to the platform picker. */
   picker?: Picker;
+  /**
+   * Hostnames besides localhost, 127.0.0.1 and [::1] that requests may use (Host and Origin). Set when
+   * the server listens on another interface, e.g. `--host 192.168.1.5`.
+   */
+  allowedHosts?: string[];
+  /** Runs owl-bt.js plugins without the trust check (the --trust-plugins flag). */
+  trustAllPlugins?: boolean;
 }
 
 export function resolveClientDist(options: AppOptions = {}): string {
@@ -36,7 +44,12 @@ export function createApp(options: AppOptions = {}): express.Express {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use('/api', createApiRouter({ picker: options.picker }));
+  // Host and Origin checks cover every route, including the static client.
+  app.use(localGuard(allowedHostnames(options.allowedHosts)));
+  app.use(
+    '/api',
+    createApiRouter({ picker: options.picker, trustAllPlugins: options.trustAllPlugins }),
+  );
 
   const clientDist = resolveClientDist(options);
   const indexHtml = join(clientDist, 'index.html');
@@ -62,7 +75,12 @@ export interface ServerBundle {
 export function createServer(options: AppOptions = {}): ServerBundle {
   const app = createApp(options);
   const httpServer = createHttpServer(app);
-  const io = new Server(httpServer);
+  const allowed = allowedHostnames(options.allowedHosts);
+  const io = new Server(httpServer, {
+    allowRequest: (req, callback) => {
+      callback(null, socketRequestAllowed(req, allowed));
+    },
+  });
   const registry = new FileWatcherRegistry();
   attachProjectWatch(io, registry);
   return { app, httpServer, io, registry };

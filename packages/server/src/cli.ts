@@ -35,9 +35,20 @@ function shouldSkipOpen(): boolean {
   return program.opts<{ open: boolean }>().open === false || process.env.OWLBT_NO_OPEN === '1';
 }
 
+/** True when owl-bt.js plugins run without the trust check: `--trust-plugins` or OWLBT_TRUST_PLUGINS=1. */
+function shouldTrustPlugins(): boolean {
+  return (
+    program.opts<{ trustPlugins?: boolean }>().trustPlugins === true ||
+    process.env.OWLBT_TRUST_PLUGINS === '1'
+  );
+}
+
 /** Starts the server (or reuses a running one) and opens the given app path in the browser. */
 async function serveAndOpen(pathAndQuery: string): Promise<void> {
-  const { port, reused } = await run();
+  const { port, reused } = await run({
+    host: program.opts<{ host?: string }>().host,
+    trustAllPlugins: shouldTrustPlugins(),
+  });
   console.log(
     reused
       ? `owl-bt server already running on port ${port}`
@@ -62,6 +73,14 @@ program
   .description('owl-bt behavior tree editor')
   .version(VERSION)
   .option('--no-open', 'do not open the browser, only print the URL (or set OWLBT_NO_OPEN=1)')
+  .option(
+    '--host <host>',
+    'interface to listen on (default 127.0.0.1). Other hosts expose the API without authentication',
+  )
+  .option(
+    '--trust-plugins',
+    'run owl-bt.js plugins without the trust check (or set OWLBT_TRUST_PLUGINS=1)',
+  )
   .action(async () => {
     await serveAndOpen('/');
   });

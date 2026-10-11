@@ -27,9 +27,9 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: owl-bt
-  artifactName: ${productName} Setup ${version}.${ext}
+  artifactName: owl-bt-setup-${version}.${ext}
 portable:
-  artifactName: ${productName} ${version}.${ext}
+  artifactName: owl-bt-portable-${version}.${ext}
 mac:
   target:
     - target: dmg

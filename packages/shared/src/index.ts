@@ -7,5 +7,6 @@ export * from './treeOps';
 export * from './navigation';
 export * from './validation';
 export * from './describe';
+export * from './projectEdit';
 export * from './fuzzy';
 export * from './export';

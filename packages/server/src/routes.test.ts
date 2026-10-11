@@ -12,7 +12,7 @@ describe('API routes', () => {
   let noProjectDir: string;
   let treePath: string;
 
-  const app = () => createApp({ clientDist: join(root, 'no-client-build') });
+  const app = () => createApp({ clientDist: join(root, 'no-client-build'), trustAllPlugins: true });
   const writePlugin = (source: string) => writeFileSync(join(root, 'owl-bt.js'), source);
   const removePlugin = () => rmSync(join(root, 'owl-bt.js'), { force: true });
 
@@ -93,11 +93,11 @@ describe('API routes', () => {
       expect(res.text).toBe('Path not found');
     });
 
-    it('returns 500 with the message when the tree file is invalid JSON', async () => {
+    it('returns 422 with a JSON message when the tree file is invalid JSON', async () => {
       writeFileSync(treePath, '{ not json');
       const res = await request(app()).get('/api/tree').query({ path: treePath });
-      expect(res.status).toBe(500);
-      expect(res.text.length).toBeGreaterThan(0);
+      expect(res.status).toBe(422);
+      expect(res.body.message).toMatch(/^Invalid JSON in tree file: /);
     });
 
     it('returns the parsed tree', async () => {
@@ -107,7 +107,9 @@ describe('API routes', () => {
     });
 
     it('returns the tree as modified by onTreeLoad', async () => {
-      writePlugin(`module.exports = { onTreeLoad(ctx) { ctx.tree.label = 'loaded:' + ctx.project.nodes[0].name; } };`);
+      writePlugin(
+        `module.exports = { onTreeLoad(ctx) { ctx.tree.label = 'loaded:' + ctx.project.nodes[0].name; } };`,
+      );
       const res = await request(app()).get('/api/tree').query({ path: treePath });
       expect(res.status).toBe(200);
       expect(res.body.label).toBe('loaded:Selector');
@@ -208,7 +210,9 @@ describe('API routes', () => {
     });
 
     it('returns 409 with the message when onTreeSave returns a string', async () => {
-      writePlugin(`module.exports = { onTreeSave(ctx) { if (ctx.tree.label === 'forbidden') return 'Root label must not be "forbidden"'; } };`);
+      writePlugin(
+        `module.exports = { onTreeSave(ctx) { if (ctx.tree.label === 'forbidden') return 'Root label must not be "forbidden"'; } };`,
+      );
       const res = await request(app())
         .post('/api/tree')
         .query({ path: treePath })

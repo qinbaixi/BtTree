@@ -93,8 +93,23 @@ export function placementOn(
   const px = state.x + 50;
   const py = state.y + 15;
   const visible = workAreas.some(
-    (area) =>
-      px >= area.x && px < area.x + area.width && py >= area.y && py < area.y + area.height,
+    (area) => px >= area.x && px < area.x + area.width && py >= area.y && py < area.y + area.height,
   );
   return visible ? { x: state.x, y: state.y } : undefined;
+}
+
+/**
+ * Route asked for by a second launch while this instance is still starting. A launch without a file
+ * (route '/') keeps the earlier request. The latest request wins.
+ */
+export function nextPendingRoute(
+  pending: string | undefined,
+  requested: string,
+): string | undefined {
+  return requested === '/' ? pending : requested;
+}
+
+/** Route of the first window: the request queued while starting, otherwise the route of this launch. */
+export function startupRoute(pending: string | undefined, initial: string): string {
+  return pending ?? initial;
 }

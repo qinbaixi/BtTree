@@ -8,7 +8,13 @@ import {
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PROJECT_JSON, TREE_JSON } from '../test/fixtures';
 import { alertStore } from './alertStore';
-import { createTreeStore, getSelectedItem, selectCanRedo, selectCanUndo, UNDO_STACK_LIMIT } from './treeStore';
+import {
+  createTreeStore,
+  getSelectedItem,
+  selectCanRedo,
+  selectCanUndo,
+  UNDO_STACK_LIMIT,
+} from './treeStore';
 
 function setup() {
   const saveTree = vi.fn(async () => undefined);
@@ -91,9 +97,13 @@ describe('treeStore', () => {
     const { store } = await loaded();
     const rootId = store.getState().root!.id;
     store.getState().select({ kind: 'node', nodeId: rootId });
-    store.getState().apply('Rename', (draft) => {
-      draft.label = 'Renamed';
-    }, { kind: 'node', nodeId: rootId });
+    store.getState().apply(
+      'Rename',
+      (draft) => {
+        draft.label = 'Renamed';
+      },
+      { kind: 'node', nodeId: rootId },
+    );
 
     store.getState().undo();
 
@@ -102,7 +112,8 @@ describe('treeStore', () => {
     expect(state.selection).toEqual({ kind: 'node', nodeId: rootId });
     expect(state.undoStack).toEqual([]);
     expect(state.redoStack).toHaveLength(1);
-    expect(state.dirty).toBe(true);
+    // Back at the loaded tree, which is what is on disk.
+    expect(state.dirty).toBe(false);
     expect(selectCanUndo(state)).toBe(false);
     expect(selectCanRedo(state)).toBe(true);
   });
@@ -110,9 +121,13 @@ describe('treeStore', () => {
   it('redo re-applies the step and restores the selection from after it', async () => {
     const { store } = await loaded();
     const rootId = store.getState().root!.id;
-    store.getState().apply('Rename', (draft) => {
-      draft.label = 'Renamed';
-    }, { kind: 'node', nodeId: rootId });
+    store.getState().apply(
+      'Rename',
+      (draft) => {
+        draft.label = 'Renamed';
+      },
+      { kind: 'node', nodeId: rootId },
+    );
     store.getState().undo();
     store.getState().select(undefined);
 
@@ -201,10 +216,16 @@ describe('treeStore', () => {
     const decorator = child.decorators[0];
 
     expect(getSelectedItem(root, { kind: 'node', nodeId: child.id })?.node).toBe(child);
-    const item = getSelectedItem(root, { kind: 'decorator', nodeId: child.id, itemId: decorator.id });
+    const item = getSelectedItem(root, {
+      kind: 'decorator',
+      nodeId: child.id,
+      itemId: decorator.id,
+    });
     expect(item?.kind).toBe('decorator');
     expect(item?.subItem).toBe(decorator);
-    expect(getSelectedItem(root, { kind: 'service', nodeId: child.id, itemId: 'missing' })).toBeUndefined();
+    expect(
+      getSelectedItem(root, { kind: 'service', nodeId: child.id, itemId: 'missing' }),
+    ).toBeUndefined();
     expect(getSelectedItem(undefined, { kind: 'node', nodeId: child.id })).toBeUndefined();
   });
 
@@ -221,7 +242,9 @@ describe('treeStore', () => {
     expect(path).toBe('/trees/root.json');
     expect(json).toEqual(nodeToJson(store.getState().root!));
     expect(store.getState().dirty).toBe(false);
-    expect(alertStore.getState().alerts.map((a) => [a.type, a.message])).toEqual([['success', 'Done']]);
+    expect(alertStore.getState().alerts.map((a) => [a.type, a.message])).toEqual([
+      ['success', 'Done'],
+    ]);
   });
 
   it('keeps the dirty flag and reports the server message when save fails', async () => {
@@ -255,5 +278,86 @@ describe('treeStore', () => {
       draft.childNodes = draft.childNodes.filter((n) => n.type !== 'Missing');
     });
     expect(store.getState().isValid(project)).toBe(true);
+  });
+});
+
+describe('dirty state against the undo position', () => {
+  beforeEach(() => {
+    alertStore.getState().clear();
+  });
+
+  it('undo back to the loaded tree is clean, and redo makes it dirty again', async () => {
+    const { store } = await loaded();
+    store.getState().apply('Rename', (draft) => {
+      draft.label = 'Renamed';
+    });
+    expect(store.getState().dirty).toBe(true);
+    store.getState().undo();
+    expect(store.getState().dirty).toBe(false);
+    store.getState().redo();
+    expect(store.getState().dirty).toBe(true);
+  });
+
+  it('after a save, undo is dirty and redo is clean again', async () => {
+    const { store } = await loaded();
+    store.getState().apply('Rename', (draft) => {
+      draft.label = 'Renamed';
+    });
+    await store.getState().save();
+    expect(store.getState().dirty).toBe(false);
+    store.getState().undo();
+    expect(store.getState().dirty).toBe(true);
+    store.getState().redo();
+    expect(store.getState().dirty).toBe(false);
+  });
+
+  it('a new edit after undoing past the save is dirty, even though the undo count matches', async () => {
+    const { store } = await loaded();
+    store.getState().apply('Rename', (draft) => {
+      draft.label = 'Saved';
+    });
+    await store.getState().save();
+    store.getState().undo();
+    store.getState().apply('Other', (draft) => {
+      draft.label = 'Other';
+    });
+    // The saved step is gone from the history, so no undo can make the tree clean again.
+    expect(store.getState().dirty).toBe(true);
+    store.getState().undo();
+    expect(store.getState().dirty).toBe(true);
+  });
+
+  it('stays clean after undo back to the saved step when the history was trimmed', async () => {
+    const { store } = await loaded();
+    store.getState().apply('Saved step', (draft) => {
+      draft.label = 'Saved';
+    });
+    await store.getState().save();
+    for (let i = 0; i < UNDO_STACK_LIMIT; i++) {
+      store.getState().apply('Step', (draft) => {
+        draft.label = `Step ${i}`;
+      });
+    }
+    expect(store.getState().undoStack).toHaveLength(UNDO_STACK_LIMIT);
+    expect(store.getState().dirty).toBe(true);
+    for (let i = 0; i < UNDO_STACK_LIMIT; i++) {
+      store.getState().undo();
+    }
+    // The saved step was dropped when the history was trimmed: the tree is not clean.
+    expect(store.getState().dirty).toBe(true);
+  });
+
+  it('a load resets the saved position', async () => {
+    const { store } = await loaded();
+    store.getState().apply('Rename', (draft) => {
+      draft.label = 'Renamed';
+    });
+    await store.getState().save();
+    await store.getState().load('/trees/other.json');
+    store.getState().apply('Rename', (draft) => {
+      draft.label = 'Again';
+    });
+    store.getState().undo();
+    expect(store.getState().dirty).toBe(false);
   });
 });

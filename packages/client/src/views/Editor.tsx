@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { collectMissingTypes, formatMissingTypes, type Selection } from '@owlbt/shared';
 import AlertPanel from '../components/AlertPanel/AlertPanel';
 import ContextMenu, {
@@ -8,6 +8,7 @@ import ContextMenu, {
 } from '../components/ContextMenu/ContextMenu';
 import { FuzzyDialogHost } from '../components/FuzzyDialog/FuzzyDialog';
 import ItemPalette from '../components/ItemPalette/ItemPalette';
+import PluginBanner from '../components/PluginBanner/PluginBanner';
 import PropertyPanel from '../components/PropertyPanel/PropertyPanel';
 import SidePanel from '../components/SidePanel/SidePanel';
 import TopMenu from '../components/TopMenu/TopMenu';
@@ -16,6 +17,7 @@ import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
 import '../commands/coreCommands';
 import { commandContext } from '../commands/registry';
 import { useHotkeys } from '../commands/useHotkeys';
+import { setNavigator } from '../lib/appNavigation';
 import { getPathLastSegment, registerMru } from '../lib/mru';
 import { alertStore, alerts } from '../store/alertStore';
 import { projectStore, useProjectStore } from '../store/projectStore';
@@ -45,6 +47,13 @@ function EditorPage({ treePath }: { treePath: string }) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | undefined>(undefined);
 
   useHotkeys();
+
+  const navigate = useNavigate();
+  // Commands (e.g. Edit project types) navigate in this tab through the router.
+  useEffect(() => {
+    setNavigator(navigate);
+    return () => setNavigator(undefined);
+  }, [navigate]);
 
   // The canvas has already selected the clicked item (or cleared the selection) when this runs.
   const openContextMenu = useCallback((_selection: Selection | undefined, x: number, y: number) => {
@@ -118,6 +127,7 @@ function EditorPage({ treePath }: { treePath: string }) {
             )}
           </li>
         </ol>
+        <PluginBanner treePath={treePath} />
         <AlertPanel />
       </div>
       <div className={styles.main}>

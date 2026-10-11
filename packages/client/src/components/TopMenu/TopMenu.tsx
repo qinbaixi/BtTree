@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { commandContext, commandRegistry, execCommand } from '../../commands/registry';
-import { EXPORT_COMMAND_IDS, THEME_COMMAND_IDS } from '../../commands/coreCommands';
+import {
+  EDIT_PROJECT_COMMAND_ID,
+  EXPORT_COMMAND_IDS,
+  THEME_COMMAND_IDS,
+} from '../../commands/coreCommands';
 import { useProjectStore } from '../../store/projectStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTheme, type ThemeId } from '../../lib/theme';
@@ -31,6 +35,7 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
       { title: 'Export: TypeScript', commandId: EXPORT_COMMAND_IDS.ts },
       { title: 'Export: C#', commandId: EXPORT_COMMAND_IDS.cs },
       { title: 'Export: All formats', commandId: EXPORT_COMMAND_IDS.all },
+      { title: 'Edit project types…', commandId: EDIT_PROJECT_COMMAND_ID },
     ],
   },
   {

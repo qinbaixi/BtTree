@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
 import { installGlobalErrorListeners } from './lib/globalErrors';
 import Editor from './views/Editor';
 import Home from './views/Home';
+import ProjectEditor from './views/ProjectEditor';
 
 export default function App() {
   useEffect(() => installGlobalErrorListeners(), []);
@@ -14,6 +15,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/tree" element={<Editor />} />
+          <Route path="/project" element={<ProjectEditor />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ErrorBoundary>

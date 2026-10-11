@@ -24,9 +24,10 @@ import {
 import { focusNode } from '../components/TreeCanvas/viewportStore';
 import { exportTree, type ExportFormat, type ExportTreeResult } from '../lib/api';
 import { readClipboard, writeClipboard } from '../lib/clipboard';
+import { navigateTo, projectEditorUrl, type ProjectEditorLink } from '../lib/appNavigation';
 import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
-import { getSelectedItem, selectCanRedo, selectCanUndo } from '../store/treeStore';
+import { getSelectedItem, selectCanRedo, selectCanUndo, type TreeStore } from '../store/treeStore';
 import {
   addItemToNode,
   choiceId,
@@ -538,6 +539,42 @@ const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: All formats', [
   'cs',
 ]);
 
+export const EDIT_PROJECT_COMMAND_ID = 'core:EditProjectTypes';
+
+/**
+ * Opens the project editor for the open tree in this tab. Unsaved tree changes are saved first;
+ * the navigation is cancelled when the user declines or the save fails.
+ */
+export async function openProjectEditorFromTree(
+  tree: TreeStore,
+  type?: ProjectEditorLink['type'],
+): Promise<void> {
+  const { treePath, dirty } = tree.getState();
+  if (!treePath) {
+    return;
+  }
+  if (dirty) {
+    if (!window.confirm('Save changes before editing project types?')) {
+      return;
+    }
+    if (!(await tree.getState().save())) {
+      return;
+    }
+  }
+  navigateTo(projectEditorUrl({ path: treePath, from: treePath, type }));
+}
+
+const editProjectTypes: Command = {
+  id: EDIT_PROJECT_COMMAND_ID,
+  name: 'Edit project types…',
+  canExec(ctx) {
+    return ctx.tree.getState().treePath !== undefined;
+  },
+  exec(ctx) {
+    return openProjectEditorFromTree(ctx.tree);
+  },
+};
+
 export const THEME_COMMAND_IDS: Record<ThemeId, string> = {
   light: 'core:ThemeLight',
   classic: 'core:ThemeClassic',
@@ -587,6 +624,7 @@ export const coreCommands: Command[] = [
   commandPalette,
   themeLight,
   themeClassic,
+  editProjectTypes,
 ];
 
 for (const command of coreCommands) {

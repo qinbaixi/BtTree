@@ -30,7 +30,9 @@ describe('project discovery', () => {
     mkdirSync(join(root, 'a'), { recursive: true });
     writeFileSync(join(root, 'a', 'owl-bt.json'), PROJECT_JSON);
 
-    expect(await findProjectFile(join(root, 'a', 'tree.json'))).toBe(join(root, 'a', 'owl-bt.json'));
+    expect(await findProjectFile(join(root, 'a', 'tree.json'))).toBe(
+      join(root, 'a', 'owl-bt.json'),
+    );
   });
 
   it('returns undefined when no ancestor has a project file', async () => {
@@ -53,20 +55,14 @@ describe('project discovery', () => {
   it('getProject loads the plugin and picks up edits on every call', async () => {
     writeFileSync(join(root, 'owl-bt.json'), PROJECT_JSON);
     const pluginPath = join(root, 'owl-bt.js');
-    writeFileSync(
-      pluginPath,
-      'module.exports = { onTreeSave() { return "v1"; } };',
-    );
+    writeFileSync(pluginPath, 'module.exports = { onTreeSave() { return "v1"; } };');
     const treePath = join(root, 'tree.json');
 
-    const first = await getProject(treePath);
+    const first = await getProject(treePath, { trustAllPlugins: true });
     expect(first?.plugin?.onTreeSave?.({} as never)).toBe('v1');
 
-    writeFileSync(
-      pluginPath,
-      'module.exports = { onTreeSave() { return "v2"; } };',
-    );
-    const second = await getProject(treePath);
+    writeFileSync(pluginPath, 'module.exports = { onTreeSave() { return "v2"; } };');
+    const second = await getProject(treePath, { trustAllPlugins: true });
     expect(second?.plugin?.onTreeSave?.({} as never)).toBe('v2');
   });
 
@@ -88,7 +84,9 @@ describe('isPathInDir', () => {
   });
 
   it('accepts names that merely start with two dots', () => {
-    expect(isPathInDir(join('/work', 'proj', '..name', 'tree.json'), join('/work', 'proj'))).toBe(true);
+    expect(isPathInDir(join('/work', 'proj', '..name', 'tree.json'), join('/work', 'proj'))).toBe(
+      true,
+    );
   });
 
   it('is case-insensitive on win32 only', () => {

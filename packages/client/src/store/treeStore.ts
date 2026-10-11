@@ -74,6 +74,11 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** The entry on top of an undo stack (the step that produced the current tree), undefined when empty. */
+function topOf(stack: HistoryEntry[]): HistoryEntry | undefined {
+  return stack[stack.length - 1];
+}
+
 export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
   const deps: TreeStoreDeps = {
     fetchTree,
@@ -84,6 +89,11 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
   return createStore<TreeState>()((set, get) => {
     let loadToken = 0;
+    /**
+     * Undo-stack top when the tree was loaded or last saved. The tree is clean while the top is this
+     * entry again, so undo back to the saved state is clean, and a new edit after an undo is not.
+     */
+    let savedTop: HistoryEntry | undefined;
 
     return {
       dirty: false,
@@ -95,6 +105,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
       async load(treePath) {
         const token = ++loadToken;
+        savedTop = undefined;
         set({
           treePath,
           root: undefined,
@@ -111,6 +122,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
             return;
           }
           const root = nodeFromJson(json, deps.idGen);
+          savedTop = undefined;
           set((state) => ({
             root,
             loading: false,
@@ -159,12 +171,13 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
           selectionBefore: state.selection,
           selectionAfter,
         };
+        const undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
         set({
           root: nextRoot,
           selection: selectionAfter,
-          dirty: true,
+          dirty: topOf(undoStack) !== savedTop,
           version: state.version + 1,
-          undoStack: [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT),
+          undoStack,
           redoStack: [],
         });
         return true;
@@ -176,12 +189,13 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         if (!entry || !state.root) {
           return;
         }
+        const undoStack = state.undoStack.slice(0, -1);
         set({
           root: applyPatches(state.root, entry.inversePatches),
           selection: entry.selectionBefore,
-          dirty: true,
+          dirty: topOf(undoStack) !== savedTop,
           version: state.version + 1,
-          undoStack: state.undoStack.slice(0, -1),
+          undoStack,
           redoStack: [...state.redoStack, entry],
         });
       },
@@ -192,12 +206,13 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         if (!entry || !state.root) {
           return;
         }
+        const undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
         set({
           root: applyPatches(state.root, entry.patches),
           selection: entry.selectionAfter,
-          dirty: true,
+          dirty: topOf(undoStack) !== savedTop,
           version: state.version + 1,
-          undoStack: [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT),
+          undoStack,
           redoStack: state.redoStack.slice(0, -1),
         });
       },
@@ -212,13 +227,16 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
           alerts.error('Unable to save before the tree is loaded');
           return false;
         }
+        const savedAt = topOf(get().undoStack);
         try {
           await deps.saveTree(treePath, nodeToJson(root));
         } catch (err) {
           alerts.error(errorText(err));
           return false;
         }
-        set({ dirty: false });
+        savedTop = savedAt;
+        // Edits made while the request ran stay unsaved.
+        set({ dirty: topOf(get().undoStack) !== savedTop });
         alerts.success('Done');
         return true;
       },

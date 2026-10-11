@@ -113,7 +113,7 @@ function resolveInheritance(
   return merged;
 }
 
-function resolveProperty(
+export function resolveProperty(
   prop: PropertyDescJson,
   customTypes: Record<string, CustomTypeJson>,
 ): CompiledProperty {
@@ -189,7 +189,8 @@ function compileKind(
     }
   }
 
-  const result: Record<string, CompiledItemType> = {};
+  // Null prototype: a type named like an Object.prototype member must not hit the prototype.
+  const result: Record<string, CompiledItemType> = Object.create(null);
   for (const [name, desc] of resolved) {
     if (desc.isAbstract) {
       continue;

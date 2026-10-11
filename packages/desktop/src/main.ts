@@ -21,9 +21,11 @@ import {
 } from '@owlbt/server';
 import {
   candidatePorts,
+  nextPendingRoute,
   parseWindowState,
   placementOn,
   routeFor,
+  startupRoute,
   treePathFromArgs,
   type WindowState,
 } from './launch';
@@ -45,6 +47,8 @@ let origin = '';
 let serverResult: RunResult | undefined;
 let mainWindow: BrowserWindow | undefined;
 let pickerBusy = false;
+/** Route requested by a second launch before the server and window were ready. Latest wins. */
+let pendingRoute: string | undefined;
 
 /** Folder with the bundled client: resources/client when packaged, the monorepo build in development. */
 function clientDistDir(): string {
@@ -222,7 +226,12 @@ function createMainWindow(route: string): BrowserWindow {
   });
   if (devtoolsEnabled) {
     win.webContents.on('before-input-event', (event, input) => {
-      if (input.type === 'keyDown' && input.control && input.shift && input.key.toUpperCase() === 'I') {
+      if (
+        input.type === 'keyDown' &&
+        input.control &&
+        input.shift &&
+        input.key.toUpperCase() === 'I'
+      ) {
         win.webContents.toggleDevTools();
         event.preventDefault();
       }
@@ -243,6 +252,8 @@ async function startServer(): Promise<RunResult> {
     throw new Error(`the client build is missing at ${clientDistDir()}`);
   }
   process.env.OWLBT_TEMPLATES_DIR = templatesDir();
+  // Plugin trust decisions live with the user profile. An explicit OWLBT_TRUST_FILE (e.g. for tests) wins.
+  process.env.OWLBT_TRUST_FILE ??= join(app.getPath('userData'), 'trusted-plugins.json');
 
   let lastError: unknown;
   for (const port of candidatePorts(DEFAULT_PORT, PORT_COUNT)) {
@@ -280,9 +291,7 @@ function isFile(path: string): boolean {
 
 function setupMenu(): void {
   if (process.platform === 'darwin') {
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]),
-    );
+    Menu.setApplicationMenu(Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }]));
   } else {
     // The editor has its own toolbar; no native menu bar on Windows and Linux.
     Menu.setApplicationMenu(null);
@@ -358,15 +367,21 @@ async function runSmoke(win: BrowserWindow, loaded: Promise<void>): Promise<void
 
 function start(): void {
   app.on('second-instance', (_event, argv, cwd) => {
+    const route = routeFromArgs(argv.slice(1), cwd);
+    if (serverResult === undefined) {
+      // Still starting: the first window opens on the latest requested route once the server is up.
+      pendingRoute = nextPendingRoute(pendingRoute, route);
+      return;
+    }
     const win = mainWindow;
     if (!win) {
+      mainWindow = createMainWindow(route);
       return;
     }
     if (win.isMinimized()) {
       win.restore();
     }
     win.focus();
-    const route = routeFromArgs(argv.slice(1), cwd);
     if (route !== '/') {
       void win.loadURL(`${origin}${route}`);
     }
@@ -417,7 +432,10 @@ function start(): void {
         return;
       }
       origin = `http://${HOST}:${serverResult.port}`;
-      mainWindow = createMainWindow(routeFromArgs(process.argv.slice(1), process.cwd()));
+      mainWindow = createMainWindow(
+        startupRoute(pendingRoute, routeFromArgs(process.argv.slice(1), process.cwd())),
+      );
+      pendingRoute = undefined;
     })
     .catch((err: unknown) => {
       console.error('owl-bt:', err);

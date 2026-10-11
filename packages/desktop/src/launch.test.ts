@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   candidatePorts,
   DEFAULT_WINDOW_STATE,
+  nextPendingRoute,
   parseWindowState,
   placementOn,
   routeFor,
+  startupRoute,
   treePathFromArgs,
 } from './launch';
 
@@ -31,7 +33,9 @@ describe('treePathFromArgs', () => {
   });
 
   it('skips flags, non-json arguments and missing files', () => {
-    expect(treePathFromArgs(['--inspect', 'readme.txt', 'missing.json'], cwd, isFile)).toBeUndefined();
+    expect(
+      treePathFromArgs(['--inspect', 'readme.txt', 'missing.json'], cwd, isFile),
+    ).toBeUndefined();
     expect(treePathFromArgs([], cwd, isFile)).toBeUndefined();
   });
 });
@@ -77,5 +81,23 @@ describe('placementOn', () => {
     const state = { x: 5000, y: 100, width: 1400, height: 900, maximized: false };
     expect(placementOn(state, screen)).toBeUndefined();
     expect(placementOn(DEFAULT_WINDOW_STATE, screen)).toBeUndefined();
+  });
+});
+
+describe('nextPendingRoute and startupRoute', () => {
+  it('queues a requested file route and lets the latest request win', () => {
+    expect(nextPendingRoute(undefined, '/tree?path=a')).toBe('/tree?path=a');
+    expect(nextPendingRoute('/tree?path=a', '/tree?path=b')).toBe('/tree?path=b');
+  });
+
+  it('keeps an earlier request when the second launch names no file', () => {
+    expect(nextPendingRoute('/tree?path=a', '/')).toBe('/tree?path=a');
+    expect(nextPendingRoute(undefined, '/')).toBeUndefined();
+  });
+
+  it('opens the queued route first, otherwise the route of this launch', () => {
+    expect(startupRoute('/tree?path=queued', '/tree?path=argv')).toBe('/tree?path=queued');
+    expect(startupRoute(undefined, '/tree?path=argv')).toBe('/tree?path=argv');
+    expect(startupRoute(undefined, '/')).toBe('/');
   });
 });

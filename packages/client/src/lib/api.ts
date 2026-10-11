@@ -141,3 +141,54 @@ export async function exportProject(
   const response = await request('/api/export/batch', postJson({ dir, formats }));
   return (await response.json()) as ExportProjectResult;
 }
+
+/** owl-bt.json as the project editor loads it. `hash` identifies the text for conditional saves. */
+export interface ProjectMeta {
+  /** Absolute path of owl-bt.json. */
+  path: string;
+  hash: string;
+  content: string;
+}
+
+/** Loads owl-bt.json (raw text and hash) for the project that applies to the path. */
+export async function fetchProjectMeta(path: string): Promise<ProjectMeta> {
+  const response = await request(`/api/project/meta?${new URLSearchParams({ path })}`);
+  return (await response.json()) as ProjectMeta;
+}
+
+export interface ProjectSaveBody {
+  content: unknown;
+  baseHash: string;
+  force?: boolean;
+}
+
+/**
+ * Saves owl-bt.json. Throws ApiError 409 when the file changed since `baseHash` (unless `force`),
+ * and ApiError 400 with the compile message when the content is not a valid project.
+ */
+export async function saveProject(path: string, body: ProjectSaveBody): Promise<{ hash: string }> {
+  const response = await request(`/api/project?${new URLSearchParams({ path })}`, {
+    ...postJson(body),
+    method: 'PUT',
+  });
+  return (await response.json()) as { hash: string };
+}
+
+/** Plugin (owl-bt.js) state of the project that applies to a tree. `pluginPath` is null without a plugin. */
+export interface PluginState {
+  pluginPath: string | null;
+  trusted?: boolean;
+  /** Trusted before, but the file changed since. */
+  changed?: boolean;
+}
+
+export async function fetchPluginState(treePath: string): Promise<PluginState> {
+  const response = await request(`/api/plugin?${new URLSearchParams({ path: treePath })}`);
+  return (await response.json()) as PluginState;
+}
+
+/** Trusts the current content of the project's plugin. Resolves with the new state. */
+export async function trustPlugin(treePath: string): Promise<PluginState> {
+  const response = await request('/api/plugin/trust', postJson({ path: treePath }));
+  return (await response.json()) as PluginState;
+}

@@ -21,6 +21,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - [目录结构](#目录结构)
 - [安装与使用](#安装与使用)
 - [项目文件（owl-bt.json）](#项目文件owl-btjson)
+- [项目编辑器（图形化编辑 owl-bt.json）](#项目编辑器图形化编辑-owl-btjson)
 - [树文件（tree）格式](#树文件tree格式)
 - [导出 Erlang / Lua / TypeScript / C#](#导出-erlang--lua--typescript--c)
 - [桌面版（Electron）](#桌面版electron)
@@ -72,6 +73,7 @@ npm run dev          # 打开 http://localhost:5173
 │   │       ├── navigation.ts     # 键盘导航
 │   │       ├── validation.ts     # 属性校验、缺失类型检查
 │   │       ├── describe.ts       # 描述模板 {{Prop}} 替换
+│       ├── projectEdit.ts     # 项目文件编辑（增删改名、继承、属性、自定义类型）与校验
 │   │       ├── fuzzy.ts          # 模糊搜索与匹配高亮
 │   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# 生成器
 │   ├── server/                   # @owlbt/server：Express 5 + socket.io 4 服务端与 owlbt CLI
@@ -79,7 +81,8 @@ npm run dev          # 打开 http://localhost:5173
 │   │   │   ├── cli.ts            # owlbt 命令（init / create / open / export）
 │   │   │   ├── run.ts            # 启动 HTTP + socket.io 服务
 │   │   │   ├── app.ts            # Express 应用与静态资源
-│   │   │   ├── routes.ts         # /api/* 路由
+│   │   │   ├── routes.ts         # /api/* 路由（含 owl-bt.json 的读取与保存）
+│   │   ├── projectFile.ts    # owl-bt.json 写入：sha256、缩进与换行保持
 │   │   │   ├── project.ts        # 查找 owl-bt.json、加载 owl-bt.js 插件
 │   │   │   ├── workspace.ts      # 目录扫描、初始化项目、新建树
 │   │   │   ├── export.ts         # 单个 / 批量导出并写文件
@@ -89,12 +92,13 @@ npm run dev          # 打开 http://localhost:5173
 │   │   ├── templates/            # 新项目与新树的模板
 │   │   └── scripts/              # 构建后把前端产物复制到 dist/public
 │   ├── client/                   # @owlbt/client：Vite + React 19 编辑器前端
+│   │   ├── scripts/              # gen-icons.mjs：生成 src/lib/faIcons.generated.ts（Font Awesome 实心图标名）
 │   │   └── src/
-│   │       ├── views/            # 首页（Home）与编辑器（Editor）
-│   │       ├── components/       # 画布、属性面板、类型面板、对话框、菜单等
+│   │       ├── views/            # 首页（Home）、树编辑器（Editor）与项目编辑器（ProjectEditor）
+│   │       ├── components/       # 画布、属性面板、类型面板、对话框、菜单等；ProjectEditor/ 为项目编辑器的各面板
 │   │       ├── commands/         # 命令注册、快捷键、导出命令
-│   │       ├── store/            # zustand 状态（树、项目、提示、对话框、类型查看）
-│   │       ├── lib/              # API 封装、剪贴板、最近打开、主题等
+│   │       ├── store/            # zustand 状态（树、项目、项目编辑器、提示、对话框、类型查看）
+│   │       ├── lib/              # API 封装、剪贴板、最近打开、主题、页面跳转、图标列表等
 │   │       └── styles/           # 全局样式与主题变量
 │   └── desktop/                  # @owlbt/desktop：Electron 桌面版
 │       ├── src/                  # 主进程：内嵌服务端、原生对话框、窗口管理
@@ -128,7 +132,7 @@ npm run dev
 ```
 
 - 编辑器前端：http://localhost:5173
-- 后端服务：http://localhost:9000。开发模式下后端端口默认为 9000，可用 `OWLBT_DEV_PORT` 修改；但 Vite 的代理目标写死在 `packages/client/vite.config.ts` 中（`/api` 和 `/socket.io`），修改端口时需同步修改该文件。
+- 后端服务：http://127.0.0.1:9000。开发模式下后端端口默认为 9000，可用 `OWLBT_DEV_PORT` 修改；但 Vite 的代理目标写死在 `packages/client/vite.config.ts` 中（`/api` 和 `/socket.io`，目标为 `http://127.0.0.1:9000`），修改端口时需同步修改该文件。开发服务默认只监听 `127.0.0.1`，可用 `npm run dev -w @owlbt/server -- --host <host>` 或 `OWLBT_HOST` 改变（同样需要允许对应的 Host，见「网络与安全」）。
 - 打开一个树：访问 `/tree?path=<树文件的绝对路径>`，例如 `http://localhost:5173/tree?path=D:\code\NodeJS\BtTree\samples\basic\trees\demo.json`。
 
 ### 生产模式（从源码构建）
@@ -162,6 +166,9 @@ owlbt open <树文件路径>
 | `owlbt export <path>` | | 导出为 Erlang / Lua / TypeScript / C#，见下文「导出 Erlang / Lua / TypeScript / C#」；不启动服务 |
 | `owlbt --no-open ...` | | 不打开浏览器，只打印 URL（适合测试和无界面环境） |
 | `OWLBT_NO_OPEN=1` | | 与 `--no-open` 相同的环境变量形式 |
+| `owlbt --host <host>` | | 监听指定的网卡地址（默认 `127.0.0.1`）。指定其他地址会暴露无认证的 API，见「网络与安全」 |
+| `owlbt --trust-plugins` | | 不经过插件信任检查直接运行 `owl-bt.js`，见「项目插件」 |
+| `OWLBT_TRUST_PLUGINS=1` | | 与 `--trust-plugins` 相同的环境变量形式 |
 | `owlbt -V` / `owlbt -h` | | 版本号 / 帮助 |
 
 如果服务已在目标端口运行，CLI 会打印 `owl-bt server already running on port <port>` 并以退出码 0 结束，不会重复启动服务。
@@ -190,6 +197,15 @@ owlbt create ./my-project/trees/patrol.json --no-open
 ```
 
 无效的端口（非整数、超出 1–65535）会被忽略。
+
+### 网络与安全
+
+服务端的 API 没有登录认证，因此默认只接受本机的连接：
+
+- **监听地址**：默认监听 `127.0.0.1`，同一台电脑上的其他用户或其他机器无法连接。`owlbt --host <host>` 可改为其他网卡地址（开发模式下还可用环境变量 `OWLBT_HOST`）。监听非回环地址时，服务端会在终端打印警告：API 没有认证，任何能连上它的人都可以读取和修改它提供的文件。
+- **Host 检查**：所有请求（包括页面文件）的 `Host` 头的主机名必须是 `localhost`、`127.0.0.1`、`[::1]`，或由 `--host` 指定的地址；端口不检查。其他主机名返回 403（`Forbidden host`）。这可以防止 DNS 重绑定攻击，即恶意网页把自己的域名解析到 `127.0.0.1` 后读取本机的文件。
+- **Origin 检查**：`GET` 与 `HEAD` 以外的请求，若带有 `Origin` 头，其主机名也必须是上述允许的主机，否则返回 403（`Forbidden origin`）。不带 `Origin` 的请求（如 `curl`）照常处理。WebSocket（`/socket.io`）连接同样检查。
+- **使用 `--host` 时**：`--host` 指定的地址会被加入允许列表，浏览器应使用同一地址访问。`0.0.0.0` 与 `::` 这类通配地址不会加入允许列表，请使用本机的实际地址（如 `--host 192.168.1.5`）。
 
 ## 首页（打开树与项目）
 
@@ -320,6 +336,35 @@ owlbt create ./my-project/trees/patrol.json --no-open
 图标全部使用 Font Awesome 6 Free Solid 的图标名。`RandomSelector` 与 `Loop` 设置了自定义颜色，其余类型使用默认颜色。
 
 Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节点的示例树，演示标签、注释、装饰器（含 `periodic` 与 `inverseCheckCondition`）以及带 `timeBetweenTicks` 的服务。模板中的 `templates/tree.json` 是只有一个 `Selector` 根节点的最小树，**New tree** 使用它。
+
+## 项目编辑器（图形化编辑 owl-bt.json）
+
+除了直接编辑 `owl-bt.json`，也可以在项目编辑器中图形化地管理节点、装饰器、服务的类型定义、自定义属性类型与导出设置。编辑器地址为 `/project?path=<owl-bt.json 或项目内任一树的绝对路径>`。
+
+**入口**
+
+- 首页工作区面板的「Edit project types」（项目存在时显示）。
+- 树编辑器的「File → Edit project types…」。有未保存的树修改时会先询问是否保存；取消则不跳转。
+- 属性面板中某个类型的「Edit in project」，打开后直接选中该类型。从树进入时，左上角会出现「← Back to tree」。
+
+**页面布局**
+
+- 左侧：类型列表，按「组合节点 / 行为节点 / 装饰器 / 服务」分组并显示数量。可搜索（`Ctrl+F`），抽象类型斜体并标注 abstract，显示「← 基类」提示。每行悬停可上移、下移、复制、删除；删除被其他类型继承的类型前会列出这些引用。有校验错误的类型显示红点，警告显示黄点。底部的「+ Node / + Decorator / + Service」新建类型。另有「Custom types」（自定义类型）与「Export settings」（导出设置）两个入口。
+- 中间：所选类型的表单。名称（修改时同步更新其他类型的基类引用）、组合 / 抽象开关、基类（多选，禁止自身与循环继承）、图标（可输入名称，或「Choose…」打开图标选择框：Font Awesome 6 Free 实心图标，输入关键字过滤，方向键移动，Enter 选择，Esc 关闭）、颜色（取色器、十六进制输入、「Default」恢复默认、10 个预设色）、描述模板（点击属性名即可插入 `{{Name}}`，引用不存在的属性会给出警告）、属性表、导出字段与未知字段（只读显示，原样保留）。
+- 属性表：自有属性可编辑（名称、类型、默认值、min/max、枚举值增删排序、自定义类型的正则只读显示、描述、导出名与导出位置）；从基类继承的属性以灰色只读显示并标注「from 基类名」。
+- 右侧：实时预览。使用与树编辑器相同的节点卡片，同时显示明亮与深色两种主题；带装饰器与服务的示例节点（项目中没有组合节点时使用示例节点），可切换「With label」「Invalid」，并可在「Sample values」中填写属性值（只影响预览）。预览下方可展开查看编译后的类型 JSON。
+- 自定义类型：表格编辑名称、基础类型（string / number）、正则，并可在「Test」中实时测试是否匹配；重命名会同时更新属性的类型。
+- 导出设置：Erlang / Lua / TypeScript / C# 的输出目录、文件名模板与 C# 命名空间，空白时使用默认值。
+- 底部「Problems」栏列出校验问题（错误与警告），点击即可跳到对应的类型或自定义类型。
+
+**保存与冲突**
+
+- `Ctrl+S` 保存（也可用工具栏按钮）。`Ctrl+Z` / `Ctrl+Y` 撤销与重做（输入框内保留文本框自身的撤销）。连续在同一字段输入会合并为一步撤销。
+- 写入前会检查内容能否编译（如缺失基类、循环继承）；不能编译时不保存，并在底部栏显示原因。仅有警告时可以保存。
+- 保存时保留文件原有的缩进（Tab 或空格）、换行方式（LF / CRLF）与末尾换行，并保留所有未知字段。
+- 文件在磁盘上被其他程序修改后，若没有未保存的修改，编辑器会自动重新载入并保留当前选中项；若有未保存的修改，顶部显示「项目文件已在磁盘上改变」，可选择「Reload」（放弃修改，使用磁盘内容）或「Keep mine」（保留修改，之后保存时会再次询问）。
+- 保存时若文件已被修改，会弹出对话框：「Reload from disk」（放弃修改，重新载入）、「Overwrite」（用当前修改覆盖文件）或「Cancel」。
+- 离开页面时若有未保存的修改，浏览器会提示确认。
 
 ## 树文件（tree）格式
 
@@ -572,7 +617,19 @@ get_node(1) ->
 
 `ctx` 的字段：`tree`（树内容）、`path`（树文件路径）、`project`（已解析的 `owl-bt.json`）、`projectPath`（`owl-bt.json` 路径）。
 
-插件在每次请求时重新加载，修改后无需重启服务。示例：
+### 插件信任
+
+`owl-bt.js` 会在你的电脑上执行代码，因此只有在你信任它之后才会运行。信任按文件内容的 sha256 记录：
+
+- 编辑器打开的树所属项目中若有未信任的 `owl-bt.js`，编辑器顶部会显示提示，插件不会运行，树照常加载和保存。点击 **Trust and run** 信任当前内容并重新加载树，点击 **Dismiss** 只隐藏提示。
+- 信任之后修改 `owl-bt.js`，插件会再次变为未信任（提示中会说明插件“changed since you trusted it”），需要重新信任。
+- 信任记录保存在信任文件中。默认位置为 `~/.owlbt/trusted-plugins.json`（Windows 为 `%USERPROFILE%\.owlbt\trusted-plugins.json`）；可用环境变量 `OWLBT_TRUST_FILE` 指定其他文件。桌面版使用用户数据目录下的 `trusted-plugins.json`。信任文件损坏或缺失时，所有插件都视为未信任。
+- 撤销信任：删除信任文件中对应的条目，或调用 `POST /api/plugin/revoke`。
+- `owlbt --trust-plugins`（或 `OWLBT_TRUST_PLUGINS=1`）跳过检查，直接运行所有项目的插件。只在你完全信任所打开的项目时使用。
+
+相关接口见「本地 HTTP API」中的 `/api/plugin`。
+
+插件在每次请求时重新加载，修改后无需重启服务（修改后需重新信任才会运行）。示例：
 
 ```js
 'use strict';
@@ -618,8 +675,13 @@ module.exports = {
 | --- | --- | --- |
 | `GET` | `/api/health` | 健康检查，返回 `{ "ok": true }` |
 | `GET` | `/api/project?path=<树文件绝对路径>` | 返回该树所属 `owl-bt.json` 的原始内容。无项目时 404 |
-| `GET` | `/api/tree?path=<树文件绝对路径>` | 返回树（经 `onTreeLoad` 处理）。路径不在项目内时 403 |
-| `POST` | `/api/tree?path=<树文件绝对路径>` | 保存树。可能被 `onTreeSave` 拒绝（409） |
+| `GET` | `/api/project/meta?path=<树文件或 owl-bt.json 绝对路径>` | 返回 `{ path, hash, content }`：项目文件的绝对路径、内容哈希（sha256）与原始文本，供项目编辑器使用 |
+| `PUT` | `/api/project?path=<树文件或 owl-bt.json 绝对路径>` | 保存项目。请求体 `{ content, baseHash, force? }`：内容不能编译时 400；文件哈希与 `baseHash` 不一致且未 `force` 时 409（`{ message, currentHash }`）；成功返回 `{ hash }`。保留缩进、换行与未知字段 |
+| `GET` | `/api/tree?path=<树文件绝对路径>` | 返回树（经 `onTreeLoad` 处理）。路径不在项目内时 403；文件不是合法 JSON 时 422，响应 `{ message: "Invalid JSON in tree file: ..." }`。文件开头的 UTF-8 BOM 会被忽略。项目有插件时响应头 `X-Owlbt-Plugin` 为 `trusted`、`changed` 或 `untrusted` |
+| `POST` | `/api/tree?path=<树文件绝对路径>` | 保存树。可能被 `onTreeSave` 拒绝（409）。保留原文件的缩进、换行与 BOM；新文件使用制表符缩进 |
+| `GET` | `/api/plugin?path=<树文件或 owl-bt.json 绝对路径>` | 项目插件的信任状态：`{ pluginPath, trusted, changed }`；项目没有 `owl-bt.js` 时 `{ pluginPath: null }` |
+| `POST` | `/api/plugin/trust` | 请求体 `{ path }`（项目内的路径）。信任项目当前的 `owl-bt.js`，返回状态。项目没有插件时 404 |
+| `POST` | `/api/plugin/revoke` | 请求体 `{ path }`。撤销对项目插件的信任，返回状态。项目没有插件时 404 |
 | `GET` | `/api/workspace?dir=<绝对目录或文件>` | 列出树文件，见下文 |
 | `POST` | `/api/project/init` | 初始化项目，见下文 |
 | `POST` | `/api/tree/create` | 创建树文件，见下文 |
@@ -674,8 +736,8 @@ module.exports = {
 
 产物位于仓库根目录的 `release/`（已加入 `.gitignore`）：
 
-- 安装包：`release/owl-bt Setup x.y.z.exe`（NSIS，可选择安装目录，创建桌面和开始菜单快捷方式）
-- 便携版：`release/owl-bt x.y.z.exe`（无需安装，直接运行）
+- 安装包：`release/owl-bt-setup-x.y.z.exe`（NSIS，可选择安装目录，创建桌面和开始菜单快捷方式）
+- 便携版：`release/owl-bt-portable-x.y.z.exe`（无需安装，直接运行）
 - 未打包目录：`release/win-unpacked/owl-bt.exe`
 
 ### 用户数据
@@ -684,6 +746,7 @@ module.exports = {
 
 ### 说明
 
+- 插件信任记录保存在用户数据目录的 `trusted-plugins.json`（可用 `OWLBT_TRUST_FILE` 覆盖），见「项目插件」中的「插件信任」。
 - 服务端固定使用端口 `18955`（只监听本机）；该端口被占用时依次尝试 `18956` 到 `18975`。端口会影响浏览器本地存储的隔离，所以尽量保持 `18955`。
 - 应用是单实例的：再次启动时会激活已有窗口，并打开传入的 `.json` 树文件。
 - 首页的“打开文件 / 打开文件夹”使用系统原生对话框。

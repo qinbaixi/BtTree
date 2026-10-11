@@ -1,9 +1,10 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
-import type { ErrorRequestHandler } from 'express';
+import { mkdir, readFile, stat } from 'node:fs/promises';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import type { ErrorRequestHandler, Request, Response } from 'express';
 import express, { Router } from 'express';
-import type { ProjectFile, TreeNodeJson } from '@owlbt/shared';
+import { compileProject, type ProjectFile, type TreeNodeJson } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
+import { withFileLock, writeFileAtomic } from './fileLock';
 import {
   createPicker,
   DialogBusyError,
@@ -12,7 +13,17 @@ import {
   type Picker,
 } from './picker';
 import { exportProject, exportTree, parseExportFormats } from './export';
-import { getProject, isPathInDir, type PluginContext, type Project } from './project';
+import { formatJsonLike, sha256 } from './projectFile';
+import {
+  getProject,
+  isPathInDir,
+  PLUGIN_FILE_NAME,
+  type PluginContext,
+  type PluginStatus,
+  type Project,
+  type ProjectOptions,
+} from './project';
+import { revoke, trust } from './pluginTrust';
 import {
   initProject,
   loadWorkspace,
@@ -26,7 +37,14 @@ export { HttpError } from './errors';
 export interface RouterOptions {
   /** Native dialog runner. Defaults to a picker for the current platform. */
   picker?: Picker;
+  /** Runs owl-bt.js without the trust check. */
+  trustAllPlugins?: boolean;
 }
+
+/** Response header of GET /api/tree when the project has a plugin: trusted, changed or untrusted. */
+export const PLUGIN_HEADER = 'X-Owlbt-Plugin';
+
+const UTF8_BOM = String.fromCharCode(0xfeff);
 
 function requireAbsolutePath(raw: unknown, name = 'path'): string {
   if (typeof raw !== 'string' || raw === '') {
@@ -45,12 +63,53 @@ function objectBody(body: unknown): Record<string, unknown> {
   return body as Record<string, unknown>;
 }
 
-async function requireProjectFor(treePath: string): Promise<Project> {
-  const project = await getProject(treePath);
+function messageOf(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** The project that applies to a path (the project file itself or a tree in the project). 404 when none. */
+async function loadProjectOr404(path: string, options: ProjectOptions = {}): Promise<Project> {
+  let project: Project | undefined;
+  try {
+    project = await getProject(path, options);
+  } catch (err) {
+    if (!isErrno(err, 'ENOENT')) {
+      throw err;
+    }
+  }
+  if (!project) {
+    throw new HttpError(404, 'No project found');
+  }
+  return project;
+}
+
+async function requireProjectFor(treePath: string, options: ProjectOptions = {}): Promise<Project> {
+  const project = await getProject(treePath, options);
   if (!project || !isPathInDir(treePath, project.dir)) {
     throw new HttpError(403, 'Path must be in project');
   }
   return project;
+}
+
+/** Header value for the plugin state: `trusted`, `changed` (trusted before, edited since) or `untrusted`. */
+function pluginHeaderValue(status: PluginStatus): string {
+  if (status.trusted) {
+    return 'trusted';
+  }
+  return status.changed === true ? 'changed' : 'untrusted';
+}
+
+/** Body of the /api/plugin routes. `pluginPath` is null when the project has no plugin. */
+function pluginResponse(project: Project): {
+  pluginPath: string | null;
+  trusted?: boolean;
+  changed?: boolean;
+} {
+  const status = project.pluginStatus;
+  if (!status) {
+    return { pluginPath: null };
+  }
+  return { pluginPath: status.path, trusted: status.trusted, changed: status.changed === true };
 }
 
 /** Optional starting folder for a dialog. A file is replaced by its folder; anything unusable is ignored. */
@@ -85,30 +144,31 @@ function buildContext(project: Project, treePath: string, tree: TreeNodeJson): P
 export function createApiRouter(options: RouterOptions = {}): Router {
   const router = Router();
   const picker = options.picker ?? createPicker();
+  const projectOptions: ProjectOptions = { trustAllPlugins: options.trustAllPlugins };
 
   router.get('/health', (_req, res) => {
     res.json({ ok: true });
   });
 
   router.get('/project', async (req, res) => {
-    const treePath = requireAbsolutePath(req.query.path);
-    let project: Project | undefined;
-    try {
-      project = await getProject(treePath);
-    } catch (err) {
-      if (!isErrno(err, 'ENOENT')) {
-        throw err;
-      }
-    }
-    if (!project) {
-      throw new HttpError(404, 'No project found');
-    }
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
     res.type('application/json').send(project.content);
+  });
+
+  router.get('/project/meta', async (req, res) => {
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    res.json({ path: project.path, hash: sha256(project.content), content: project.content });
   });
 
   router.get('/workspace', async (req, res) => {
     const dir = requireAbsolutePath(req.query.dir, 'dir');
     res.json(await loadWorkspace(dir));
+  });
+
+  // Plugin trust state of the project that applies to a tree or project path.
+  router.get('/plugin', async (req, res) => {
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    res.json(pluginResponse(project));
   });
 
   // Media type check for writes, before the body is parsed.
@@ -121,9 +181,60 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   });
   router.use(express.json({ limit: '50mb' }));
 
+  /**
+   * Saves owl-bt.json. Rejected (400) when the content does not compile. Rejected (409, with the
+   * current hash) when the file changed since baseHash was read, unless force is true. The check and
+   * the write run under the file lock, so two saves with the same baseHash cannot both succeed.
+   */
+  router.put('/project', async (req, res) => {
+    const body = objectBody(req.body);
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+
+    const content = body.content;
+    if (typeof content !== 'object' || content === null || Array.isArray(content)) {
+      throw new HttpError(400, 'Content must be a JSON object');
+    }
+    if (typeof body.baseHash !== 'string') {
+      throw new HttpError(400, 'baseHash must be a string');
+    }
+    try {
+      compileProject(content as ProjectFile);
+    } catch (err) {
+      throw new HttpError(400, messageOf(err));
+    }
+
+    const outcome = await withFileLock(project.path, async () => {
+      let current: string;
+      try {
+        current = await readFile(project.path, 'utf8');
+      } catch (err) {
+        if (isErrno(err, 'ENOENT')) {
+          throw new HttpError(404, 'No project found');
+        }
+        throw err;
+      }
+      const currentHash = sha256(current);
+      if (body.force !== true && body.baseHash !== currentHash) {
+        return { conflict: true as const, currentHash };
+      }
+      const text = formatJsonLike(content, current);
+      await writeFileAtomic(project.path, text);
+      return { conflict: false as const, hash: sha256(text) };
+    });
+
+    if (outcome.conflict) {
+      res.status(409).json({
+        message: 'Project file changed on disk',
+        currentHash: outcome.currentHash,
+      });
+      return;
+    }
+    res.json({ hash: outcome.hash });
+  });
+
   router.get('/tree', async (req, res) => {
     const treePath = requireAbsolutePath(req.query.path);
-    const project = await requireProjectFor(treePath);
+    const project = await requireProjectFor(treePath, projectOptions);
 
     let raw: string;
     try {
@@ -135,7 +246,17 @@ export function createApiRouter(options: RouterOptions = {}): Router {
       throw err;
     }
 
-    let tree = JSON.parse(raw) as TreeNodeJson;
+    let tree: TreeNodeJson;
+    try {
+      tree = JSON.parse(raw.startsWith(UTF8_BOM) ? raw.slice(1) : raw) as TreeNodeJson;
+    } catch (err) {
+      res.status(422).json({ message: `Invalid JSON in tree file: ${messageOf(err)}` });
+      return;
+    }
+
+    if (project.pluginStatus) {
+      res.setHeader(PLUGIN_HEADER, pluginHeaderValue(project.pluginStatus));
+    }
     if (project.plugin?.onTreeLoad) {
       const ctx = buildContext(project, treePath, tree);
       await project.plugin.onTreeLoad(ctx);
@@ -146,7 +267,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
   router.post('/tree', async (req, res) => {
     const treePath = requireAbsolutePath(req.query.path);
-    const project = await requireProjectFor(treePath);
+    const project = await requireProjectFor(treePath, projectOptions);
 
     const body: unknown = req.body;
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -166,16 +287,60 @@ export function createApiRouter(options: RouterOptions = {}): Router {
       tree = ctx.tree;
     }
 
-    try {
-      await writeFile(treePath, JSON.stringify(tree, null, '\t'), 'utf8');
-    } catch (err) {
-      if (isErrno(err, 'ENOENT')) {
-        throw new HttpError(404, 'Path not found');
+    await withFileLock(treePath, async () => {
+      let original: string | undefined;
+      try {
+        original = await readFile(treePath, 'utf8');
+      } catch (err) {
+        if (!isErrno(err, 'ENOENT')) {
+          throw err;
+        }
       }
-      throw err;
-    }
+      // A new file gets tab indentation. An existing file keeps its indentation, line endings and BOM.
+      const hasBom = original?.startsWith(UTF8_BOM) === true;
+      const text = formatJsonLike(tree, hasBom ? original?.slice(1) : original, '\t');
+      try {
+        await writeFileAtomic(treePath, hasBom ? `${UTF8_BOM}${text}` : text);
+      } catch (err) {
+        if (isErrno(err, 'ENOENT')) {
+          throw new HttpError(404, 'Path not found');
+        }
+        throw err;
+      }
+    });
     res.json({ ok: true });
   });
+
+  /** Trust decisions. The body names a path in the project; the project's plugin is the subject. */
+  const pluginDecision = (apply: (pluginPath: string) => Promise<void>) => {
+    return async (req: Request, res: Response): Promise<void> => {
+      const body = objectBody(req.body);
+      const project = await loadProjectOr404(
+        requireAbsolutePath(body.path, 'path'),
+        projectOptions,
+      );
+      if (!project.pluginStatus) {
+        throw new HttpError(404, 'No plugin found');
+      }
+      try {
+        await apply(join(project.dir, PLUGIN_FILE_NAME));
+      } catch (err) {
+        if (isErrno(err, 'ENOENT')) {
+          throw new HttpError(404, 'No plugin found');
+        }
+        throw err;
+      }
+      res.json(pluginResponse(await loadProjectOr404(project.path, projectOptions)));
+    };
+  };
+  router.post(
+    '/plugin/trust',
+    pluginDecision((pluginPath) => trust(pluginPath)),
+  );
+  router.post(
+    '/plugin/revoke',
+    pluginDecision((pluginPath) => revoke(pluginPath)),
+  );
 
   router.post('/dialog/pick', async (req, res) => {
     const body = objectBody(req.body ?? {});
@@ -208,7 +373,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   router.post('/tree/create', async (req, res) => {
     const body = objectBody(req.body);
     const treePath = withJsonExtension(resolve(requireAbsolutePath(body.path, 'path')));
-    await requireProjectFor(treePath);
+    await requireProjectFor(treePath, projectOptions);
 
     await mkdir(dirname(treePath), { recursive: true });
     const created = await writeNewFile(treePath, await readTemplate('tree.json'));

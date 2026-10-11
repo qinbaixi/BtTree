@@ -7,6 +7,7 @@ import {
   type ItemKind,
   type TreeNode,
 } from '@owlbt/shared';
+import { openProjectEditorFromTree } from '../../commands/coreCommands';
 import { inspectStore } from '../../store/inspectStore';
 import { treeStore } from '../../store/treeStore';
 import { focusNode } from '../TreeCanvas/viewportStore';
@@ -69,6 +70,13 @@ export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
       </fieldset>
 
       <div className={styles.footer}>
+        <button
+          type="button"
+          className={styles.textButton}
+          onClick={() => void openProjectEditorFromTree(treeStore, { kind, name })}
+        >
+          Edit in project
+        </button>
         <button
           type="button"
           className={styles.textButton}

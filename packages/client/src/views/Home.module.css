@@ -358,7 +358,7 @@
 }
 
 .mruLink {
-  padding-right: 44px;
+  padding-right: 150px;
   border-radius: 0;
 }
 
@@ -388,6 +388,30 @@
 .remove:hover {
   color: var(--text);
   background: var(--surface-muted);
+}
+
+.editProject {
+  position: absolute;
+  top: 50%;
+  right: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transform: translateY(-50%);
+}
+
+.editProject:hover,
+.editProject:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Empty state */
