@@ -470,6 +470,7 @@ export const EXPORT_COMMAND_IDS = {
   lua: 'core:ExportLua',
   ts: 'core:ExportTs',
   cs: 'core:ExportCs',
+  go: 'core:ExportGo',
   all: 'core:ExportAll',
 } as const;
 
@@ -532,11 +533,13 @@ const exportErlang = exportCommand(EXPORT_COMMAND_IDS.erlang, 'Export: Erlang', 
 const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, 'Export: Lua', ['lua']);
 const exportTs = exportCommand(EXPORT_COMMAND_IDS.ts, 'Export: TypeScript', ['ts']);
 const exportCs = exportCommand(EXPORT_COMMAND_IDS.cs, 'Export: C#', ['cs']);
+const exportGo = exportCommand(EXPORT_COMMAND_IDS.go, 'Export: Go', ['go']);
 const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: All formats', [
   'erlang',
   'lua',
   'ts',
   'cs',
+  'go',
 ]);
 
 export const EDIT_PROJECT_COMMAND_ID = 'core:EditProjectTypes';
@@ -610,6 +613,7 @@ export const coreCommands: Command[] = [
   exportLua,
   exportTs,
   exportCs,
+  exportGo,
   exportAll,
   moveNodeCommand('Move Left', 'shift+left', -1, 100),
   moveNodeCommand('Move Right', 'shift+right', 1, 101),

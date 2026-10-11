@@ -34,6 +34,7 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
       { title: 'Export: Lua', commandId: EXPORT_COMMAND_IDS.lua },
       { title: 'Export: TypeScript', commandId: EXPORT_COMMAND_IDS.ts },
       { title: 'Export: C#', commandId: EXPORT_COMMAND_IDS.cs },
+      { title: 'Export: Go', commandId: EXPORT_COMMAND_IDS.go },
       { title: 'Export: All formats', commandId: EXPORT_COMMAND_IDS.all },
       { title: 'Edit project types…', commandId: EDIT_PROJECT_COMMAND_ID },
     ],

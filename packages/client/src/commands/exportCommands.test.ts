@@ -73,25 +73,29 @@ describe('export commands', () => {
     expect(cmd(EXPORT_COMMAND_IDS.lua).name).toBe('Export: Lua');
     expect(cmd(EXPORT_COMMAND_IDS.ts).name).toBe('Export: TypeScript');
     expect(cmd(EXPORT_COMMAND_IDS.cs).name).toBe('Export: C#');
+    expect(cmd(EXPORT_COMMAND_IDS.go).name).toBe('Export: Go');
     expect(cmd(EXPORT_COMMAND_IDS.all).name).toBe('Export: All formats');
     expect(EXPORT_COMMAND_IDS.ts).toBe('core:ExportTs');
     expect(EXPORT_COMMAND_IDS.cs).toBe('core:ExportCs');
+    expect(EXPORT_COMMAND_IDS.go).toBe('core:ExportGo');
     expect(EXPORT_COMMAND_IDS.all).toBe('core:ExportAll');
     for (const id of Object.values(EXPORT_COMMAND_IDS)) {
       expect(commandRegistry[id]).toBeDefined();
     }
   });
 
-  it('exports TypeScript and C# with their own commands', async () => {
+  it('exports TypeScript, C# and Go with their own commands', async () => {
     const { ctx } = await loadedSetup();
     exportTreeMock.mockResolvedValue({ treePath: 'tree.json', files: [], warnings: [] });
 
     await cmd(EXPORT_COMMAND_IDS.ts).exec(ctx);
     await cmd(EXPORT_COMMAND_IDS.cs).exec(ctx);
+    await cmd(EXPORT_COMMAND_IDS.go).exec(ctx);
 
     expect(exportTreeMock.mock.calls).toEqual([
       ['tree.json', ['ts']],
       ['tree.json', ['cs']],
+      ['tree.json', ['go']],
     ]);
   });
 
@@ -126,7 +130,7 @@ describe('export commands', () => {
     const { ctx } = await loadedSetup();
     exportTreeMock.mockResolvedValue({ treePath: 'tree.json', files: [], warnings: [] });
     await cmd(EXPORT_COMMAND_IDS.all).exec(ctx);
-    expect(exportTreeMock).toHaveBeenCalledWith('tree.json', ['erlang', 'lua', 'ts', 'cs']);
+    expect(exportTreeMock).toHaveBeenCalledWith('tree.json', ['erlang', 'lua', 'ts', 'cs', 'go']);
   });
 
   it('asks before saving a dirty tree and does nothing when the user declines', async () => {

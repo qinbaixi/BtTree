@@ -4,12 +4,15 @@ import {
   buildExportModel,
   createIdGen,
   csharpClassName,
+  goNamePrefix,
   nodeFromJson,
   parseAndCompileProject,
   parseCsNamespace,
+  parseGoPackage,
   sanitizeModuleName,
   toCSharp,
   toErlang,
+  toGo,
   toLua,
   toTypeScript,
   type ProjectFile,
@@ -19,7 +22,7 @@ import { HttpError, isErrno } from './errors';
 import { getProject } from './project';
 import { loadWorkspace } from './workspace';
 
-export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs'] as const;
+export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs', 'go'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 const FORMAT_DEFAULTS: Record<ExportFormat, { outDir: string; extension: string }> = {
@@ -27,6 +30,7 @@ const FORMAT_DEFAULTS: Record<ExportFormat, { outDir: string; extension: string 
   lua: { outDir: 'export/lua', extension: '.lua' },
   ts: { outDir: 'export/ts', extension: '.ts' },
   cs: { outDir: 'export/cs', extension: '.cs' },
+  go: { outDir: 'export/go', extension: '.go' },
 };
 
 export interface ExportedFile {
@@ -150,6 +154,16 @@ export async function exportTree(
       content = toLua(model, { sourcePath });
     } else if (format === 'ts') {
       content = toTypeScript(model, { sourcePath });
+    } else if (format === 'go') {
+      const goPackage = parseGoPackage(config.package);
+      if (goPackage.warning !== undefined) {
+        result.warnings.push(goPackage.warning);
+      }
+      content = toGo(model, {
+        sourcePath,
+        packageName: goPackage.package,
+        namePrefix: goNamePrefix(baseName),
+      });
     } else {
       const namespace = parseCsNamespace(config.namespace);
       if (namespace.warning !== undefined) {

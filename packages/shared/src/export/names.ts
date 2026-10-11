@@ -323,3 +323,102 @@ export function parseCsNamespace(raw: unknown): { namespace: string; warning?: s
     warning: `Invalid C# namespace ${JSON.stringify(raw)}, using ${DEFAULT_CS_NAMESPACE}`,
   };
 }
+
+/** Go keywords; package names must not be one of them. */
+const GO_KEYWORDS: ReadonlySet<string> = new Set([
+  'break',
+  'case',
+  'chan',
+  'const',
+  'continue',
+  'default',
+  'defer',
+  'else',
+  'fallthrough',
+  'for',
+  'func',
+  'go',
+  'goto',
+  'if',
+  'import',
+  'interface',
+  'map',
+  'package',
+  'range',
+  'return',
+  'select',
+  'struct',
+  'switch',
+  'type',
+  'var',
+]);
+
+/**
+ * Go interpreted string literal. Control characters use `\xHH`; a byte order mark and lone
+ * surrogates (which Go source cannot hold) become `\uFEFF` and `\uFFFD`.
+ */
+export function goString(text: string): string {
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === '\\' || ch === '"') {
+      out += `\\${ch}`;
+    } else if (ch === '\n') {
+      out += '\\n';
+    } else if (ch === '\r') {
+      out += '\\r';
+    } else if (ch === '\t') {
+      out += '\\t';
+    } else if (code < 0x20 || code === 0x7f) {
+      out += `\\x${code.toString(16).padStart(2, '0')}`;
+    } else if (code === 0xfeff) {
+      out += '\\uFEFF';
+    } else if (code >= 0xd800 && code <= 0xdfff) {
+      out += '\\uFFFD';
+    } else {
+      out += ch;
+    }
+  }
+  return `"${out}"`;
+}
+
+/**
+ * Exported Go identifier prefix from a file name: words separated by any non-alphanumeric
+ * character, each with an upper case first letter (`bt_mon_1000` -> `BtMon1000`). A leading digit
+ * gets a `Bt` prefix so the name stays exported.
+ */
+export function goNamePrefix(fileName: string): string {
+  const pascal = fileName
+    .split(/[^A-Za-z0-9]+/)
+    .filter((word) => word !== '')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+  if (pascal === '') {
+    return 'BehaviorTree';
+  }
+  return /^[0-9]/.test(pascal) ? `Bt${pascal}` : pascal;
+}
+
+export const DEFAULT_GO_PACKAGE = 'behaviortrees';
+
+/**
+ * Validates the `export.go.package` setting: a Go identifier that is not a keyword or `_`.
+ * Anything else falls back to DEFAULT_GO_PACKAGE and comes back with a warning.
+ */
+export function parseGoPackage(raw: unknown): { package: string; warning?: string } {
+  if (raw === undefined) {
+    return { package: DEFAULT_GO_PACKAGE };
+  }
+  if (
+    typeof raw === 'string' &&
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(raw) &&
+    raw !== '_' &&
+    !GO_KEYWORDS.has(raw)
+  ) {
+    return { package: raw };
+  }
+  return {
+    package: DEFAULT_GO_PACKAGE,
+    warning: `Invalid Go package ${JSON.stringify(raw)}, using ${DEFAULT_GO_PACKAGE}`,
+  };
+}
