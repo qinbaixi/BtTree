@@ -354,10 +354,20 @@ const GO_KEYWORDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Text that goString can quote as is: no quote, backslash, control character, byte order mark or
+ * surrogate (surrogate pairs take the slow path too, which leaves them unchanged).
+ */
+// eslint-disable-next-line no-control-regex
+const GO_STRING_PLAIN = /^[^"\\\x00-\x1f\x7f\ufeff\ud800-\udfff]*$/;
+
+/**
  * Go interpreted string literal. Control characters use `\xHH`; a byte order mark and lone
  * surrogates (which Go source cannot hold) become `\uFEFF` and `\uFFFD`.
  */
 export function goString(text: string): string {
+  if (GO_STRING_PLAIN.test(text)) {
+    return `"${text}"`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;

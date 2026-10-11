@@ -178,4 +178,20 @@ describe('toGo', () => {
     const go = render([], 'Selector - Root\r\nNext line ');
     expect(go).toContain('\t// Selector - Root Next line\n\t1: {');
   });
+
+  it('renders very large trees without hitting argument-count limits', () => {
+    const count = 60000;
+    const model: ExportModel = {
+      rootId: 1,
+      entries: Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        kind: 'node' as const,
+        comment: 'Task',
+        fields: [['node_id', i + 1]] as Array<[string, ExportValue]>,
+      })),
+      warnings: [],
+    };
+    const go = toGo(model, OPTIONS);
+    expect(go).toContain(`\t${count}: {\n\t\t"node_id": ${count},\n\t},\n}\n`);
+  });
 });
