@@ -92,6 +92,19 @@ export function validateItem(
   };
 }
 
+/** Same as `validateItem(type, properties).isValid`, without building the result. */
+export function isItemValid(type: CompiledItemType, properties: Record<string, unknown>): boolean {
+  if (type.isInvalid === true) {
+    return false;
+  }
+  for (const prop of type.properties) {
+    if (!validatePropertyValue(prop, getEffectiveValue(prop, properties))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Collects the unique, sorted type names used in the tree that are missing from the project. */
 export function collectMissingTypes(root: TreeNode, project: CompiledProject): MissingTypes {
   const nodes = new Set<string>();
@@ -139,23 +152,25 @@ export function formatMissingTypes(missing: MissingTypes): string[] | null {
   return lines.length > 0 ? lines : null;
 }
 
-/** True when no item uses a missing type and every item's properties are valid. */
+/** True when no item uses a missing type and every item's properties are valid. Stops at the first invalid item. */
 export function isTreeValid(root: TreeNode, project: CompiledProject): boolean {
-  let valid = true;
-  forEachNode(root, (n) => {
-    if (!validateItem(getItemType(project, 'node', n.type), n.properties).isValid) {
-      valid = false;
+  if (!isItemValid(getItemType(project, 'node', root.type), root.properties)) {
+    return false;
+  }
+  for (const d of root.decorators) {
+    if (!isItemValid(getItemType(project, 'decorator', d.type), d.properties)) {
+      return false;
     }
-    for (const d of n.decorators) {
-      if (!validateItem(getItemType(project, 'decorator', d.type), d.properties).isValid) {
-        valid = false;
-      }
+  }
+  for (const s of root.services) {
+    if (!isItemValid(getItemType(project, 'service', s.type), s.properties)) {
+      return false;
     }
-    for (const s of n.services) {
-      if (!validateItem(getItemType(project, 'service', s.type), s.properties).isValid) {
-        valid = false;
-      }
+  }
+  for (const child of root.childNodes) {
+    if (!isTreeValid(child, project)) {
+      return false;
     }
-  });
-  return valid;
+  }
+  return true;
 }

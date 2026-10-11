@@ -29,24 +29,39 @@ export function findNode(root: TreeNode, id: string): TreeNode | undefined {
   return undefined;
 }
 
-/** Returns the path from root to the node (inclusive), or [] if not found. */
-export function findNodePath(root: TreeNode, id: string): TreeNode[] {
-  if (root.id === id) {
-    return [root];
+function collectPath(node: TreeNode, id: string, path: TreeNode[]): boolean {
+  path.push(node);
+  if (node.id === id) {
+    return true;
   }
-  for (const child of root.childNodes) {
-    const sub = findNodePath(child, id);
-    if (sub.length > 0) {
-      return [root, ...sub];
+  for (const child of node.childNodes) {
+    if (collectPath(child, id, path)) {
+      return true;
     }
   }
-  return [];
+  path.pop();
+  return false;
+}
+
+/** Returns the path from root to the node (inclusive), or [] if not found. */
+export function findNodePath(root: TreeNode, id: string): TreeNode[] {
+  const path: TreeNode[] = [];
+  collectPath(root, id, path);
+  return path;
 }
 
 /** Returns the parent of the node with the given id (undefined for root or unknown ids). */
 export function findParent(root: TreeNode, id: string): TreeNode | undefined {
-  const path = findNodePath(root, id);
-  return path.length > 1 ? path[path.length - 2] : undefined;
+  for (const child of root.childNodes) {
+    if (child.id === id) {
+      return root;
+    }
+    const found = findParent(child, id);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
 }
 
 /** Returns the live decorators or services array of a node. */

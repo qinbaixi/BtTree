@@ -1,4 +1,5 @@
 import {
+  cachedFormatter,
   isExportAtom,
   isExportMap,
   type ExportEntry,
@@ -6,7 +7,7 @@ import {
   type ExportModel,
   type ExportValue,
 } from './model';
-import { luaKey, luaString } from './names';
+import { luaKey as formatLuaKey, luaString } from './names';
 
 export interface LuaOptions {
   /** Tree file path relative to the project directory, forward slashes. */
@@ -15,6 +16,10 @@ export interface LuaOptions {
 
 const ENTRY_INDENT = 4;
 const FIELD_INDENT = 8;
+const ENTRY_PAD = ' '.repeat(ENTRY_INDENT);
+const FIELD_PAD = ' '.repeat(FIELD_INDENT);
+
+const luaKey = cachedFormatter(formatLuaKey);
 
 /** Single-line Lua expression. Atoms become strings, maps become tables. */
 function inline(value: ExportValue): string {
@@ -53,14 +58,12 @@ function topLevel(value: ExportValue): string {
   return isExportMap(value) ? multilineTable(value, FIELD_INDENT) : inline(value);
 }
 
-function entryLines(entry: ExportEntry): string[] {
-  const lines = [`${' '.repeat(ENTRY_INDENT)}-- ${entry.comment}`];
-  lines.push(`${' '.repeat(ENTRY_INDENT)}[${entry.id}] = {`);
+function pushEntryLines(lines: string[], entry: ExportEntry): void {
+  lines.push(`${ENTRY_PAD}-- ${entry.comment}`, `${ENTRY_PAD}[${entry.id}] = {`);
   for (const [key, value] of entry.fields) {
-    lines.push(`${' '.repeat(FIELD_INDENT)}${luaKey(key)} = ${topLevel(value)},`);
+    lines.push(`${FIELD_PAD}${luaKey(key)} = ${topLevel(value)},`);
   }
-  lines.push(`${' '.repeat(ENTRY_INDENT)}},`);
-  return lines;
+  lines.push(`${ENTRY_PAD}},`);
 }
 
 /** Renders the export model as a Lua module returning { root, nodes, get_node }. */
@@ -70,7 +73,7 @@ export function toLua(model: ExportModel, options: LuaOptions): string {
     'local nodes = {',
   ];
   for (const entry of model.entries) {
-    lines.push(...entryLines(entry));
+    pushEntryLines(lines, entry);
   }
   lines.push(
     '}',

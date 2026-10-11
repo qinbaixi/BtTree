@@ -1,5 +1,6 @@
 import {
   getItemType,
+  isItemValid,
   validateItem,
   type CompiledItemType,
   type CompiledProject,
@@ -31,24 +32,28 @@ export function itemName(item: { label?: string; type: string }): string {
   return item.label ?? item.type;
 }
 
-function formatPath(names: string[]): string {
+function formatPath(names: readonly string[]): string {
   return names.length > 0 ? names.join(PATH_SEPARATOR) : TOP_LEVEL_LABEL;
 }
 
 /**
  * Visits every node with the display names of its ancestors (root first, not including the node).
- * Pre-order, like forEachNode.
+ * Pre-order, like forEachNode. `ancestors` is one shared stack: read it during the visit, do not keep it.
  */
-function walk(
-  node: TreeNode,
-  ancestors: string[],
-  visit: (node: TreeNode, ancestors: string[]) => void,
-): void {
-  visit(node, ancestors);
-  const names = [...ancestors, itemName(node)];
-  for (const child of node.childNodes) {
-    walk(child, names, visit);
-  }
+function walk(root: TreeNode, visit: (node: TreeNode, ancestors: readonly string[]) => void): void {
+  const ancestors: string[] = [];
+  const step = (node: TreeNode): void => {
+    visit(node, ancestors);
+    if (node.childNodes.length === 0) {
+      return;
+    }
+    ancestors.push(itemName(node));
+    for (const child of node.childNodes) {
+      step(child);
+    }
+    ancestors.pop();
+  };
+  step(root);
 }
 
 export interface TypeUsage {
@@ -71,7 +76,7 @@ export function findTypeUsages(
   if (!root) {
     return usages;
   }
-  walk(root, [], (node, ancestors) => {
+  walk(root, (node, ancestors) => {
     if (kind === 'node') {
       if (node.type === name) {
         usages.push({ nodeId: node.id, label: itemName(node), path: formatPath(ancestors) });
@@ -151,15 +156,15 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
   const addProblem = (
     kind: ItemKind,
     node: TreeNode,
-    ancestors: string[],
+    ancestors: readonly string[],
     item: { type: string; properties: Record<string, unknown>; id: string },
     itemId?: string,
   ) => {
     const type = getItemType(project, kind, item.type);
-    const validation = validateItem(type, item.properties);
-    if (validation.isValid) {
+    if (isItemValid(type, item.properties)) {
       return;
     }
+    const validation = validateItem(type, item.properties);
     const message = validation.missingType
       ? `Missing type '${item.type}'`
       : `Invalid: ${validation.invalidProperties.join(', ')}`;
@@ -173,7 +178,7 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
     });
   };
 
-  walk(root, [], (node, ancestors) => {
+  walk(root, (node, ancestors) => {
     summary.nodes += 1;
     summary.maxDepth = Math.max(summary.maxDepth, ancestors.length + 1);
 

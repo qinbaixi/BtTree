@@ -1,4 +1,5 @@
 import {
+  cachedFormatter,
   isExportAtom,
   isExportMap,
   type ExportEntry,
@@ -6,7 +7,7 @@ import {
   type ExportModel,
   type ExportValue,
 } from './model';
-import { erlangAtom, erlangString } from './names';
+import { erlangAtom as formatErlangAtom, erlangString } from './names';
 
 export interface ErlangOptions {
   /** Erlang module name (already sanitized). */
@@ -17,6 +18,10 @@ export interface ErlangOptions {
 
 const CLAUSE_INDENT = 4;
 const FIELD_INDENT = 8;
+const CLAUSE_PAD = ' '.repeat(CLAUSE_INDENT);
+const FIELD_PAD = ' '.repeat(FIELD_INDENT);
+
+const erlangAtom = cachedFormatter(formatErlangAtom);
 
 /** Integers print without a decimal point; other numbers always contain one (`1.0e+21`). */
 function erlangNumber(n: number): string {
@@ -65,17 +70,17 @@ function topLevel(value: ExportValue): string {
   return isExportMap(value) ? multilineMap(value, FIELD_INDENT) : inline(value);
 }
 
-function clause(entry: ExportEntry): string[] {
+function pushClause(lines: string[], entry: ExportEntry): void {
   const fields = entry.fields.map(
-    ([key, value]) => `${' '.repeat(FIELD_INDENT)}${erlangAtom(key)} => ${topLevel(value)}`,
+    ([key, value]) => `${FIELD_PAD}${erlangAtom(key)} => ${topLevel(value)}`,
   );
-  return [
+  lines.push(
     `%% ${entry.comment}`,
     `get_node(${entry.id}) ->`,
-    `${' '.repeat(CLAUSE_INDENT)}#{`,
+    `${CLAUSE_PAD}#{`,
     fields.join(',\n'),
-    `${' '.repeat(CLAUSE_INDENT)}};`,
-  ];
+    `${CLAUSE_PAD}};`,
+  );
 }
 
 /** Renders the export model as an Erlang module with get_node/1 and get_root_node/0. */
@@ -96,7 +101,7 @@ export function toErlang(model: ExportModel, options: ErlangOptions): string {
     '',
   ];
   for (const entry of model.entries) {
-    lines.push(...clause(entry));
+    pushClause(lines, entry);
   }
   // The reference file ends with two blank lines after the root accessor.
   lines.push(
