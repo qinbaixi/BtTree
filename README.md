@@ -4,7 +4,7 @@
 
 **基于 TypeScript 与 React 19 的行为树（Behavior Tree）编辑器**
 
-[![Release](https://img.shields.io/github/v/release/<owner>/<repo>)](https://github.com/<owner>/<repo>/releases)
+[![Release](https://img.shields.io/github/v/release/qinbaixi/BtTree)](https://github.com/qinbaixi/BtTree/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node](https://img.shields.io/badge/node-%3E%3D22.12-339933)
 
@@ -48,8 +48,8 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 ## 快速开始
 
 ```sh
-git clone https://github.com/<owner>/<repo>.git
-cd <repo>
+git clone https://github.com/qinbaixi/BtTree.git
+cd BtTree
 npm install
 npm run dev          # 打开 http://localhost:5173
 ```

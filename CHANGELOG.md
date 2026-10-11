@@ -58,5 +58,5 @@
 - 描述模板只做属性值替换，不再执行表达式。
 - 保存请求体上限提高到 50 MB；服务端异常不再导致进程退出。
 
-[未发布]: https://github.com/<owner>/<repo>/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/<owner>/<repo>/releases/tag/v0.1.0
+[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/qinbaixi/BtTree/releases/tag/v0.1.0
