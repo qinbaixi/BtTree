@@ -1,10 +1,20 @@
 import { createServer, type ServerBundle } from './app';
 import { getPort } from './config';
+import type { Picker } from './picker';
 
 export interface RunOptions {
   /** Defaults to getPort(). */
   port?: number;
+  /** Interface to listen on. Defaults to all interfaces (Node's default). */
+  host?: string;
+  /**
+   * When true, a busy port rejects with EADDRINUSE instead of being treated as "already running".
+   * Used by the desktop app, which must own its port.
+   */
+  strictPort?: boolean;
   clientDist?: string;
+  /** Native file dialog runner for POST /api/dialog/pick. Defaults to the platform picker. */
+  picker?: Picker;
   /**
    * Called once listening. `reused: true` means the port is already held by another
    * instance, which is treated as success.
@@ -20,10 +30,10 @@ export interface RunResult {
   server?: ServerBundle;
 }
 
-/** Starts the HTTP + socket.io server. Rejects on errors other than EADDRINUSE. */
+/** Starts the HTTP + socket.io server. Rejects on errors other than EADDRINUSE (and on EADDRINUSE with strictPort). */
 export function run(options: RunOptions = {}): Promise<RunResult> {
   const port = options.port ?? getPort();
-  const bundle = createServer({ clientDist: options.clientDist });
+  const bundle = createServer({ clientDist: options.clientDist, picker: options.picker });
   const { httpServer } = bundle;
 
   return new Promise<RunResult>((resolvePromise, reject) => {
@@ -37,20 +47,26 @@ export function run(options: RunOptions = {}): Promise<RunResult> {
     };
 
     const onStartError = (err: NodeJS.ErrnoException): void => {
-      if (err.code === 'EADDRINUSE') {
+      if (err.code === 'EADDRINUSE' && !options.strictPort) {
         finish(true);
       } else {
         reject(err);
       }
     };
 
-    httpServer.once('error', onStartError);
-    httpServer.listen(port, () => {
+    const onListen = (): void => {
       httpServer.off('error', onStartError);
       httpServer.on('error', (err) => {
         console.error(err);
       });
       finish(false);
-    });
+    };
+
+    httpServer.once('error', onStartError);
+    if (options.host === undefined) {
+      httpServer.listen(port, onListen);
+    } else {
+      httpServer.listen(port, options.host, onListen);
+    }
   });
 }

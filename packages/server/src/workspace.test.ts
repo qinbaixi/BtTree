@@ -9,6 +9,8 @@ import {
   MAX_TREE_FILE_BYTES,
   MAX_TREE_RESULTS,
   readTemplate,
+  templatesDir,
+  TEMPLATES_DIR,
   withJsonExtension,
 } from './workspace';
 
@@ -190,5 +192,31 @@ describe('withJsonExtension', () => {
     expect(withJsonExtension('/a/tree')).toBe('/a/tree.json');
     expect(withJsonExtension('/a/tree.json')).toBe('/a/tree.json');
     expect(withJsonExtension('/a/TREE.JSON')).toBe('/a/TREE.JSON');
+  });
+});
+
+describe('templatesDir', () => {
+  it('uses OWLBT_TEMPLATES_DIR when set and the shipped templates otherwise', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlbt-tpl-'));
+    try {
+      writeFileSync(join(dir, 'tree.json'), '{"type":"Custom"}');
+      expect(templatesDir({ OWLBT_TEMPLATES_DIR: dir })).toBe(dir);
+      expect(templatesDir({})).toBe(TEMPLATES_DIR);
+
+      const saved = process.env.OWLBT_TEMPLATES_DIR;
+      process.env.OWLBT_TEMPLATES_DIR = dir;
+      try {
+        expect(await readTemplate('tree.json')).toBe('{"type":"Custom"}');
+      } finally {
+        if (saved === undefined) {
+          delete process.env.OWLBT_TEMPLATES_DIR;
+        } else {
+          process.env.OWLBT_TEMPLATES_DIR = saved;
+        }
+      }
+      expect(await readTemplate('owl-bt.json')).toContain('"types"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -1,22 +1,16 @@
 #!/usr/bin/env node
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { VERSION } from '@owlbt/shared';
 import { Command } from 'commander';
 import open from 'open';
 import { exportProject, exportTree, parseExportFormats, type ExportTreeResult } from './export';
 import { run } from './run';
 import { findProjectFile, PROJECT_FILE_NAME } from './project';
+import { readTemplate } from './workspace';
 
 // The CLI runs in production mode unless NODE_ENV says otherwise (affects the default port).
 process.env.NODE_ENV ??= 'production';
-
-const templatesDir = fileURLToPath(new URL('../templates/', import.meta.url));
-
-function readTemplate(name: string): Promise<string> {
-  return readFile(join(templatesDir, name), 'utf8');
-}
 
 function describeError(err: unknown): string {
   if (typeof err === 'object' && err !== null && 'code' in err) {

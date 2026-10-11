@@ -1,0 +1,24 @@
+{
+  "name": "@owlbt/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "owl-bt desktop app: the editor in an Electron window",
+  "author": "owl-bt",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node scripts/make-icon.mjs && node scripts/bundle.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "dist": "electron-builder --win --publish never",
+    "dist:dir": "electron-builder --win --dir --publish never",
+    "dist:current": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "@owlbt/server": "0.1.0",
+    "@owlbt/shared": "0.1.0",
+    "electron": "44.7.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.27.7"
+  },
+  "license": "MIT"
+}

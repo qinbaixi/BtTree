@@ -2,3 +2,7 @@ node_modules
 dist
 coverage
 *.tgz
+release
+
+# Local Claude Code settings
+.claude/

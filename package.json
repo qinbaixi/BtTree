@@ -1,6 +1,16 @@
 {
   "name": "owl-bt-ts",
+  "version": "0.1.0",
+  "description": "Behavior tree editor (TypeScript + React rewrite of owl-bt)",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/<owner>/<repo>.git"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -8,6 +18,10 @@
   "scripts": {
     "dev": "concurrently -k -n server,client -c blue,green \"npm run dev -w @owlbt/server\" \"npm run dev -w @owlbt/client\"",
     "build": "npm run build -w @owlbt/client && npm run build -w @owlbt/server",
+    "desktop": "npm run build && npm run start -w @owlbt/desktop",
+    "package": "npm run build && npm run build -w @owlbt/desktop && npm run dist -w @owlbt/desktop",
+    "package:dir": "npm run build && npm run build -w @owlbt/desktop && npm run dist:dir -w @owlbt/desktop",
+    "package:current": "npm run build && npm run build -w @owlbt/desktop && npm run dist:current -w @owlbt/desktop",
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint ."

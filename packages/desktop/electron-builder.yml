@@ -1,0 +1,44 @@
+# electron-builder configuration for the owl-bt desktop app. Run from packages/desktop (see package.json).
+appId: com.owlbt.editor
+productName: owl-bt
+directories:
+  output: ../../release
+  buildResources: build
+files:
+  - dist/main.cjs
+  - build/icon.png
+  - package.json
+extraResources:
+  - from: ../client/dist
+    to: client
+  - from: ../server/templates
+    to: templates
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: owl-bt
+  artifactName: ${productName} Setup ${version}.${ext}
+portable:
+  artifactName: ${productName} ${version}.${ext}
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.developer-tools
+  icon: build/icon.png
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: Development

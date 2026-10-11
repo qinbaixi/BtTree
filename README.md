@@ -1,8 +1,34 @@
+<div align="center">
+
 # owl-bt
 
-owl-bt 是一个行为树（Behavior Tree）编辑器，灵感来自 Unreal Engine 的行为树。它支持装饰器（Decorator）和服务（Service）这类挂在节点上的子项，使树更小、更易读。
+**基于 TypeScript 与 React 19 的行为树（Behavior Tree）编辑器**
 
-本仓库是 owl-bt 的 TypeScript / React 重写版（原版为 AngularJS + Express 4 的 JavaScript 项目，见 `D:\code\NodeJS\owl-bt`）。
+[![Release](https://img.shields.io/github/v/release/<owner>/<repo>)](https://github.com/<owner>/<repo>/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Node](https://img.shields.io/badge/node-%3E%3D22.12-339933)
+
+</div>
+
+owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。它支持装饰器（Decorator）和服务（Service）这类挂在节点上的子项，使树更小、更易读。项目和树都保存为普通 JSON，并可导出为 Erlang / Lua / TypeScript / C# 配置，方便接入游戏服务端或客户端。
+
+本仓库是 [owl-bt](https://github.com/pruttned/owl-bt)（AngularJS + Express 4）的 TypeScript / React 重写版，保持文件格式兼容。
+
+## 目录
+
+- [功能](#功能)
+- [快速开始](#快速开始)
+- [目录结构](#目录结构)
+- [安装与使用](#安装与使用)
+- [项目文件（owl-bt.json）](#项目文件owl-btjson)
+- [树文件（tree）格式](#树文件tree格式)
+- [导出 Erlang / Lua / TypeScript / C#](#导出-erlang--lua--typescript--c)
+- [桌面版（Electron）](#桌面版electron)
+- [键盘快捷键](#键盘快捷键)
+- [本地 HTTP API](#本地-http-api)
+- [开发](#开发)
+- [贡献](#贡献)
+- [许可](#许可)
 
 ## 功能
 
@@ -14,6 +40,78 @@ owl-bt 是一个行为树（Behavior Tree）编辑器，灵感来自 Unreal Engi
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
 - **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
+- **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# 配置。
+- **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
+- **主题**：默认明亮主题，可切换为原版风格的深色主题。
+
+## 快速开始
+
+```sh
+git clone https://github.com/<owner>/<repo>.git
+cd <repo>
+npm install
+npm run dev          # 打开 http://localhost:5173
+```
+
+在首页点「Open folder…」选择 `samples/basic`，再点击 `trees/demo.json` 即可体验。只想要桌面程序：Windows 上双击 `package.bat`，在 `release/` 中取安装包。
+
+## 目录结构
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── release.yml           # 推送 v* 标签时构建 Windows 安装包并发布到 GitHub Releases
+├── packages/                     # npm workspaces
+│   ├── shared/                   # @owlbt/shared：前后端共用的纯 TypeScript 核心（以源码形式被引用）
+│   │   └── src/
+│   │       ├── types.ts          # 项目文件、树文件、运行时模型的类型定义
+│   │       ├── compileProject.ts # 项目编译：继承、抽象类型、自定义属性类型、默认颜色
+│   │       ├── treeModel.ts      # 树 JSON 与运行时模型互转（保留未知字段）
+│   │       ├── treeOps.ts        # 树的增删移动等操作（可在 immer draft 中使用）
+│   │       ├── navigation.ts     # 键盘导航
+│   │       ├── validation.ts     # 属性校验、缺失类型检查
+│   │       ├── describe.ts       # 描述模板 {{Prop}} 替换
+│   │       ├── fuzzy.ts          # 模糊搜索与匹配高亮
+│   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# 生成器
+│   ├── server/                   # @owlbt/server：Express 5 + socket.io 4 服务端与 owlbt CLI
+│   │   ├── src/
+│   │   │   ├── cli.ts            # owlbt 命令（init / create / open / export）
+│   │   │   ├── run.ts            # 启动 HTTP + socket.io 服务
+│   │   │   ├── app.ts            # Express 应用与静态资源
+│   │   │   ├── routes.ts         # /api/* 路由
+│   │   │   ├── project.ts        # 查找 owl-bt.json、加载 owl-bt.js 插件
+│   │   │   ├── workspace.ts      # 目录扫描、初始化项目、新建树
+│   │   │   ├── export.ts         # 单个 / 批量导出并写文件
+│   │   │   ├── picker.ts         # 系统原生文件选择框（Windows / macOS / Linux）
+│   │   │   ├── fileWatcher.ts    # 项目文件监视（500ms 防抖）
+│   │   │   └── socket.ts         # /prj-watch 热重载推送
+│   │   ├── templates/            # 新项目与新树的模板
+│   │   └── scripts/              # 构建后把前端产物复制到 dist/public
+│   ├── client/                   # @owlbt/client：Vite + React 19 编辑器前端
+│   │   └── src/
+│   │       ├── views/            # 首页（Home）与编辑器（Editor）
+│   │       ├── components/       # 画布、属性面板、类型面板、对话框、菜单等
+│   │       ├── commands/         # 命令注册、快捷键、导出命令
+│   │       ├── store/            # zustand 状态（树、项目、提示、对话框、类型查看）
+│   │       ├── lib/              # API 封装、剪贴板、最近打开、主题等
+│   │       └── styles/           # 全局样式与主题变量
+│   └── desktop/                  # @owlbt/desktop：Electron 桌面版
+│       ├── src/                  # 主进程：内嵌服务端、原生对话框、窗口管理
+│       ├── scripts/              # 主进程打包（esbuild）、图标生成
+│       ├── build/                # 应用图标
+│       └── electron-builder.yml  # 安装包 / 便携版配置
+├── samples/
+│   └── basic/                    # 示例项目：owl-bt.json、owl-bt.js 插件、trees/demo.json
+├── package.bat                   # Windows 一键打包桌面版
+├── package.sh                    # macOS / Linux 一键打包桌面版
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
+```
+
+构建产物（均已加入 `.gitignore`）：`packages/*/dist/`、桌面版安装包 `release/`。
 
 ## 环境要求
 
@@ -554,6 +652,44 @@ module.exports = {
 - Windows 使用 PowerShell 的 WinForms 对话框，macOS 使用 `osascript`，Linux 依次尝试 `zenity` 与 `kdialog`。
 - 没有可用的选择框时返回 `501 { "message": "..." }`；已有选择框打开时返回 409；超过 10 分钟视为取消。
 
+## 桌面版（Electron）
+
+`packages/desktop` 把编辑器打包成 Windows 桌面应用。服务端在应用进程内启动，只监听 `127.0.0.1`，界面在独立窗口中显示，不需要单独启动浏览器或命令行。
+
+### 一键打包
+
+在仓库根目录（或资源管理器中）运行：
+
+| 平台 | 命令 | 说明 |
+| --- | --- | --- |
+| Windows | 双击 `package.bat`，或 `cmd /c package.bat` | 没有 `node_modules` 时先执行 `npm ci`，完成后打开 `release` 文件夹；失败时暂停并显示错误 |
+| macOS / Linux | `bash package.sh` | 为当前系统构建（dmg / AppImage） |
+| 任意平台 | `npm run package` | Windows 的安装包与便携版，等同于 `package.bat` 的构建部分 |
+
+其他命令：`npm run package:dir` 只生成未打包的 `release/win-unpacked/`（更快，用于本地检查）；`npm run desktop` 构建后直接以桌面窗口运行（开发调试）。`package.bat` 设置 `OWLBT_NONINTERACTIVE=1` 时不打开资源管理器，也不暂停。
+
+首次构建需要联网下载 Electron 二进制和 electron-builder 的 NSIS 工具。
+
+### 产物
+
+产物位于仓库根目录的 `release/`（已加入 `.gitignore`）：
+
+- 安装包：`release/owl-bt Setup x.y.z.exe`（NSIS，可选择安装目录，创建桌面和开始菜单快捷方式）
+- 便携版：`release/owl-bt x.y.z.exe`（无需安装，直接运行）
+- 未打包目录：`release/win-unpacked/owl-bt.exe`
+
+### 用户数据
+
+窗口位置和大小保存在 `%APPDATA%\owl-bt\window-state.json`。浏览器的本地存储（如界面偏好）保存在同一目录下。
+
+### 说明
+
+- 服务端固定使用端口 `18955`（只监听本机）；该端口被占用时依次尝试 `18956` 到 `18975`。端口会影响浏览器本地存储的隔离，所以尽量保持 `18955`。
+- 应用是单实例的：再次启动时会激活已有窗口，并打开传入的 `.json` 树文件。
+- 首页的“打开文件 / 打开文件夹”使用系统原生对话框。
+- 服务端的模板目录通过环境变量 `OWLBT_TEMPLATES_DIR` 指定，打包版自动设置。
+- 开发调试：`Ctrl+Shift+I` 打开开发者工具（打包版需设置 `OWLBT_DEVTOOLS=1`）。
+
 ## 与原版 owl-bt 的主要差异
 
 - **技术栈**：TypeScript 单仓库（npm workspaces），前端使用 React 19 + Vite，后端使用 Express 5 + socket.io 4，原版为 AngularJS 1.x、Express 4、socket.io 1.7。
@@ -563,20 +699,7 @@ module.exports = {
 - **请求体上限**：写入树文件的请求体上限为 50 MB（Express 默认的 JSON 上限为 100 KB）。
 - **错误处理**：服务端异常以纯文本响应返回而不会导致进程崩溃；项目文件的热重载错误会以提示显示，且在项目重新解析成功后自动消失。
 
-## 仓库结构
-
-```
-packages/
-  shared/   共享代码（TypeScript 源码，不单独发布）：项目编译、树模型与操作、校验、模糊搜索
-  server/   Express + socket.io 服务端，以及 owlbt CLI（src/cli.ts，tsup 构建到 dist/）
-            templates/   owlbt init / create 使用的模板
-            scripts/     构建后把前端产物复制到 dist/public
-  client/   Vite + React 19 编辑器前端（zustand 状态管理，d3 布局）
-samples/
-  basic/    示例项目与示例树
-```
-
-## 脚本
+## 开发
 
 在仓库根目录执行：
 
@@ -588,7 +711,20 @@ samples/
 | `npm test` | 运行所有测试（Vitest） |
 | `npm run typecheck` | 对所有包执行 TypeScript 类型检查 |
 | `npm run lint` | 运行 ESLint |
+| `npm run desktop` | 构建后以桌面窗口运行 |
+| `npm run package` | 打包 Windows 安装版与便携版到 `release/` |
+| `npm run package:dir` | 只生成 `release/win-unpacked/`，用于快速检查 |
+
+提交前请确保 `npm run typecheck`、`npm run lint`、`npm test` 全部通过；发布工作流在打包前也会运行这些检查。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request，流程和代码约定见 [CONTRIBUTING.md](CONTRIBUTING.md)，版本变更见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 致谢
+
+本项目基于 Peter Ruttkay-Nedecký 的 [owl-bt](https://github.com/pruttned/owl-bt)，沿用了其文件格式、交互设计与部分测试用例。
 
 ## 许可
 
-未指定。
+[MIT](LICENSE)

@@ -4,6 +4,7 @@ import { VERSION } from '@owlbt/shared';
 import { run } from './run';
 
 export { run, type RunOptions, type RunResult } from './run';
+export { DialogBusyError, DialogUnsupportedError, type Picker, type PickKind, type PickResult } from './picker';
 
 function isEntryPoint(): boolean {
   const entry = process.argv[1];

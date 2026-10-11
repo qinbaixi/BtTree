@@ -8,6 +8,14 @@ import { findProjectFile, PROJECT_FILE_NAME } from './project';
 /** Templates shipped with the package. Resolves from both src/ and the bundled dist/. */
 export const TEMPLATES_DIR = fileURLToPath(new URL('../templates/', import.meta.url));
 
+/**
+ * Folder with the templates. OWLBT_TEMPLATES_DIR overrides the default, for bundles where the
+ * module location does not contain the templates (the desktop app). Read on every call.
+ */
+export function templatesDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.OWLBT_TEMPLATES_DIR ? resolve(env.OWLBT_TEMPLATES_DIR) : TEMPLATES_DIR;
+}
+
 export const MAX_TREE_RESULTS = 500;
 /** Directory levels below the scan root that are searched. */
 export const MAX_SCAN_DEPTH = 6;
@@ -35,7 +43,7 @@ export interface Workspace {
 }
 
 export function readTemplate(name: string): Promise<string> {
-  return readFile(join(TEMPLATES_DIR, name), 'utf8');
+  return readFile(join(templatesDir(), name), 'utf8');
 }
 
 /** Creates the file with `content`. Returns false (and leaves the file alone) when it already exists. */
