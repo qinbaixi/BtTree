@@ -266,6 +266,58 @@ describe('exportTree and exportProject', () => {
     expect(existsSync(join(root, 'export', 'lua', 'c.lua'))).toBe(true);
   });
 
+  it('keeps the listing order when trees are exported concurrently', async () => {
+    const names = Array.from({ length: 12 }, (_, i) => `t${String(i).padStart(2, '0')}`);
+    for (const [i, name] of names.entries()) {
+      // Every third tree fails; the others finish in an order that depends on file I/O.
+      writeTree(
+        `trees/${name}.json`,
+        i % 3 === 0 ? { type: 'Selector', childNodes: [{ type: 'Nope' }] } : GOOD_TREE,
+      );
+    }
+
+    const batch = await exportProject(root, ['lua', 'go']);
+
+    expect(batch.results.map((r) => [r.relPath, r.error === undefined])).toEqual(
+      names.map((name, i) => [`trees/${name}.json`, i % 3 !== 0]),
+    );
+    for (const [i, result] of batch.results.entries()) {
+      expect(result.files.map((f) => f.format)).toEqual(i % 3 === 0 ? [] : ['lua', 'go']);
+    }
+  });
+
+  it('uses the nearest owl-bt.json of each tree in a batch', async () => {
+    writeTree('trees/a.json', GOOD_TREE);
+    mkdirSync(join(root, 'sub'), { recursive: true });
+    writeFileSync(
+      join(root, 'sub', 'owl-bt.json'),
+      JSON.stringify({ ...PROJECT, export: { lua: { outDir: 'gen' } } }),
+    );
+    writeTree('sub/b.json', GOOD_TREE);
+
+    const batch = await exportProject(root, ['lua']);
+
+    expect(batch.results.map((r) => r.files)).toEqual([
+      [{ format: 'lua', path: join(root, 'sub', 'gen', 'b.lua') }],
+      [{ format: 'lua', path: join(root, 'export', 'lua', 'a.lua') }],
+    ]);
+  });
+
+  it('does not run the project plugin when exporting', async () => {
+    writeFileSync(
+      join(root, 'owl-bt.js'),
+      `require('node:fs').writeFileSync(${JSON.stringify(join(root, 'ran.txt'))}, 'x');`,
+    );
+    const treePath = writeTree('trees/a.json', GOOD_TREE);
+
+    const single = await exportTree(treePath, ['lua']);
+    const batch = await exportProject(root, ['lua']);
+
+    expect(single.error).toBeUndefined();
+    expect(batch.results[0].error).toBeUndefined();
+    expect(existsSync(join(root, 'ran.txt'))).toBe(false);
+  });
+
   it('throws 404 for a folder outside any project', async () => {
     const outside = mkdtempSync(join(tmpdir(), 'owlbt-noproject-'));
     try {

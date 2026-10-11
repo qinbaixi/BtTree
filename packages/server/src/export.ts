@@ -15,11 +15,12 @@ import {
   toGo,
   toLua,
   toTypeScript,
+  type CompiledProject,
   type ProjectFile,
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
-import { getProject } from './project';
+import { findProjectFile } from './project';
 import { loadWorkspace } from './workspace';
 
 export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs', 'go'] as const;
@@ -60,6 +61,57 @@ export interface ExportProjectResult {
   results: Array<ExportTreeResult & { relPath: string }>;
 }
 
+/** Trees exported at the same time by exportProject. */
+export const EXPORT_CONCURRENCY = 4;
+
+/**
+ * The project file as the exporter needs it: parsed and compiled once. Export never runs the
+ * project plugin (owl-bt.js), so it is not loaded.
+ */
+interface ExportProject {
+  dir: string;
+  file: ProjectFile;
+  compiled?: CompiledProject;
+  /** Set when owl-bt.json does not compile. */
+  error?: string;
+}
+
+/** Cache of loaded projects by owl-bt.json path, shared by the trees of one batch. */
+type ProjectCache = Map<string, Promise<ExportProject>>;
+
+async function readExportProject(path: string): Promise<ExportProject> {
+  const content = await readFile(path, 'utf8');
+  const compiled = parseAndCompileProject(content);
+  if (!compiled.project) {
+    return { dir: dirname(path), file: {}, error: compiled.error ?? 'unknown error' };
+  }
+  return {
+    dir: dirname(path),
+    file: JSON.parse(content) as ProjectFile,
+    compiled: compiled.project,
+  };
+}
+
+/** The project that applies to a tree, or undefined when there is none. */
+async function loadExportProject(
+  treePath: string,
+  cache?: ProjectCache,
+): Promise<ExportProject | undefined> {
+  const path = await findProjectFile(treePath);
+  if (!path) {
+    return undefined;
+  }
+  if (!cache) {
+    return readExportProject(path);
+  }
+  let pending = cache.get(path);
+  if (!pending) {
+    pending = readExportProject(path);
+    cache.set(path, pending);
+  }
+  return pending;
+}
+
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -95,7 +147,16 @@ export async function exportTree(
   formats: ExportFormat[],
   options: ExportOptions = {},
 ): Promise<ExportTreeResult> {
-  const project = await getProject(treePath);
+  return exportTreeIn(treePath, formats, options);
+}
+
+async function exportTreeIn(
+  treePath: string,
+  formats: ExportFormat[],
+  options: ExportOptions,
+  cache?: ProjectCache,
+): Promise<ExportTreeResult> {
+  const project = await loadExportProject(treePath, cache);
   if (!project) {
     throw new HttpError(404, 'No project found');
   }
@@ -119,20 +180,19 @@ export async function exportTree(
     return { ...result, error: `Invalid tree file: ${messageOf(err)}` };
   }
 
-  const compiled = parseAndCompileProject(project.content);
-  if (!compiled.project) {
-    return { ...result, error: `Invalid project file: ${compiled.error ?? 'unknown error'}` };
+  if (!project.compiled) {
+    return { ...result, error: `Invalid project file: ${project.error ?? 'unknown error'}` };
   }
 
   let model: ReturnType<typeof buildExportModel>;
   try {
-    model = buildExportModel(nodeFromJson(json, createIdGen()), compiled.project);
+    model = buildExportModel(nodeFromJson(json, createIdGen()), project.compiled);
   } catch (err) {
     return { ...result, error: messageOf(err) };
   }
   result.warnings = model.warnings;
 
-  const projectFile = JSON.parse(project.content) as ProjectFile;
+  const projectFile = project.file;
   const sourcePath = relative(project.dir, treePath).split(sep).join('/');
   const treeName = basename(treePath).replace(/\.json$/i, '');
 
@@ -202,19 +262,34 @@ export async function exportProject(
     throw new HttpError(404, 'No project found');
   }
 
-  const results: ExportProjectResult['results'] = [];
-  for (const tree of workspace.trees) {
-    try {
-      results.push({ relPath: tree.relPath, ...(await exportTree(tree.path, formats, options)) });
-    } catch (err) {
-      results.push({
-        relPath: tree.relPath,
-        treePath: tree.path,
-        files: [],
-        warnings: [],
-        error: messageOf(err),
-      });
+  // owl-bt.json is read and compiled once per batch; trees are exported a few at a time so file
+  // I/O overlaps. Results keep the order of the workspace listing.
+  const cache: ProjectCache = new Map();
+  const { trees } = workspace;
+  const results: ExportProjectResult['results'] = new Array(trees.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < trees.length) {
+      const index = next++;
+      const tree = trees[index];
+      try {
+        results[index] = {
+          relPath: tree.relPath,
+          ...(await exportTreeIn(tree.path, formats, options, cache)),
+        };
+      } catch (err) {
+        results[index] = {
+          relPath: tree.relPath,
+          treePath: tree.path,
+          files: [],
+          warnings: [],
+          error: messageOf(err),
+        };
+      }
     }
-  }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(EXPORT_CONCURRENCY, trees.length) }, () => worker()),
+  );
   return { projectDir: workspace.projectDir, truncated: workspace.truncated, results };
 }

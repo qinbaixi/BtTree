@@ -14,6 +14,28 @@ export interface MissingTypes {
   services: string[];
 }
 
+/** Compiled custom type patterns (null for invalid ones). Patterns come from a handful of custom types. */
+const PATTERN_CACHE = new Map<string, RegExp | null>();
+const PATTERN_CACHE_LIMIT = 1000;
+
+/** Anchored regex for a custom type pattern, compiled once; null when the pattern is invalid. */
+function patternRegex(pattern: string): RegExp | null {
+  let regex = PATTERN_CACHE.get(pattern);
+  if (regex === undefined) {
+    try {
+      regex = new RegExp(`^(?:${pattern})$`);
+    } catch {
+      regex = null;
+    }
+    if (PATTERN_CACHE.size >= PATTERN_CACHE_LIMIT) {
+      // Patterns typed in the project editor create new entries; start over instead of growing.
+      PATTERN_CACHE.clear();
+    }
+    PATTERN_CACHE.set(pattern, regex);
+  }
+  return regex;
+}
+
 /**
  * Validates a value against a compiled property.
  * null, undefined and '' are always valid. A pattern (from a custom type) takes precedence over the type checks.
@@ -24,13 +46,8 @@ export function validatePropertyValue(prop: CompiledProperty, value: unknown): b
   }
 
   if (prop.pattern) {
-    let regex: RegExp;
-    try {
-      regex = new RegExp(`^(?:${prop.pattern})$`);
-    } catch {
-      return false;
-    }
-    return regex.test(String(value));
+    const regex = patternRegex(prop.pattern);
+    return regex !== null && regex.test(String(value));
   }
 
   switch (prop.type) {

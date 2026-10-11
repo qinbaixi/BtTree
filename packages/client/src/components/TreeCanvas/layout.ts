@@ -68,24 +68,22 @@ export function linkPath(link: Pick<LinkLayout, 'sx' | 'sy' | 'tx' | 'ty'>): str
  * vertical positions are per depth level (level height = tallest node of the level + separation).
  */
 export function computeTreeLayout(root: TreeNode, sizes: SizeMap): TreeLayout {
-  const sizeOf = (id: string): Size => {
-    const size = sizes.get(id);
-    return { width: finiteOrZero(size?.width), height: finiteOrZero(size?.height) };
-  };
+  // Separation runs for every pair of neighbours, so widths are looked up without allocating.
+  const widthOf = (id: string): number => finiteOrZero(sizes.get(id)?.width);
+  const heightOf = (id: string): number => finiteOrZero(sizes.get(id)?.height);
 
   const hierarchyRoot = hierarchy<TreeNode>(root, (node) => node.childNodes);
   const positioned = tree<TreeNode>()
     .nodeSize([BASE_WIDTH, BASE_HEIGHT])
     .separation(
-      (a, b) =>
-        ((sizeOf(a.data.id).width + sizeOf(b.data.id).width) + SEPARATION_X) / BASE_WIDTH * 0.5,
+      (a, b) => ((widthOf(a.data.id) + widthOf(b.data.id) + SEPARATION_X) / BASE_WIDTH) * 0.5,
     )(hierarchyRoot);
 
   const all = positioned.descendants();
 
   const maxHeightPerDepth: number[] = [];
   for (const item of all) {
-    const height = sizeOf(item.data.id).height;
+    const height = heightOf(item.data.id);
     maxHeightPerDepth[item.depth] = Math.max(maxHeightPerDepth[item.depth] ?? 0, height);
   }
   const levelTop: number[] = [];
@@ -99,7 +97,8 @@ export function computeTreeLayout(root: TreeNode, sizes: SizeMap): TreeLayout {
   let maxRight = -Infinity;
   let maxBottom = -Infinity;
   const raw = all.map((item) => {
-    const { width, height } = sizeOf(item.data.id);
+    const width = widthOf(item.data.id);
+    const height = heightOf(item.data.id);
     const left = item.x - width / 2;
     const top = levelTop[item.depth];
     minLeft = Math.min(minLeft, left);

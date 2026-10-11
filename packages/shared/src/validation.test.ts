@@ -92,6 +92,23 @@ describe('validatePropertyValue', () => {
     expect(validatePropertyValue(prop({ type: 'string', pattern: '(' }), 'x')).toBe(false);
   });
 
+  it('gives the same answers when a pattern is reused or changed', () => {
+    for (let i = 0; i < 3; i++) {
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[a-z]+' }), 'abc')).toBe(true);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[a-z]+' }), 'ABC')).toBe(false);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[A-Z]+' }), 'ABC')).toBe(true);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '(' }), 'x')).toBe(false);
+    }
+  });
+
+  it('keeps working after many distinct patterns', () => {
+    for (let i = 0; i < 1500; i++) {
+      expect(
+        validatePropertyValue(prop({ type: 'string', pattern: `x{${i}}` }), 'x'.repeat(i)),
+      ).toBe(true);
+    }
+  });
+
   it('ignores an empty pattern and falls back to the type checks', () => {
     expect(validatePropertyValue(prop({ type: 'bool', pattern: '' }), 'x')).toBe(false);
   });
