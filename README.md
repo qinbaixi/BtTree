@@ -58,6 +58,9 @@ npm run dev          # 打开 http://localhost:5173
 
 ## 目录结构
 
+<details>
+<summary>查看完整目录树</summary>
+
 ```text
 .
 ├── .github/
@@ -119,12 +122,17 @@ npm run dev          # 打开 http://localhost:5173
 
 构建产物（均已加入 `.gitignore`）：`packages/*/dist/`、桌面版安装包 `release/`。
 
+</details>
+
 ## 环境要求
 
 - 运行 CLI（全局安装或 `npm run build` 之后）：Node.js **>= 22.12**。这是 `commander@15` 的要求，`@owlbt/server` 的 `engines` 字段也据此声明。
 - 开发和测试：Node.js **>= 22.12**（Vitest 5 要求 `^22.12 || ^24 || >=26`，Vite 8 要求 `^20.19 || >=22.12`）。
 
 ## 安装与使用
+
+<details>
+<summary>开发模式、生产构建、全局安装、CLI 命令、端口与网络安全</summary>
 
 ### 开发模式
 
@@ -209,9 +217,16 @@ owlbt create ./my-project/trees/patrol.json --no-open
 - **Origin 检查**：`GET` 与 `HEAD` 以外的请求，若带有 `Origin` 头，其主机名也必须是上述允许的主机，否则返回 403（`Forbidden origin`）。不带 `Origin` 的请求（如 `curl`）照常处理。WebSocket（`/socket.io`）连接同样检查。
 - **使用 `--host` 时**：`--host` 指定的地址会被加入允许列表，浏览器应使用同一地址访问。`0.0.0.0` 与 `::` 这类通配地址不会加入允许列表，请使用本机的实际地址（如 `--host 192.168.1.5`）。
 
+</details>
+
 ## 首页（打开树与项目）
 
-首页（`/`）用于找到要编辑的树。顶部有三个入口：
+首页（`/`）用于找到要编辑的树：输入路径、用系统对话框打开文件夹或树文件，或直接编辑项目类型。
+
+<details>
+<summary>打开文件夹 / 树文件、初始化项目、新建树、编辑项目类型</summary>
+
+顶部有三个入口：
 
 - **路径输入框**：输入树文件的完整路径（以 `.json` 结尾）会直接打开编辑器；输入文件夹路径则列出该文件夹中的树。
 - **Open folder…**：调用本机的系统文件夹选择框，选中后列出该文件夹中的树。
@@ -237,9 +252,14 @@ owlbt init ./my-project                    # 只写入 owl-bt.json
 owlbt create ./my-project/trees/patrol.json --no-open
 ```
 
+</details>
+
 ## 项目文件（owl-bt.json）
 
 项目文件定义树中可以使用的节点、装饰器、服务及其属性。CLI 会从树文件所在目录开始向上查找最近的 `owl-bt.json`，树文件必须位于项目目录之内。
+
+<details>
+<summary>类型字段、属性字段、自定义类型与完整示例</summary>
 
 顶层字段：
 
@@ -326,9 +346,14 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 属性值不合法时（例如超出 `min` / `max`、不在 `values` 中、不匹配 `pattern`），树中对应的节点会显示为无效。类型不存在于项目文件中时，属性面板会显示 `Missing descriptor in project file` 错误。
 
+</details>
+
 ## 默认模板
 
-`owlbt init` 和首页的 **Initialize project here** 使用 `packages/server/templates/owl-bt.json` 作为 `owl-bt.json`。模板包含可以直接使用的类型，可作为编写自己项目的起点：
+`owlbt init` 和首页的 **Initialize project here** 使用 `packages/server/templates/owl-bt.json` 作为 `owl-bt.json`。模板包含可以直接使用的类型，可作为编写自己项目的起点。
+
+<details>
+<summary>查看模板包含的类型</summary>
 
 - **自定义类型**：`blackboardKey`（以字母或下划线开头的标识符，用于黑板键名）、`probability`（0 到 1 之间的小数）。
 - **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`。
@@ -339,9 +364,14 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节点的示例树，演示标签、注释、装饰器（含 `periodic` 与 `inverseCheckCondition`）以及带 `timeBetweenTicks` 的服务。模板中的 `templates/tree.json` 是只有一个 `Selector` 根节点的最小树，**New tree** 使用它。
 
+</details>
+
 ## 项目编辑器（图形化编辑 owl-bt.json）
 
 除了直接编辑 `owl-bt.json`，也可以在项目编辑器中图形化地管理节点、装饰器、服务的类型定义、自定义属性类型与导出设置。编辑器地址为 `/project?path=<owl-bt.json 或项目内任一树的绝对路径>`。
+
+<details>
+<summary>入口、功能、预览与保存规则</summary>
 
 **入口**
 
@@ -368,9 +398,14 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 - 保存时若文件已被修改，会弹出对话框：「Reload from disk」（放弃修改，重新载入）、「Overwrite」（用当前修改覆盖文件）或「Cancel」。
 - 离开页面时若有未保存的修改，浏览器会提示确认。
 
+</details>
+
 ## 树文件（tree）格式
 
 树文件是一个 JSON 对象，表示根节点。子节点放在 `childNodes` 中，装饰器和服务放在 `decorators`、`services` 中。未知字段会被原样保留。
+
+<details>
+<summary>查看树文件结构与保存规则</summary>
 
 ```json
 {
@@ -411,9 +446,14 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 
 示例树见 `samples/basic/trees/demo.json`，示例项目见 `samples/basic/owl-bt.json`。
 
+</details>
+
 ## 导出 Erlang / Lua / TypeScript / C#
 
 树可以导出为 Erlang 模块（`get_node/1`、`get_root_node/0`）、Lua 模块（返回 `{ root, nodes, get_node }`）、TypeScript 模块（`nodes`、`getNode()`）或 C# 静态类（`Nodes`、`GetNode()`）。Erlang 的输出格式与 `bt_mon_1000.erl` 这类手写配置保持一致。四种格式使用同一份导出模型：条目的编号、键的顺序和值完全相同，只有语法不同。
+
+<details>
+<summary>配置、节点编号、导出内容、各语言输出示例、命令行与编辑器用法</summary>
 
 ### 项目配置
 
@@ -597,7 +637,6 @@ owlbt export ./my-project --format ts,cs
     get_root_node/0
 ]).
 
-
 %% Selector - Root
 get_node(1) ->
     #{
@@ -610,9 +649,16 @@ get_node(1) ->
     };
 ```
 
+</details>
+
 ## 项目插件（owl-bt.js）
 
-如果项目目录中存在 `owl-bt.js`，服务端会在加载和保存树时调用它。插件必须是 CommonJS 模块，导出包含以下可选钩子的对象：
+如果项目目录中存在 `owl-bt.js`，服务端会在加载和保存树时调用它；插件需要在编辑器中确认信任后才会运行。
+
+<details>
+<summary>插件接口与信任机制</summary>
+
+插件必须是 CommonJS 模块，导出包含以下可选钩子的对象：
 
 - `onTreeLoad(ctx)`：加载树时调用。修改 `ctx.tree` 即可改变返回给编辑器的内容。
 - `onTreeSave(ctx)`：保存树时调用。修改 `ctx.tree` 会写入文件。返回 `false` 会拒绝保存（HTTP 409），返回字符串会以该字符串作为原因拒绝保存（HTTP 409）。返回其他值（包括 `undefined`）则正常保存。
@@ -648,9 +694,14 @@ module.exports = {
 };
 ```
 
+</details>
+
 ## 键盘快捷键
 
 `mod` 在 Windows / Linux 上是 `Ctrl`，在 macOS 上是 `Cmd`。
+
+<details>
+<summary>查看全部快捷键</summary>
 
 | 快捷键 | 功能 |
 | --- | --- |
@@ -669,9 +720,14 @@ module.exports = {
 
 「聚焦选中节点」和「设置节点类型」没有默认快捷键，可在命令面板（`Ctrl+Shift+P`）中执行。
 
+</details>
+
 ## 本地 HTTP API
 
 服务端在 `/api` 下提供以下接口，全部为本机使用的 JSON / 纯文本接口。写入请求的 `Content-Type` 必须是 `application/json`，否则返回 415。错误响应为纯文本（除非另有说明）。
+
+<details>
+<summary>查看接口列表</summary>
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
@@ -716,9 +772,14 @@ module.exports = {
 - Windows 使用 PowerShell 的 WinForms 对话框，macOS 使用 `osascript`，Linux 依次尝试 `zenity` 与 `kdialog`。
 - 没有可用的选择框时返回 `501 { "message": "..." }`；已有选择框打开时返回 409；超过 10 分钟视为取消。
 
+</details>
+
 ## 桌面版（Electron）
 
 `packages/desktop` 把编辑器打包成 Windows 桌面应用。服务端在应用进程内启动，只监听 `127.0.0.1`，界面在独立窗口中显示，不需要单独启动浏览器或命令行。
+
+<details>
+<summary>一键打包、产物、用户数据与说明</summary>
 
 ### 一键打包
 
@@ -755,7 +816,12 @@ module.exports = {
 - 服务端的模板目录通过环境变量 `OWLBT_TEMPLATES_DIR` 指定，打包版自动设置。
 - 开发调试：`Ctrl+Shift+I` 打开开发者工具（打包版需设置 `OWLBT_DEVTOOLS=1`）。
 
+</details>
+
 ## 与原版 owl-bt 的主要差异
+
+<details>
+<summary>查看差异列表</summary>
 
 - **技术栈**：TypeScript 单仓库（npm workspaces），前端使用 React 19 + Vite，后端使用 Express 5 + socket.io 4，原版为 AngularJS 1.x、Express 4、socket.io 1.7。
 - **图标**：使用 Font Awesome 6 Free Solid（原版 README 描述的是 Font Awesome 旧版的 `fa-` 图标名）。
@@ -763,6 +829,8 @@ module.exports = {
 - **描述模板**：只做属性值替换，不执行表达式。
 - **请求体上限**：写入树文件的请求体上限为 50 MB（Express 默认的 JSON 上限为 100 KB）。
 - **错误处理**：服务端异常以纯文本响应返回而不会导致进程崩溃；项目文件的热重载错误会以提示显示，且在项目重新解析成功后自动消失。
+
+</details>
 
 ## 开发
 
