@@ -1,17 +1,25 @@
 name: release
 
-# Builds the Windows desktop app and attaches it to a GitHub Release when a version tag is pushed.
+# Builds the Windows desktop app and publishes it to a GitHub Release when a version tag is pushed.
+# The release notes come from the matching "## [x.y.z]" section of CHANGELOG.md.
+# Run manually with a tag to only refresh that release's notes from the current CHANGELOG.md.
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag (e.g. v0.1.0) whose release notes should be refreshed from CHANGELOG.md. Leave empty to build without publishing.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   windows:
+    if: github.event_name == 'push' || github.event.inputs.tag == ''
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +28,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Release notes from CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/release-notes.mjs "${{ github.ref_name }}" release-notes.md
 
       - name: Install dependencies
         run: npm ci
@@ -43,7 +55,26 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           files: |
             release/*.exe
             release/*.blockmap
-          generate_release_notes: true
+
+  notes:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Release notes from CHANGELOG
+        run: node scripts/release-notes.mjs "${{ github.event.inputs.tag }}" release-notes.md
+
+      - name: Update release notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          body_path: release-notes.md

@@ -46,7 +46,7 @@
 
 ## 发布流程（维护者）
 
-1. 更新各 `packages/*/package.json` 的版本号，把 `CHANGELOG.md` 中「未发布」的内容移到新版本下。
+1. 更新各 `packages/*/package.json` 的版本号，把 `CHANGELOG.md` 中「未发布」的内容移到新版本 `## [x.y.z] - 日期` 下。发布说明会从这一节自动生成，可先用 `node scripts/release-notes.mjs x.y.z` 在本地预览。
 2. 提交后打标签并推送：
 
    ```sh
@@ -54,4 +54,5 @@
    git push origin v0.2.0
    ```
 
-3. GitHub Actions 的 `release` 工作流会运行检查、构建 Windows 安装版和便携版，并上传到对应的 GitHub Release。
+3. GitHub Actions 的 `release` 工作流会先检查 CHANGELOG 中是否有该版本（没有则直接失败），再运行检查、构建 Windows 安装版和便携版，并以 CHANGELOG 中该版本的内容作为说明发布到 GitHub Release。
+4. 发布后如需修改说明：更新 `CHANGELOG.md` 并推送，然后在 Actions 页面手动运行 `release` 工作流，`tag` 填写版本标签（如 `v0.1.0`），只会刷新该 Release 的说明，不会重新构建。

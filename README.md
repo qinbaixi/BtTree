@@ -63,6 +63,8 @@ npm run dev          # 打开 http://localhost:5173
 ├── .github/
 │   └── workflows/
 │       └── release.yml           # 推送 v* 标签时构建 Windows 安装包并发布到 GitHub Releases
+├── scripts/
+│   └── release-notes.mjs         # 从 CHANGELOG.md 提取指定版本的发布说明
 ├── packages/                     # npm workspaces
 │   ├── shared/                   # @owlbt/shared：前后端共用的纯 TypeScript 核心（以源码形式被引用）
 │   │   └── src/
