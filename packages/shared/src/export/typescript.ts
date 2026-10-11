@@ -1,4 +1,5 @@
 import {
+  cachedFormatter,
   isExportAtom,
   isExportMap,
   type ExportEntry,
@@ -6,7 +7,7 @@ import {
   type ExportModel,
   type ExportValue,
 } from './model';
-import { tsKey, tsString } from './names';
+import { tsKey as formatTsKey, tsString } from './names';
 
 export interface TypeScriptOptions {
   /** Tree file path relative to the project directory, forward slashes. */
@@ -15,6 +16,10 @@ export interface TypeScriptOptions {
 
 const ENTRY_INDENT = 2;
 const FIELD_INDENT = 4;
+const ENTRY_PAD = ' '.repeat(ENTRY_INDENT);
+const FIELD_PAD = ' '.repeat(FIELD_INDENT);
+
+const tsKey = cachedFormatter(formatTsKey);
 
 /** Single-line TypeScript expression. Atoms become strings, maps become object literals. */
 function inline(value: ExportValue): string {
@@ -61,14 +66,12 @@ function lineComment(text: string): string {
   return text.replace(LINE_BREAKS, ' ');
 }
 
-function entryLines(entry: ExportEntry): string[] {
-  const lines = [`${' '.repeat(ENTRY_INDENT)}// ${lineComment(entry.comment)}`];
-  lines.push(`${' '.repeat(ENTRY_INDENT)}${entry.id}: {`);
+function pushEntryLines(lines: string[], entry: ExportEntry): void {
+  lines.push(`${ENTRY_PAD}// ${lineComment(entry.comment)}`, `${ENTRY_PAD}${entry.id}: {`);
   for (const [key, value] of entry.fields) {
-    lines.push(`${' '.repeat(FIELD_INDENT)}${tsKey(key)}: ${topLevel(value)},`);
+    lines.push(`${FIELD_PAD}${tsKey(key)}: ${topLevel(value)},`);
   }
-  lines.push(`${' '.repeat(ENTRY_INDENT)}},`);
-  return lines;
+  lines.push(`${ENTRY_PAD}},`);
 }
 
 /** Renders the export model as a TypeScript module with rootId, nodes and getNode(). */
@@ -87,7 +90,7 @@ export function toTypeScript(model: ExportModel, options: TypeScriptOptions): st
     'export const nodes: Readonly<Record<number, BtNode>> = {',
   ];
   for (const entry of model.entries) {
-    lines.push(...entryLines(entry));
+    pushEntryLines(lines, entry);
   }
   lines.push(
     '};',

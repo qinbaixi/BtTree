@@ -4,6 +4,7 @@ import {
   collectMissingTypes,
   formatMissingTypes,
   getEffectiveValue,
+  isItemValid,
   isTreeValid,
   validateItem,
   validatePropertyValue,
@@ -149,6 +150,20 @@ describe('validateItem', () => {
     ],
   });
   const waitType = getItemType(project, 'node', 'Wait');
+
+  it('isItemValid agrees with validateItem().isValid', () => {
+    const cases: Record<string, unknown>[] = [
+      {},
+      { Time: 3, Mode: 'b', Code: '42' },
+      { Time: -5 },
+      { Mode: 'c' },
+      { Code: 'abc' },
+    ];
+    for (const properties of cases) {
+      expect(isItemValid(waitType, properties)).toBe(validateItem(waitType, properties).isValid);
+    }
+    expect(isItemValid(getItemType(project, 'node', 'Missing'), {})).toBe(false);
+  });
 
   it('is valid for a valid item (defaults count as values)', () => {
     expect(validateItem(waitType, {})).toEqual({

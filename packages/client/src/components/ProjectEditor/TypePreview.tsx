@@ -42,11 +42,14 @@ export function buildPreview(
   kind: ItemKind,
   name: string,
 ): PreviewModel | { error: string } {
-  const copy = JSON.parse(JSON.stringify(draft)) as ProjectFile;
-  const desc = copy[LIST_KEY[kind]]?.find((item) => item.name === name);
-  if (desc) {
-    desc.isAbstract = false;
-  }
+  // Only the previewed descriptor changes; compileProject does not modify its input.
+  const listKey = LIST_KEY[kind];
+  const copy: ProjectFile = {
+    ...draft,
+    [listKey]: draft[listKey]?.map((item) =>
+      item.name === name ? { ...item, isAbstract: false } : item,
+    ),
+  };
   let project: CompiledProject;
   try {
     project = compileProject(copy);
