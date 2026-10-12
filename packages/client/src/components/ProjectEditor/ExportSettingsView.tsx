@@ -4,7 +4,7 @@ import { runEdit } from './PropertyTable';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
-type Format = 'erlang' | 'lua' | 'ts' | 'cs';
+type Format = 'erlang' | 'lua' | 'ts' | 'cs' | 'go';
 
 interface FormatInfo {
   format: Format;
@@ -13,6 +13,8 @@ interface FormatInfo {
   fileName: string;
   /** Only C# has a namespace. */
   namespace?: string;
+  /** Only Go has a package. */
+  package?: string;
 }
 
 /** Export formats with the defaults the exporter uses when a field is empty. */
@@ -26,6 +28,13 @@ export const FORMATS: readonly FormatInfo[] = [
     outDir: 'export/cs',
     fileName: '{name}',
     namespace: 'BehaviorTrees',
+  },
+  {
+    format: 'go',
+    label: 'Go',
+    outDir: 'export/go',
+    fileName: '{name}',
+    package: 'behaviortrees',
   },
 ];
 
@@ -57,7 +66,7 @@ export function setExportField(
   }
 }
 
-/** Center column: output folder, file name template and C# namespace per export format. */
+/** Center column: output folder, file name template, C# namespace and Go package per export format. */
 export function ExportSettingsView() {
   const draft = useProjectEditorStore((state) => state.draft);
   if (!draft) {
@@ -110,6 +119,18 @@ export function ExportSettingsView() {
                   placeholder={info.namespace}
                   className={styles.input}
                   onCommit={(value) => edit('namespace', value)}
+                />
+              </div>
+            )}
+            {info.package !== undefined && (
+              <div className={styles.field}>
+                <span className={styles.fieldLabel}>Package</span>
+                <TextInput
+                  value={current.package ?? ''}
+                  ariaLabel="Go package"
+                  placeholder={info.package}
+                  className={styles.input}
+                  onCommit={(value) => edit('package', value)}
                 />
               </div>
             )}

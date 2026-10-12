@@ -20,6 +20,8 @@ export const MAX_TREE_RESULTS = 500;
 /** Directory levels below the scan root that are searched. */
 export const MAX_SCAN_DEPTH = 6;
 export const MAX_TREE_FILE_BYTES = 5 * 1024 * 1024;
+/** Candidate files of one folder that are read at the same time. */
+export const SCAN_CONCURRENCY = 4;
 
 const SKIPPED_DIRS = new Set(['node_modules']);
 const SKIPPED_FILES = new Set(['owl-bt.json', 'package.json', 'package-lock.json']);
@@ -112,20 +114,38 @@ async function scanDir(dirPath: string, depth: number, state: ScanState): Promis
     return; // Unreadable folders are skipped.
   }
 
-  for (const entry of entries) {
+  let i = 0;
+  while (i < entries.length) {
     if (state.truncated) {
       return;
     }
-    const full = join(dirPath, entry.name);
+    const entry = entries[i];
     if (entry.isDirectory()) {
+      i++;
       if (depth < MAX_SCAN_DEPTH && !isSkippedDir(entry.name)) {
-        await scanDir(full, depth + 1, state);
+        await scanDir(join(dirPath, entry.name), depth + 1, state);
       }
-    } else if (entry.isFile() && isCandidateFile(entry.name) && (await isTreeFile(full))) {
+      continue;
+    }
+    // Up to SCAN_CONCURRENCY candidate files up to the next directory are read at the same time;
+    // they are added in listing order, so the result (and where truncation happens) is unchanged.
+    const batch: string[] = [];
+    while (i < entries.length && !entries[i].isDirectory() && batch.length < SCAN_CONCURRENCY) {
+      const file = entries[i++];
+      if (file.isFile() && isCandidateFile(file.name)) {
+        batch.push(join(dirPath, file.name));
+      }
+    }
+    const isTree = await Promise.all(batch.map((full) => isTreeFile(full)));
+    for (let j = 0; j < batch.length; j++) {
+      if (!isTree[j]) {
+        continue;
+      }
       if (state.trees.length >= MAX_TREE_RESULTS) {
         state.truncated = true;
         return;
       }
+      const full = batch[j];
       state.trees.push({ path: full, relPath: relative(state.root, full).split(sep).join('/') });
     }
   }

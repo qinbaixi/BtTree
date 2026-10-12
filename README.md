@@ -10,7 +10,7 @@
 
 </div>
 
-owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。它支持装饰器（Decorator）和服务（Service）这类挂在节点上的子项，使树更小、更易读。项目和树都保存为普通 JSON，并可导出为 Erlang / Lua / TypeScript / C# 配置，方便接入游戏服务端或客户端。
+owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。它支持装饰器（Decorator）和服务（Service）这类挂在节点上的子项，使树更小、更易读。项目和树都保存为普通 JSON，并可导出为 Erlang / Lua / TypeScript / C# / Go 配置，方便接入游戏服务端或客户端。
 
 本仓库是 [owl-bt](https://github.com/pruttned/owl-bt)（AngularJS + Express 4）的 TypeScript / React 重写版，保持文件格式兼容。
 
@@ -23,7 +23,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - [项目文件（owl-bt.json）](#项目文件owl-btjson)
 - [项目编辑器（图形化编辑 owl-bt.json）](#项目编辑器图形化编辑-owl-btjson)
 - [树文件（tree）格式](#树文件tree格式)
-- [导出 Erlang / Lua / TypeScript / C#](#导出-erlang--lua--typescript--c)
+- [导出 Erlang / Lua / TypeScript / C# / Go](#导出-erlang--lua--typescript--c--go)
 - [桌面版（Electron）](#桌面版electron)
 - [键盘快捷键](#键盘快捷键)
 - [本地 HTTP API](#本地-http-api)
@@ -41,7 +41,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
 - **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
-- **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# 配置。
+- **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# / Go 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
 - **主题**：默认明亮主题，可切换为原版风格的深色主题。
 
@@ -80,7 +80,7 @@ npm run dev          # 打开 http://localhost:5173
 │   │       ├── describe.ts       # 描述模板 {{Prop}} 替换
 │       ├── projectEdit.ts     # 项目文件编辑（增删改名、继承、属性、自定义类型）与校验
 │   │       ├── fuzzy.ts          # 模糊搜索与匹配高亮
-│   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# 生成器
+│   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# / Go 生成器
 │   ├── server/                   # @owlbt/server：Express 5 + socket.io 4 服务端与 owlbt CLI
 │   │   ├── src/
 │   │   │   ├── cli.ts            # owlbt 命令（init / create / open / export）
@@ -173,7 +173,7 @@ owlbt open <树文件路径>
 | `owlbt init [path]` | `i` | 在目录中创建 `owl-bt.json`（文件已存在时失败） |
 | `owlbt create <path>` | `c` | 创建树文件（自动创建父目录）并打开；路径必须位于某个项目内 |
 | `owlbt open <path>` | `o` | 打开已有的树文件 |
-| `owlbt export <path>` | | 导出为 Erlang / Lua / TypeScript / C#，见下文「导出 Erlang / Lua / TypeScript / C#」；不启动服务 |
+| `owlbt export <path>` | | 导出为 Erlang / Lua / TypeScript / C# / Go，见下文「导出 Erlang / Lua / TypeScript / C# / Go」；不启动服务 |
 | `owlbt --no-open ...` | | 不打开浏览器，只打印 URL（适合测试和无界面环境） |
 | `OWLBT_NO_OPEN=1` | | 与 `--no-open` 相同的环境变量形式 |
 | `owlbt --host <host>` | | 监听指定的网卡地址（默认 `127.0.0.1`）。指定其他地址会暴露无认证的 API，见「网络与安全」 |
@@ -267,7 +267,7 @@ owlbt create ./my-project/trees/patrol.json --no-open
 - `nodes`：节点类型（可选）
 - `decorators`：装饰器类型（可选）
 - `services`：服务类型（可选）
-- `export`：导出设置（可选），见下文「导出 Erlang / Lua / TypeScript / C#」
+- `export`：导出设置（可选），见下文「导出 Erlang / Lua / TypeScript / C# / Go」
 
 ### 类型（items）的字段
 
@@ -386,7 +386,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 - 属性表：自有属性可编辑（名称、类型、默认值、min/max、枚举值增删排序、自定义类型的正则只读显示、描述、导出名与导出位置）；从基类继承的属性以灰色只读显示并标注「from 基类名」。
 - 右侧：实时预览。使用与树编辑器相同的节点卡片，同时显示明亮与深色两种主题；带装饰器与服务的示例节点（项目中没有组合节点时使用示例节点），可切换「With label」「Invalid」，并可在「Sample values」中填写属性值（只影响预览）。预览下方可展开查看编译后的类型 JSON。
 - 自定义类型：表格编辑名称、基础类型（string / number）、正则，并可在「Test」中实时测试是否匹配；重命名会同时更新属性的类型。
-- 导出设置：Erlang / Lua / TypeScript / C# 的输出目录、文件名模板与 C# 命名空间，空白时使用默认值。
+- 导出设置：Erlang / Lua / TypeScript / C# / Go 的输出目录、文件名模板、C# 命名空间与 Go 包名，空白时使用默认值。
 - 底部「Problems」栏列出校验问题（错误与警告），点击即可跳到对应的类型或自定义类型。
 
 **保存与冲突**
@@ -448,9 +448,9 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 
 </details>
 
-## 导出 Erlang / Lua / TypeScript / C#
+## 导出 Erlang / Lua / TypeScript / C# / Go
 
-树可以导出为 Erlang 模块（`get_node/1`、`get_root_node/0`）、Lua 模块（返回 `{ root, nodes, get_node }`）、TypeScript 模块（`nodes`、`getNode()`）或 C# 静态类（`Nodes`、`GetNode()`）。Erlang 的输出格式与 `bt_mon_1000.erl` 这类手写配置保持一致。四种格式使用同一份导出模型：条目的编号、键的顺序和值完全相同，只有语法不同。
+树可以导出为 Erlang 模块（`get_node/1`、`get_root_node/0`）、Lua 模块（返回 `{ root, nodes, get_node }`）、TypeScript 模块（`nodes`、`getNode()`）、C# 静态类（`Nodes`、`GetNode()`）或 Go 源文件（`<前缀>Nodes`、`<前缀>GetNode()`）。Erlang 的输出格式与 `bt_mon_1000.erl` 这类手写配置保持一致。五种格式使用同一份导出模型：条目的编号、键的顺序和值完全相同，只有语法不同。
 
 <details>
 <summary>配置、节点编号、导出内容、各语言输出示例、命令行与编辑器用法</summary>
@@ -464,15 +464,18 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
   "erlang": { "outDir": "export/erlang", "fileName": "{name}" },
   "lua": { "outDir": "export/lua", "fileName": "{name}" },
   "ts": { "outDir": "export/ts", "fileName": "{name}" },
-  "cs": { "outDir": "export/cs", "fileName": "{name}", "namespace": "BehaviorTrees" }
+  "cs": { "outDir": "export/cs", "fileName": "{name}", "namespace": "BehaviorTrees" },
+  "go": { "outDir": "export/go", "fileName": "{name}", "package": "behaviortrees" }
 }
 ```
 
-- `outDir`：相对于项目目录。默认 `export/erlang`、`export/lua`、`export/ts`、`export/cs`
-- `fileName`：文件名模板，`{name}` 为树文件名（不含 `.json`）。扩展名 `.erl` / `.lua` / `.ts` / `.cs` 会自动补上，模板中已带扩展名时不重复
+- `outDir`：相对于项目目录。默认 `export/erlang`、`export/lua`、`export/ts`、`export/cs`、`export/go`
+- `fileName`：文件名模板，`{name}` 为树文件名（不含 `.json`）。扩展名 `.erl` / `.lua` / `.ts` / `.cs` / `.go` 会自动补上，模板中已带扩展名时不重复
 - Erlang 模块名取文件名（不含扩展名）：转为小写，`[a-z0-9_]` 以外的字符替换为 `_`，不以字母开头时加 `m_` 前缀。例如 `bt-mon 1000.json` 生成模块 `bt_mon_1000`
 - `namespace`（仅 C#）：生成类所在的命名空间，由点分隔的 C# 标识符组成，例如 `Game.Ai`，默认 `BehaviorTrees`。不合法的值（如 `1Game`、含空格或 C# 关键字）回退为默认值，并作为警告返回
 - C# 类名取文件名：按非字母数字字符分词，每个词首字母大写，例如 `bt_mon_1000` 生成类 `BtMon1000`；以数字开头时加 `_` 前缀，与 C# 关键字同名时加 `@` 前缀
+- `package`（仅 Go）：生成文件的包名，必须是 Go 标识符，默认 `behaviortrees`。不合法的值（如 `1ai`、`game.ai`、Go 关键字）回退为默认值，并作为警告返回
+- Go 标识符前缀取文件名：按字母和数字以外的字符分词，每个词首字母大写，例如 `bt_mon_1000` 生成 `BtMon1000RootID`、`BtMon1000Nodes`、`BtMon1000GetNode`。中文等非 ASCII 字母会保留（Go 标识符允许），不以大写字母开头时加 `Bt` 前缀，例如 `巡逻.json` 生成 `Bt巡逻RootID`。同一目录下的多个树因此可以放在同一个包里，但文件名只差标点或大小写的两棵树（如 `bt-mon` 与 `bt_mon`）会得到相同的前缀
 
 类型的 `export` 设置（节点、装饰器、服务都可以用，继承时与其他字段一样被子类型覆盖）：
 
@@ -481,7 +484,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 ```
 
 - `type`：导出的 `type`。默认：复合节点 `composite`，动作节点 `task`，装饰器 `decorator`，服务 `service`
-- `subType`：导出的 `sub_type`。默认为类型名的 snake_case（`RandomSelector` → `random_selector`）。数字保持数字；字符串在 Erlang 中为原子，在 Lua、TypeScript 与 C# 中为字符串
+- `subType`：导出的 `sub_type`。默认为类型名的 snake_case（`RandomSelector` → `random_selector`）。数字保持数字；字符串在 Erlang 中为原子，在 Lua、TypeScript、C# 与 Go 中为字符串
 - `fields`：常量字段，原样写到导出项的顶层（如 `"finish_once": true`）
 
 属性的导出设置：
@@ -512,19 +515,19 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 
 值的编码：
 
-| 值 | Erlang | Lua | TypeScript | C# |
-| --- | --- | --- | --- | --- |
-| 整数 / 小数 | 原样（整数不带小数点） | 原样 | 原样 | `int`；超出 int32 的整数为 `123L`；小数为 `0.5`、`1.5E+21` |
-| 布尔 | `true` / `false` | `true` / `false` | `true` / `false` | `true` / `false` |
-| 字符串 | `<<"text"/utf8>>` | `"text"` | `'text'` | `"text"` |
-| 枚举值 | 原子，如 `'Like This'` | 字符串 | 字符串 | 字符串 |
-| null | `undefined` | `nil` | `null` | `null` |
-| 数组 | 列表 `[1,2]` | 表 `{1, 2}` | 数组 `[1, 2]` | `decorators` / `services` / `children` 为 `new int[] { 1, 2 }`，其他为 `new object[] { ... }` |
-| 对象 | map `#{k => v}` | 表 `{ k = v }` | 对象 `{ k: v }` | `new Dictionary<string, object> { ["k"] = v, }` |
+| 值 | Erlang | Lua | TypeScript | C# | Go |
+| --- | --- | --- | --- | --- | --- |
+| 整数 / 小数 | 原样（整数不带小数点） | 原样 | 原样 | `int`；超出 int32 的整数为 `123L`；小数为 `0.5`、`1.5E+21` | `int`；超出 int32 的整数为 `int64(123)`；小数为 `0.5`、`1.5e+21` |
+| 布尔 | `true` / `false` | `true` / `false` | `true` / `false` | `true` / `false` | `true` / `false` |
+| 字符串 | `<<"text"/utf8>>` | `"text"` | `'text'` | `"text"` | `"text"` |
+| 枚举值 | 原子，如 `'Like This'` | 字符串 | 字符串 | 字符串 | 字符串 |
+| null | `undefined` | `nil` | `null` | `null` | `nil` |
+| 数组 | 列表 `[1,2]` | 表 `{1, 2}` | 数组 `[1, 2]` | `decorators` / `services` / `children` 为 `new int[] { 1, 2 }`，其他为 `new object[] { ... }` | `decorators` / `services` / `children` 为 `[]int{1, 2}`，其他为 `[]any{...}` |
+| 对象 | map `#{k => v}` | 表 `{ k = v }` | 对象 `{ k: v }` | `new Dictionary<string, object> { ["k"] = v, }` | `map[string]any{"k": v}` |
 
 Erlang 的 map 没有顺序，因此装饰器中 `inverse_check_condition` 固定排在 `abort_mode` / `ignore_check` 之前。
 
-### TypeScript 与 C# 输出
+### TypeScript、C# 与 Go 输出
 
 TypeScript 输出为一个模块：`BtNode` 接口、`rootId`、以编号为键的 `nodes`，以及 `getNode(id)`。开头大致如下：
 
@@ -595,9 +598,40 @@ namespace BehaviorTrees
 }
 ```
 
-- 两种格式都以 `Generated by owl-bt from <树文件>. Do not edit.` 开头；每个条目之前是 `// <Type> - <label>` 注释，注释中的换行替换为空格
+Go 输出为一个源文件（包名与标识符前缀见上文）：`<前缀>RootID` 为根编号，`<前缀>Nodes` 为 `map[int]map[string]any`，`<前缀>GetNode(id int)` 在编号不存在时返回 `nil`。开头大致如下：
+
+```go
+// Code generated by owl-bt from trees/bt_mon_1000.json. DO NOT EDIT.
+
+package behaviortrees
+
+// BtMon1000RootID is the id of the root node.
+const BtMon1000RootID = 1
+
+// BtMon1000Nodes holds every node, decorator and service by id.
+var BtMon1000Nodes = map[int]map[string]any{
+	// Selector - Root
+	1: {
+		"node_id":    1,
+		"type":       "composite",
+		"sub_type":   "selector",
+		"decorators": []int{},
+		"services":   []int{},
+		"children":   []int{3, 5, 7},
+	},
+	...
+}
+
+// BtMon1000GetNode returns the item with the given id, or nil when there is none.
+func BtMon1000GetNode(id int) map[string]any {
+	return BtMon1000Nodes[id]
+}
+```
+
+- TypeScript 与 C# 以 `Generated by owl-bt from <树文件>. Do not edit.` 开头，Go 以 Go 约定的 `Code generated by owl-bt from <树文件>. DO NOT EDIT.` 开头；每个条目之前是 `// <Type> - <label>` 注释，注释中的换行替换为空格
 - TypeScript 使用 2 个空格缩进、单引号字符串和尾随逗号；不是合法标识符的键加引号
 - C# 使用 4 个空格缩进，代码兼容 C# 7.3（Unity 使用的版本）：不使用 record、文件范围命名空间、target-typed new 或可空标注
+- Go 输出已按 gofmt 格式化，需要 Go 1.18 及以上（使用 `any`）；只有出现 NaN 或无穷大时才导入 `math`。注意 Go 会按文件名后缀做构建约束，树文件名以 `_test`、`_linux`、`_windows` 等结尾时，可用 `fileName` 改名。键名重复时（如类型的 `export.fields` 与生成的字段同名）保留最后一个值，与 C# / Lua 的结果一致；`decorators` / `services` / `children` 不全是整数时写为 `[]any`
 
 ### 错误与警告
 
@@ -610,16 +644,17 @@ namespace BehaviorTrees
 owlbt export ./my-project/trees/patrol.json --format erlang,lua
 owlbt export ./my-project --format lua --out ./build/bt
 owlbt export ./my-project --format ts,cs
+owlbt export ./my-project --format go
 ```
 
 - 路径可以是树文件，也可以是目录（导出该目录所属项目中的全部树）
-- `--format` 可选 `erlang`、`lua`、`ts`、`cs`，默认 `erlang,lua`；`--out` 覆盖所有格式的输出目录
+- `--format` 可选 `erlang`、`lua`、`ts`、`cs`、`go`，默认 `erlang,lua`；`--out` 覆盖所有格式的输出目录
 - 每个写入的文件都会打印路径，警告输出到标准错误；只要有一个树导出失败，退出码为 1。命令不启动服务
 
 ### 编辑器
 
-- 菜单 File 中的「Export: Erlang」「Export: Lua」「Export: TypeScript」「Export: C#」，以及导出全部四种格式的「Export: All formats」，命令面板中也有同名命令。树有未保存的修改时先询问是否保存，保存失败或取消则不导出
-- 首页打开文件夹后，「导出」区域可以一次导出整个项目。可勾选 Erlang、Lua、TypeScript、C#，未保存过选择时默认勾选 Erlang 与 Lua。勾选的格式保存在浏览器中（`owlbt.exportFormats`），结果列表按树显示写入的文件、警告或错误
+- 菜单 File 中的「Export: Erlang」「Export: Lua」「Export: TypeScript」「Export: C#」「Export: Go」，以及导出全部五种格式的「Export: All formats」，命令面板中也有同名命令。树有未保存的修改时先询问是否保存，保存失败或取消则不导出
+- 首页打开文件夹后，「导出」区域可以一次导出整个项目。可勾选 Erlang、Lua、TypeScript、C#、Go，未保存过选择时默认勾选 Erlang 与 Lua。勾选的格式保存在浏览器中（`owlbt.exportFormats`），结果列表按树显示写入的文件、警告或错误
 
 ### 示例
 
@@ -744,8 +779,8 @@ module.exports = {
 | `POST` | `/api/project/init` | 初始化项目，见下文 |
 | `POST` | `/api/tree/create` | 创建树文件，见下文 |
 | `POST` | `/api/dialog/pick` | 打开本机的系统文件 / 文件夹选择框，见下文 |
-| `POST` | `/api/export` | 导出单个树为 Erlang / Lua / TypeScript / C#，见「导出 Erlang / Lua / TypeScript / C#」 |
-| `POST` | `/api/export/batch` | 导出项目中的全部树，见「导出 Erlang / Lua / TypeScript / C#」 |
+| `POST` | `/api/export` | 导出单个树为 Erlang / Lua / TypeScript / C# / Go，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
+| `POST` | `/api/export/batch` | 导出项目中的全部树，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
 
 **`GET /api/workspace?dir=...`**
 

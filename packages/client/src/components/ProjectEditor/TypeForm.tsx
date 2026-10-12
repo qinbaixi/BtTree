@@ -428,7 +428,9 @@ export function TypeForm({ kind, name }: TypeFormProps) {
       />
 
       <details className={styles.section}>
-        <summary className={styles.sectionTitle}>Export (Erlang / Lua / TypeScript / C#)</summary>
+        <summary className={styles.sectionTitle}>
+          Export (Erlang / Lua / TypeScript / C# / Go)
+        </summary>
         <p className={styles.helpText}>
           Controls how this type is written by File → Export. Each exported node gets{' '}
           <code>type</code> and <code>sub_type</code> fields; leave them empty to use the defaults

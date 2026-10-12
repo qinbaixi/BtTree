@@ -38,9 +38,10 @@ const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
   lua: 'Lua',
   ts: 'TypeScript',
   cs: 'C#',
+  go: 'Go',
 };
 
-/** Formats ticked when nothing is stored yet. TypeScript and C# are opt-in. */
+/** Formats ticked when nothing is stored yet. TypeScript, C# and Go are opt-in. */
 const DEFAULT_EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua'];
 
 /**

@@ -3,7 +3,10 @@ import {
   csharpClassName,
   csharpIdentifier,
   csharpString,
+  goNamePrefix,
+  goString,
   parseCsNamespace,
+  parseGoPackage,
   tsKey,
   tsString,
 } from './names';
@@ -106,6 +109,62 @@ describe('parseCsNamespace', () => {
       expect(result.warning).toBe(
         `Invalid C# namespace ${JSON.stringify(bad)}, using BehaviorTrees`,
       );
+    }
+  });
+});
+
+describe('goString', () => {
+  it('wraps the text in double quotes and escapes quotes, backslashes and control characters', () => {
+    expect(goString('plain')).toBe('"plain"');
+    expect(goString('say "hi" \\')).toBe('"say \\"hi\\" \\\\"');
+    expect(goString('a\nb\rc\td')).toBe('"a\\nb\\rc\\td"');
+    expect(goString('\u0000\u001f\u007f')).toBe('"\\x00\\x1f\\x7f"');
+    expect(goString('中文')).toBe('"中文"');
+  });
+
+  it('escapes characters Go source cannot hold', () => {
+    expect(goString('\ufeff')).toBe('"\\uFEFF"');
+    expect(goString('a\ud800b')).toBe('"a\\uFFFDb"');
+  });
+});
+
+describe('goNamePrefix', () => {
+  it('turns the file name into an exported PascalCase prefix', () => {
+    expect(goNamePrefix('bt_mon_1000')).toBe('BtMon1000');
+    expect(goNamePrefix('bt-mon 1000')).toBe('BtMon1000');
+    expect(goNamePrefix('patrol')).toBe('Patrol');
+    expect(goNamePrefix('func')).toBe('Func');
+  });
+
+  it('keeps names starting with a digit exported and falls back for empty names', () => {
+    expect(goNamePrefix('1_patrol')).toBe('Bt1Patrol');
+    expect(goNamePrefix('---')).toBe('BehaviorTree');
+  });
+
+  it('keeps non-ASCII letters, which Go identifiers allow', () => {
+    expect(goNamePrefix('巡逻')).toBe('Bt巡逻');
+    expect(goNamePrefix('巡逻_a')).toBe('Bt巡逻A');
+    expect(goNamePrefix('boss_巡逻')).toBe('Boss巡逻');
+    expect(goNamePrefix('élite')).toBe('Élite');
+    expect(goNamePrefix('巡逻')).not.toBe(goNamePrefix('攻击'));
+  });
+});
+
+describe('parseGoPackage', () => {
+  it('uses behaviortrees when there is no setting', () => {
+    expect(parseGoPackage(undefined)).toEqual({ package: 'behaviortrees' });
+  });
+
+  it('accepts Go identifiers', () => {
+    expect(parseGoPackage('ai')).toEqual({ package: 'ai' });
+    expect(parseGoPackage('bt_data2')).toEqual({ package: 'bt_data2' });
+  });
+
+  it('falls back to the default with a warning for anything else', () => {
+    for (const bad of ['', '_', '1ai', 'game.ai', 'my ai', 'func', 'package', 42, null]) {
+      const result = parseGoPackage(bad);
+      expect(result.package).toBe('behaviortrees');
+      expect(result.warning).toBe(`Invalid Go package ${JSON.stringify(bad)}, using behaviortrees`);
     }
   });
 });

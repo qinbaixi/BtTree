@@ -486,7 +486,7 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
         <div className={styles.propField}>
           <span
             className={styles.propLabel}
-            title="Key used for this property in exported Erlang / Lua / TS / C# files"
+            title="Key used for this property in exported Erlang / Lua / TS / C# / Go files"
           >
             Export name
           </span>
