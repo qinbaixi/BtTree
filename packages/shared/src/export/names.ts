@@ -63,8 +63,20 @@ const LUA_KEYWORDS: ReadonlySet<string> = new Set([
   'while',
 ]);
 
+/**
+ * Characters the string escapers below change: backslash, the quote and control characters.
+ * Most exported strings have none, and then the text is used as it is (no per-character copy).
+ */
+// eslint-disable-next-line no-control-regex -- control characters are what these look for
+const NEEDS_ESCAPE_DOUBLE = /[\\"\u0000-\u001f\u007f]/;
+// eslint-disable-next-line no-control-regex -- control characters are what these look for
+const NEEDS_ESCAPE_SINGLE = /[\\'\u0000-\u001f\u007f]/;
+
 /** Escapes control characters as `\x{HEX}` (Erlang) so the result can sit inside a quoted literal. */
-function escapeErlangChars(text: string, quote: string): string {
+function escapeErlangChars(text: string, quote: "'" | '"'): string {
+  if (!(quote === '"' ? NEEDS_ESCAPE_DOUBLE : NEEDS_ESCAPE_SINGLE).test(text)) {
+    return text;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -103,6 +115,9 @@ export function erlangString(text: string): string {
 
 /** Lua string literal with double quotes. Control characters use the decimal `\ddd` form. */
 export function luaString(text: string): string {
+  if (!NEEDS_ESCAPE_DOUBLE.test(text)) {
+    return `"${text}"`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -142,6 +157,9 @@ export function sanitizeModuleName(name: string): string {
 
 /** TypeScript string literal with single quotes. Control characters use `\uXXXX`. */
 export function tsString(text: string): string {
+  if (!NEEDS_ESCAPE_SINGLE.test(text)) {
+    return `'${text}'`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -249,6 +267,9 @@ const CSHARP_KEYWORDS: ReadonlySet<string> = new Set([
 
 /** C# string literal with double quotes. Control characters use `\uXXXX`. */
 export function csharpString(text: string): string {
+  if (!NEEDS_ESCAPE_DOUBLE.test(text)) {
+    return `"${text}"`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;

@@ -1,5 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
 import { Module, createRequire } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ProjectFile, TreeNodeJson } from '@owlbt/shared';
@@ -48,9 +48,9 @@ export interface ProjectOptions {
   trustAllPlugins?: boolean;
 }
 
-function isFile(path: string): boolean {
+async function isFile(path: string): Promise<boolean> {
   try {
-    return statSync(path).isFile();
+    return (await stat(path)).isFile();
   } catch {
     return false;
   }
@@ -61,7 +61,7 @@ export async function findProjectFile(treePath: string): Promise<string | undefi
   let dir = dirname(resolve(treePath));
   for (;;) {
     const candidate = join(dir, PROJECT_FILE_NAME);
-    if (isFile(candidate)) {
+    if (await isFile(candidate)) {
       return candidate;
     }
     const parent = dirname(dir);
