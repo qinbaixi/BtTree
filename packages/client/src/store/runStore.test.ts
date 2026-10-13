@@ -14,6 +14,7 @@ import {
   createRunStore,
   entriesToRecord,
   MAX_HISTORY,
+  selectCanStepBack,
   type RunStore,
   type RunStoreDeps,
 } from './runStore';
@@ -255,6 +256,70 @@ describe('runStore', () => {
     h.store.getState().seek(0);
     h.store.getState().backToLive();
     expect(h.store.getState().viewIndex).toBe(3);
+  });
+
+  it('steps back to undo the latest tick and steps forward again', () => {
+    const h = setup();
+    h.store.getState().enter();
+    expect(selectCanStepBack(h.store.getState())).toBe(false);
+    h.store.getState().stepBack();
+    expect(h.store.getState().history).toHaveLength(1);
+    for (let i = 0; i < 4; i++) h.store.getState().step();
+    const forward = h.store.getState().history;
+    expect(forward[forward.length - 1].finished).toBe('success');
+    expect(forward[forward.length - 1].blackboard).toEqual({ Ammo: 1 });
+
+    h.store.getState().stepBack();
+    h.store.getState().stepBack();
+    let state = h.store.getState();
+    expect(state.history.map((r) => r.tick)).toEqual([0, 1]);
+    expect(state.viewIndex).toBe(1);
+    expect(state.history[1].statuses[h.id('wait')]).toBe('running');
+    expect(selectCanStepBack(state)).toBe(true);
+
+    h.store.getState().step();
+    h.store.getState().step();
+    state = h.store.getState();
+    expect(state.history).toEqual(forward);
+    expect(state.history[state.history.length - 1].blackboard).toEqual({ Ammo: 1 });
+  });
+
+  it('stepping back pauses playback and keeps live blackboard edits of earlier ticks', () => {
+    const h = setup();
+    h.store.getState().enter();
+    h.store.getState().step();
+    h.store.getState().setBlackboardValue('Ammo', 5);
+    h.store.getState().step();
+    h.store.getState().play();
+    h.store.getState().stepBack();
+    const state = h.store.getState();
+    expect(state.playing).toBe(false);
+    expect(state.history.map((r) => r.tick)).toEqual([0, 1]);
+    expect(state.history[1].blackboard).toEqual({ Ammo: 5 });
+  });
+
+  it('steps back into a pending manual action', () => {
+    const h = setup({
+      type: 'Sequence',
+      childNodes: [{ type: 'Ask', label: 'ask' }, { type: 'Succeed' }],
+    });
+    h.store.getState().enter();
+    h.store.getState().step();
+    h.store.getState().resolveManual('success');
+    h.store.getState().step();
+    expect(h.store.getState().history[2].finished).toBe('success');
+    vi.mocked(h.deps.focus).mockClear();
+    h.store.getState().stepBack();
+    const state = h.store.getState();
+    expect(state.history[1].pendingManual).toBeUndefined();
+    h.store.getState().step();
+    expect(h.store.getState().history[2].finished).toBe('success');
+    h.store.getState().stepBack();
+    h.store.getState().stepBack();
+    expect(h.store.getState().history).toHaveLength(1);
+    h.store.getState().step();
+    expect(h.store.getState().history[1].pendingManual).toBe(h.id('ask'));
+    expect(h.deps.focus).toHaveBeenCalledWith(h.id('ask'));
   });
 
   it('seeking pauses playback', () => {

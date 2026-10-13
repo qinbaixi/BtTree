@@ -922,3 +922,51 @@ describe('looped runs', () => {
     expect(h.run.tick().finished).toBeUndefined();
   });
 });
+
+describe('checkpoints', () => {
+  it('restoring a checkpoint repeats the same ticks', () => {
+    const json: TreeNodeJson = {
+      type: 'RandomSelector',
+      services: [{ type: 'Counter' }],
+      childNodes: [
+        leaf('Wait', 'a', { properties: duration(2) }),
+        leaf('Fail', 'b'),
+        leaf('Attack', 'c'),
+      ],
+    };
+    const h = make(json, { Ammo: 3, Count: 0 }, { seed: 7, loops: 0 });
+    const dump = (r: TickResult) =>
+      JSON.stringify([r.tick, r.pass, r.statuses, r.subStatuses, r.blackboard, r.log]);
+    const checkpoints = [h.run.checkpoint()];
+    const ticks: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      ticks.push(dump(h.run.tick()));
+      checkpoints.push(h.run.checkpoint());
+    }
+    h.run.restore(checkpoints[3]);
+    expect(h.run.snapshot().tick).toBe(3);
+    expect(dump(h.run.snapshot())).toBe(ticks[2]);
+    for (let i = 3; i < 8; i++) {
+      expect(dump(h.run.tick())).toBe(ticks[i]);
+    }
+    // A checkpoint is not changed by ticks after it.
+    h.run.restore(checkpoints[0]);
+    expect(h.run.snapshot().tick).toBe(0);
+    expect(h.run.snapshot().blackboard).toEqual({ Ammo: 3, Count: 0 });
+    expect(dump(h.run.tick())).toBe(ticks[0]);
+  });
+
+  it('restores a pending manual action and a finished run', () => {
+    const h = make({ type: 'Sequence', childNodes: [leaf('Manual', 'm'), leaf('Succeed', 's')] });
+    h.run.tick();
+    const waiting = h.run.checkpoint();
+    expect(h.run.pendingManual()).toBe(h.id('m'));
+    h.run.resolveManual(h.id('m'), 'success');
+    expect(h.run.tick().finished).toBe('success');
+    h.run.restore(waiting);
+    expect(h.run.pendingManual()).toBe(h.id('m'));
+    expect(h.run.snapshot().finished).toBeUndefined();
+    h.run.resolveManual(h.id('m'), 'failure');
+    expect(h.run.tick().finished).toBe('failure');
+  });
+});
