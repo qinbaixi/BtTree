@@ -96,6 +96,32 @@ export interface Run {
    * current pass the last one. Ignored once the run has finished.
    */
   setLoops(loops: number): void;
+  /** Captures the complete run state (used to step back). */
+  checkpoint(): RunCheckpoint;
+  /** Returns the run to a state captured by checkpoint() of the same run. */
+  restore(checkpoint: RunCheckpoint): void;
+}
+
+/** Opaque copy of the internal state of a run. */
+export interface RunCheckpoint {
+  readonly __runCheckpoint: true;
+}
+
+interface CheckpointData {
+  blackboard: Record<string, unknown>;
+  statuses: Record<string, RunStatus>;
+  subStatuses: Record<string, SubStatus>;
+  states: Array<[string, NodeState]>;
+  cooldownStart: Array<[string, number]>;
+  resolutions: Array<[string, ManualResult]>;
+  pending: string[];
+  finished: ManualResult | undefined;
+  tickNo: number;
+  loops: number;
+  pass: number;
+  passResult: ManualResult | undefined;
+  log: LogEntry[];
+  random: number;
 }
 
 // ---------- helpers shared with the UI ----------
@@ -139,14 +165,22 @@ export function formatValue(value: unknown): string {
 }
 
 /** Seeded PRNG (mulberry32) returning numbers in [0, 1). */
-function createRandom(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+interface Random {
+  next(): number;
+  /** Internal state; restoring it repeats the same sequence. */
+  state: number;
+}
+
+function createRandom(seed: number): Random {
+  return {
+    state: seed >>> 0,
+    next() {
+      this.state = (this.state + 0x6d2b79f5) >>> 0;
+      let t = this.state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    },
   };
 }
 
@@ -428,7 +462,7 @@ export function createRun(root: TreeNode, project: CompiledProject, options: Run
     const order: number[] = [];
     while (pool.length > 0) {
       const total = pool.reduce((sum, p) => sum + p.w, 0);
-      let r = random() * total;
+      let r = random.next() * total;
       let pick = 0;
       for (let k = 0; k < pool.length; k++) {
         r -= pool[k].w;
@@ -774,6 +808,48 @@ export function createRun(root: TreeNode, project: CompiledProject, options: Run
       if (passResult !== undefined && loops !== 0 && pass >= loops) {
         finished = passResult;
       }
+    },
+    checkpoint() {
+      const data: CheckpointData = {
+        blackboard: deepClone(blackboard),
+        statuses: { ...statuses },
+        subStatuses: { ...subStatuses },
+        states: [...states].map(([id, state]) => [id, deepClone(state)]),
+        cooldownStart: [...cooldownStart],
+        resolutions: [...resolutions],
+        pending: [...pending],
+        finished,
+        tickNo,
+        loops,
+        pass,
+        passResult,
+        log: [...log],
+        random: random.state,
+      };
+      return data as unknown as RunCheckpoint;
+    },
+    restore(checkpoint) {
+      const data = checkpoint as unknown as CheckpointData;
+      for (const key of Object.keys(blackboard)) delete blackboard[key];
+      Object.assign(blackboard, deepClone(data.blackboard));
+      for (const key of Object.keys(statuses)) delete statuses[key];
+      Object.assign(statuses, data.statuses);
+      for (const key of Object.keys(subStatuses)) delete subStatuses[key];
+      Object.assign(subStatuses, data.subStatuses);
+      states.clear();
+      for (const [id, state] of data.states) states.set(id, deepClone(state));
+      cooldownStart.clear();
+      for (const [id, start] of data.cooldownStart) cooldownStart.set(id, start);
+      resolutions.clear();
+      for (const [id, result] of data.resolutions) resolutions.set(id, result);
+      pending = [...data.pending];
+      finished = data.finished;
+      tickNo = data.tickNo;
+      loops = data.loops;
+      pass = data.pass;
+      passResult = data.passResult;
+      log = [...data.log];
+      random.state = data.random;
     },
   };
 }
