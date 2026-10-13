@@ -27,7 +27,7 @@ import { readClipboard, writeClipboard } from '../lib/clipboard';
 import { navigateTo, projectEditorUrl, type ProjectEditorLink } from '../lib/appNavigation';
 import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
-import { runStore } from '../store/runStore';
+import { runStore, selectCanStepBack } from '../store/runStore';
 import { getSelectedItem, selectCanRedo, selectCanUndo, type TreeStore } from '../store/treeStore';
 import {
   addItemToNode,
@@ -591,6 +591,7 @@ const editProjectTypes: Command = {
 export const RUN_COMMAND_IDS = {
   toggle: 'core:ToggleRunMode',
   step: 'core:RunStep',
+  stepBack: 'core:RunStepBack',
   playPause: 'core:RunPlayPause',
   play: 'core:RunPlay',
   pause: 'core:RunPause',
@@ -631,6 +632,19 @@ const runStep: Command = {
   },
   exec() {
     runStore.getState().step();
+  },
+};
+
+const runStepBack: Command = {
+  id: RUN_COMMAND_IDS.stepBack,
+  name: 'Run: Step back',
+  hotkey: 'shift+f10',
+  allowInInput: true,
+  canExec() {
+    return selectCanStepBack(runStore.getState());
+  },
+  exec() {
+    runStore.getState().stepBack();
   },
 };
 
@@ -754,6 +768,7 @@ export const coreCommands: Command[] = [
   editProjectTypes,
   toggleRunMode,
   runStep,
+  runStepBack,
   runPlayPause,
   runPlay,
   runPause,

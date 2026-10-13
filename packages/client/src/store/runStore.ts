@@ -4,6 +4,7 @@ import {
   type CompiledProject,
   type ManualResult,
   type Run,
+  type RunCheckpoint,
   type ScenarioJson,
   type Selection,
   type TickResult,
@@ -73,6 +74,8 @@ export interface RunState {
   /** Rebuilds the run from the current tree, project, blackboard and overrides. */
   reset(): void;
   step(): void;
+  /** Undoes the latest tick: the run continues from the state before it. */
+  stepBack(): void;
   play(): void;
   pause(): void;
   togglePlay(): void;
@@ -156,6 +159,8 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
 
   return createStore<RunState>()((set, get) => {
     let run: Run | undefined;
+    /** checkpoints[i] is the run state of history[i]; trimmed together with the history. */
+    let checkpoints: RunCheckpoint[] = [];
     let timer: ReturnType<typeof setInterval> | undefined;
 
     const stopTimer = (): void => {
@@ -195,10 +200,12 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       }
       const result = run.tick();
       let history = [...state.history, result];
+      checkpoints.push(run.checkpoint());
       let dropped = state.dropped;
       if (history.length > MAX_HISTORY) {
         const extra = history.length - MAX_HISTORY;
         history = history.slice(extra);
+        checkpoints = checkpoints.slice(extra);
         dropped += extra;
       }
       set({ history, viewIndex: history.length - 1, dropped });
@@ -230,6 +237,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         return;
       }
       history[history.length - 1] = run.snapshot();
+      checkpoints[checkpoints.length - 1] = run.checkpoint();
       set({ history });
     };
 
@@ -239,6 +247,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       const project = deps.getProject();
       if (!root || !project) {
         run = undefined;
+        checkpoints = [];
         set({ history: [], viewIndex: 0, dropped: 0, playing: false });
         return false;
       }
@@ -249,6 +258,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         overrides: state.overrides,
         loops: state.loops,
       });
+      checkpoints = [run.checkpoint()];
       set({
         history: [run.snapshot()],
         viewIndex: 0,
@@ -370,6 +380,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       exit() {
         stopTimer();
         run = undefined;
+        checkpoints = [];
         set({ active: false, history: [], viewIndex: 0, dropped: 0, playing: false });
       },
 
@@ -389,6 +400,26 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         }
         get().pause();
         advance();
+      },
+
+      stepBack() {
+        const state = get();
+        if (!state.active || !run || state.history.length < 2) {
+          return;
+        }
+        get().pause();
+        const history = state.history.slice(0, -1);
+        checkpoints = checkpoints.slice(0, -1);
+        run.restore(checkpoints[checkpoints.length - 1]);
+        // Loops changed after the restored tick still apply.
+        run.setLoops(state.loops);
+        history[history.length - 1] = run.snapshot();
+        checkpoints[checkpoints.length - 1] = run.checkpoint();
+        set({ history, viewIndex: history.length - 1 });
+        const pending = run.pendingManual();
+        if (pending) {
+          focusAndSelect(pending);
+        }
       },
 
       play() {
@@ -600,6 +631,11 @@ export function useRunStore<T>(selector: (state: RunState) => T): T {
 /** The history entry that is currently shown (undefined outside run mode). */
 export function selectViewed(state: RunState): TickResult | undefined {
   return state.active ? state.history[state.viewIndex] : undefined;
+}
+
+/** True when the latest tick can be undone. */
+export function selectCanStepBack(state: RunState): boolean {
+  return state.active && state.history.length > 1;
 }
 
 export function selectIsLive(state: RunState): boolean {

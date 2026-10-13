@@ -61,6 +61,7 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
     items: [
       { title: 'Toggle run mode', commandId: RUN_COMMAND_IDS.toggle, hotkey: 'F5' },
       { title: 'Step', commandId: RUN_COMMAND_IDS.step, hotkey: 'F10' },
+      { title: 'Step back', commandId: RUN_COMMAND_IDS.stepBack, hotkey: 'Shift+F10' },
       { title: 'Play', commandId: RUN_COMMAND_IDS.play, hotkey: 'F8' },
       { title: 'Pause', commandId: RUN_COMMAND_IDS.pause, hotkey: 'F8' },
       { title: 'Reset', commandId: RUN_COMMAND_IDS.reset },

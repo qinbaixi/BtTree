@@ -5,6 +5,7 @@ import {
   MAX_SPEED,
   MIN_SPEED,
   runStore,
+  selectCanStepBack,
   selectIsLive,
   selectViewed,
   useRunStore,
@@ -27,6 +28,7 @@ export default function RunToolbar() {
   const viewed = useRunStore(selectViewed);
   const live = useRunStore(selectIsLive);
   const loops = useRunStore((state) => state.loops);
+  const canStepBack = useRunStore(selectCanStepBack);
   const tickNumber = useRunStore((state) => state.history[state.viewIndex]?.tick ?? 0);
   const lastTick = useRunStore((state) => state.history[state.history.length - 1]?.tick ?? 0);
   const root = useTreeStore((state) => state.root);
@@ -62,6 +64,15 @@ export default function RunToolbar() {
         >
           <i className="fa-solid fa-pause" aria-hidden="true" />
           Pause
+        </button>
+        <button
+          type="button"
+          onClick={() => run.stepBack()}
+          disabled={!canStepBack}
+          title="Step back (Shift+F10)"
+        >
+          <i className="fa-solid fa-backward-step" aria-hidden="true" />
+          Back
         </button>
         <button
           type="button"
