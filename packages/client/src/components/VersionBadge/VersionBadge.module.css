@@ -1,0 +1,68 @@
+/* App version and update status, pinned to the bottom-left corner of every page. */
+.badge {
+  position: fixed;
+  left: 8px;
+  bottom: 8px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-shadow: var(--shadow-sm);
+  opacity: 0.85;
+}
+
+.button {
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.button:disabled {
+  cursor: default;
+}
+
+.accent {
+  opacity: 1;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.accent:hover:not(:disabled) {
+  color: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.success {
+  opacity: 1;
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+
+.success:hover:not(:disabled) {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.warning {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.warning:hover:not(:disabled) {
+  color: var(--warning);
+}

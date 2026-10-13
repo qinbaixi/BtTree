@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary';
+import VersionBadge from './components/VersionBadge/VersionBadge';
 import { installGlobalErrorListeners } from './lib/globalErrors';
 import Editor from './views/Editor';
 import Home from './views/Home';
@@ -18,6 +19,7 @@ export default function App() {
           <Route path="/project" element={<ProjectEditor />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <VersionBadge />
       </ErrorBoundary>
     </BrowserRouter>
   );

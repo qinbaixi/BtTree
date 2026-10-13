@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  canInstallUpdates,
   candidatePorts,
   DEFAULT_WINDOW_STATE,
   nextPendingRoute,
@@ -99,5 +100,21 @@ describe('nextPendingRoute and startupRoute', () => {
     expect(startupRoute('/tree?path=queued', '/tree?path=argv')).toBe('/tree?path=queued');
     expect(startupRoute(undefined, '/tree?path=argv')).toBe('/tree?path=argv');
     expect(startupRoute(undefined, '/')).toBe('/');
+  });
+});
+
+describe('canInstallUpdates', () => {
+  it('updates the installed Windows app and a Linux AppImage', () => {
+    expect(canInstallUpdates(true, 'win32', {})).toBe(true);
+    expect(canInstallUpdates(true, 'linux', { APPIMAGE: '/opt/owl-bt.AppImage' })).toBe(true);
+  });
+
+  it('does not update the portable exe, other Linux builds, macOS or development', () => {
+    expect(canInstallUpdates(true, 'win32', { PORTABLE_EXECUTABLE_FILE: 'C:\\owl-bt.exe' })).toBe(
+      false,
+    );
+    expect(canInstallUpdates(true, 'linux', {})).toBe(false);
+    expect(canInstallUpdates(true, 'darwin', {})).toBe(false);
+    expect(canInstallUpdates(false, 'win32', {})).toBe(false);
   });
 });

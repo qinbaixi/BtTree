@@ -940,6 +940,16 @@ module.exports = {
 - 安装包：`release/owl-bt-setup-x.y.z.exe`（NSIS，可选择安装目录，创建桌面和开始菜单快捷方式）
 - 便携版：`release/owl-bt-portable-x.y.z.exe`（无需安装，直接运行）
 - 未打包目录：`release/win-unpacked/owl-bt.exe`
+- 更新信息：`release/latest.yml`（发布时随安装包一起上传，已安装的应用靠它检查和下载更新）
+
+### 版本与更新
+
+窗口左下角显示当前版本。启动几秒后应用会向 GitHub Releases 查询最新版本：已是最新时显示 `vX.Y.Z · Latest`，有新版本时显示 `Update to vX.Y.Z`。
+
+- 安装版：点击后在后台下载新版本并显示进度，下载完成后显示 `Restart to update to vX.Y.Z`。点击立即重启并安装（有未保存的修改时会先询问）；不点击的话，下次关闭应用时自动安装，再次打开即为新版本。
+- 便携版、macOS 和开发模式：无法自行替换，点击后在浏览器中打开新版本的下载页面。
+- 在浏览器中使用（`npm run dev` 或 CLI）时只显示版本号。
+- 检查失败（例如没有网络）时显示 `Update failed`，鼠标悬停可看原因，点击重试。
 
 ### 用户数据
 

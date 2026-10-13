@@ -11,3 +11,4 @@ export * from './projectEdit';
 export * from './fuzzy';
 export * from './export';
 export * from './runtime';
+export * from './appUpdate';

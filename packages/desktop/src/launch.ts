@@ -1,4 +1,4 @@
-/** Pure helpers for the desktop main process: ports, launch arguments, window state. */
+/** Pure helpers for the desktop main process: ports, launch arguments, window state, updates. */
 import { resolve } from 'node:path';
 
 export interface WindowState {
@@ -112,4 +112,24 @@ export function nextPendingRoute(
 /** Route of the first window: the request queued while starting, otherwise the route of this launch. */
 export function startupRoute(pending: string | undefined, initial: string): string {
   return pending ?? initial;
+}
+
+/** Whether this build can replace itself: the installed Windows app or a Linux AppImage. */
+export function canInstallUpdates(
+  isPackaged: boolean,
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+): boolean {
+  if (!isPackaged) {
+    return false;
+  }
+  if (platform === 'win32') {
+    // The portable exe extracts itself to a temp folder on every launch; there is nothing to update.
+    return env.PORTABLE_EXECUTABLE_FILE === undefined;
+  }
+  if (platform === 'linux') {
+    return env.APPIMAGE !== undefined;
+  }
+  // macOS builds are not signed, and electron-updater only updates signed apps there.
+  return false;
 }

@@ -6,6 +6,7 @@ directories:
   buildResources: build
 files:
   - dist/main.cjs
+  - dist/preload.cjs
   - build/icon.png
   - package.json
 extraResources:
@@ -14,6 +15,12 @@ extraResources:
   - from: ../server/templates
     to: templates
 asar: true
+# Where the installed app looks for updates (resources/app-update.yml). The builds are published by
+# .github/workflows/release.yml, not by electron-builder (--publish never).
+publish:
+  provider: github
+  owner: qinbaixi
+  repo: BtTree
 win:
   target:
     - target: nsis
