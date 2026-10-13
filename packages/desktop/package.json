@@ -1,6 +1,6 @@
 {
   "name": "@owlbt/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "owl-bt desktop app: the editor in an Electron window",
   "author": "owl-bt",
@@ -14,8 +14,8 @@
     "dist:current": "electron-builder --publish never"
   },
   "devDependencies": {
-    "@owlbt/server": "0.1.0",
-    "@owlbt/shared": "0.1.0",
+    "@owlbt/server": "*",
+    "@owlbt/shared": "*",
     "electron": "44.7.0",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.27.7"

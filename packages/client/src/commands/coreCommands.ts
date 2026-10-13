@@ -27,6 +27,7 @@ import { readClipboard, writeClipboard } from '../lib/clipboard';
 import { navigateTo, projectEditorUrl, type ProjectEditorLink } from '../lib/appNavigation';
 import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
+import { runStore } from '../store/runStore';
 import { getSelectedItem, selectCanRedo, selectCanUndo, type TreeStore } from '../store/treeStore';
 import {
   addItemToNode,
@@ -41,6 +42,11 @@ import { commandRegistry, registerCommand, type Command, type CommandContext } f
 import { formatHotkey } from './useHotkeys';
 
 export const COMMAND_PALETTE_ID = 'core:CommandPalette';
+
+/** The tree is read-only while run mode is on. */
+function editable(): boolean {
+  return !runStore.getState().active;
+}
 
 function currentTarget(ctx: CommandContext) {
   const { root, selection } = ctx.tree.getState();
@@ -113,7 +119,9 @@ const add: Command = {
   hotkey: 'ins',
   contextMenuOrder: 100,
   canExec(ctx) {
-    return currentTarget(ctx) !== undefined && ctx.project.getState().project !== undefined;
+    return (
+      editable() && currentTarget(ctx) !== undefined && ctx.project.getState().project !== undefined
+    );
   },
   exec(ctx) {
     const target = currentTarget(ctx);
@@ -139,7 +147,7 @@ const remove: Command = {
   contextMenuOrder: 300,
   canExec(ctx) {
     const { root, selection } = ctx.tree.getState();
-    if (!root || !selection || getSelectedItem(root, selection) === undefined) {
+    if (!editable() || !root || !selection || getSelectedItem(root, selection) === undefined) {
       return false;
     }
     return !(selection.kind === 'node' && selection.nodeId === root.id);
@@ -203,7 +211,7 @@ const paste: Command = {
   canExec(ctx) {
     const target = currentTarget(ctx);
     const clip = readClipboard();
-    if (!target || !clip) {
+    if (!editable() || !target || !clip) {
       return false;
     }
     return clip.itemType !== 'node' || isCompositeNode(ctx.project.getState().project, target.node);
@@ -261,7 +269,7 @@ const undo: Command = {
   name: 'Undo',
   hotkey: 'mod+z',
   canExec(ctx) {
-    return selectCanUndo(ctx.tree.getState());
+    return editable() && selectCanUndo(ctx.tree.getState());
   },
   exec(ctx) {
     ctx.tree.getState().undo();
@@ -273,7 +281,7 @@ const redo: Command = {
   name: 'Redo',
   hotkey: 'mod+y',
   canExec(ctx) {
-    return selectCanRedo(ctx.tree.getState());
+    return editable() && selectCanRedo(ctx.tree.getState());
   },
   exec(ctx) {
     ctx.tree.getState().redo();
@@ -309,6 +317,7 @@ function moveNodeCommand(name: string, hotkey: string, delta: -1 | 1, order: num
     canExec(ctx) {
       const { root, selection } = ctx.tree.getState();
       return (
+        editable() &&
         root !== undefined &&
         selection !== undefined &&
         selection.kind === 'node' &&
@@ -337,6 +346,7 @@ function moveSubItemCommand(name: string, hotkey: string, delta: -1 | 1, order: 
     canExec(ctx) {
       const { root, selection } = ctx.tree.getState();
       return (
+        editable() &&
         root !== undefined &&
         selection !== undefined &&
         selection.kind !== 'node' &&
@@ -403,7 +413,7 @@ const setNodeTypeCommand: Command = {
   contextMenuOrder: 300,
   canExec(ctx) {
     const target = currentTarget(ctx);
-    return target?.kind === 'node' && ctx.project.getState().project !== undefined;
+    return editable() && target?.kind === 'node' && ctx.project.getState().project !== undefined;
   },
   exec(ctx) {
     const target = currentTarget(ctx);
@@ -575,6 +585,119 @@ const editProjectTypes: Command = {
   },
 };
 
+export const RUN_COMMAND_IDS = {
+  toggle: 'core:ToggleRunMode',
+  step: 'core:RunStep',
+  playPause: 'core:RunPlayPause',
+  play: 'core:RunPlay',
+  pause: 'core:RunPause',
+  reset: 'core:RunReset',
+  breakpoint: 'core:ToggleBreakpoint',
+} as const;
+
+const toggleRunMode: Command = {
+  id: RUN_COMMAND_IDS.toggle,
+  name: 'Run: Toggle run mode',
+  hotkey: 'f5',
+  allowInInput: true,
+  canExec(ctx) {
+    return (
+      runStore.getState().active ||
+      (ctx.tree.getState().root !== undefined && ctx.project.getState().project !== undefined)
+    );
+  },
+  exec() {
+    const run = runStore.getState();
+    if (run.active) {
+      run.exit();
+    } else {
+      run.enter();
+    }
+  },
+};
+
+const runStep: Command = {
+  id: RUN_COMMAND_IDS.step,
+  name: 'Run: Step',
+  hotkey: 'f10',
+  allowInInput: true,
+  canExec() {
+    const state = runStore.getState();
+    const latest = state.history[state.history.length - 1];
+    return state.active && latest !== undefined && !latest.finished && !latest.pendingManual;
+  },
+  exec() {
+    runStore.getState().step();
+  },
+};
+
+const runPlayPause: Command = {
+  id: RUN_COMMAND_IDS.playPause,
+  name: 'Run: Play / Pause',
+  hotkey: 'f8',
+  allowInInput: true,
+  canExec() {
+    return runStore.getState().active;
+  },
+  exec() {
+    runStore.getState().togglePlay();
+  },
+};
+
+const runPlay: Command = {
+  id: RUN_COMMAND_IDS.play,
+  name: 'Run: Play',
+  allowInInput: true,
+  canExec() {
+    const state = runStore.getState();
+    return (
+      state.active && !state.playing && !state.history[state.history.length - 1]?.pendingManual
+    );
+  },
+  exec() {
+    runStore.getState().play();
+  },
+};
+
+const runPause: Command = {
+  id: RUN_COMMAND_IDS.pause,
+  name: 'Run: Pause',
+  allowInInput: true,
+  canExec() {
+    const state = runStore.getState();
+    return state.active && state.playing;
+  },
+  exec() {
+    runStore.getState().pause();
+  },
+};
+
+const runReset: Command = {
+  id: RUN_COMMAND_IDS.reset,
+  name: 'Run: Reset',
+  canExec() {
+    return runStore.getState().active;
+  },
+  exec() {
+    runStore.getState().reset();
+  },
+};
+
+const toggleBreakpoint: Command = {
+  id: RUN_COMMAND_IDS.breakpoint,
+  name: 'Toggle breakpoint',
+  contextMenuOrder: 400,
+  canExec(ctx) {
+    return runStore.getState().active && ctx.tree.getState().selection !== undefined;
+  },
+  exec(ctx) {
+    const selection = ctx.tree.getState().selection;
+    if (selection) {
+      runStore.getState().toggleBreakpoint(selection.nodeId);
+    }
+  },
+};
+
 export const THEME_COMMAND_IDS: Record<ThemeId, string> = {
   light: 'core:ThemeLight',
   classic: 'core:ThemeClassic',
@@ -625,6 +748,13 @@ export const coreCommands: Command[] = [
   themeLight,
   themeClassic,
   editProjectTypes,
+  toggleRunMode,
+  runStep,
+  runPlayPause,
+  runPlay,
+  runPause,
+  runReset,
+  toggleBreakpoint,
 ];
 
 for (const command of coreCommands) {

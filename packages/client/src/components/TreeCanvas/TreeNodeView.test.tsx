@@ -58,9 +58,9 @@ describe('TreeNodeView', () => {
     const wait = tree().childNodes[0];
     wait.properties.duration = -5;
     const { container } = renderNode(wait);
-    expect(container.querySelector('[data-item-kind="node"]')?.getAttribute('data-item-invalid')).toBe(
-      'true',
-    );
+    expect(
+      container.querySelector('[data-item-kind="node"]')?.getAttribute('data-item-invalid'),
+    ).toBe('true');
   });
 
   it('leaves valid items unmarked and applies the sub item selection', () => {

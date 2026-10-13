@@ -7,6 +7,8 @@ export interface SidePanelProps {
   /** Used for the persisted expand state (`panel-expand-<name>`). */
   name: string;
   position: 'left' | 'right';
+  /** Width of the expanded panel in px (default 240). */
+  width?: number;
   children?: ReactNode;
 }
 
@@ -14,7 +16,7 @@ export function expandStorageKey(name: string): string {
   return `panel-expand-${name}`;
 }
 
-export default function SidePanel({ title, name, position, children }: SidePanelProps) {
+export default function SidePanel({ title, name, position, width, children }: SidePanelProps) {
   const [expanded, setExpanded] = useState<boolean>(() => {
     const stored = getJson<unknown>(expandStorageKey(name), true);
     return typeof stored === 'boolean' ? stored : true;
@@ -54,7 +56,7 @@ export default function SidePanel({ title, name, position, children }: SidePanel
   }
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} style={width === undefined ? undefined : { flexBasis: width }}>
       <h2
         className={styles.title}
         role="button"

@@ -127,3 +127,36 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
+
+.runItem {
+  margin-left: 8px;
+}
+
+.runButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.runButton:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.runButton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.runButtonActive {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}

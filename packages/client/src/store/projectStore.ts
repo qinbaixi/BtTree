@@ -1,5 +1,10 @@
 import { io } from 'socket.io-client';
-import { parseAndCompileProject, type CompiledProject, type ProjectReloadPayload } from '@owlbt/shared';
+import {
+  parseAndCompileProject,
+  type CompiledProject,
+  type ProjectReloadPayload,
+  type ScenarioJson,
+} from '@owlbt/shared';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { fetchProject } from '../lib/api';
@@ -32,6 +37,8 @@ export const defaultSocketFactory: SocketFactory = (treePath) => {
 export interface ProjectState {
   treePath?: string;
   project?: CompiledProject;
+  /** Run mode scenarios of the project file (empty without any). */
+  scenarios: ScenarioJson[];
   /** Last load/parse error. Cleared on the next successful project update. */
   error?: string;
   /** Increments on every successful project update. */
@@ -48,6 +55,27 @@ const defaultDeps: ProjectStoreDeps = {
   fetchProject,
   createSocket: defaultSocketFactory,
 };
+
+/** Valid scenarios of the project text (entries without a name or blackboard object are skipped). */
+export function parseScenarios(text: string): ScenarioJson[] {
+  try {
+    const parsed = JSON.parse(text) as { scenarios?: unknown };
+    if (!Array.isArray(parsed.scenarios)) {
+      return [];
+    }
+    return parsed.scenarios.filter(
+      (entry): entry is ScenarioJson =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as ScenarioJson).name === 'string' &&
+        typeof (entry as ScenarioJson).blackboard === 'object' &&
+        (entry as ScenarioJson).blackboard !== null &&
+        !Array.isArray((entry as ScenarioJson).blackboard),
+    );
+  } catch {
+    return [];
+  }
+}
 
 export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
   const { fetchProject: fetchText, createSocket } = { ...defaultDeps, ...deps };
@@ -78,12 +106,18 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
         return false;
       }
       dismissErrorAlert();
-      set((state) => ({ project: result.project, error: undefined, version: state.version + 1 }));
+      set((state) => ({
+        project: result.project,
+        scenarios: parseScenarios(text),
+        error: undefined,
+        version: state.version + 1,
+      }));
       return true;
     };
 
     return {
       version: 0,
+      scenarios: [],
 
       async load(treePath) {
         const token = ++loadToken;

@@ -29,10 +29,7 @@ export class CanvasController {
    * Sets the canvas callbacks. `onContextMenu` receives `undefined` when the background is
    * right-clicked; `onResize` is called when a node element changes its size.
    */
-  bind(callbacks: {
-    onContextMenu?: ContextMenuHandler;
-    onResize?: () => void;
-  }): void {
+  bind(callbacks: { onContextMenu?: ContextMenuHandler; onResize?: () => void }): void {
     this.contextMenuHandler = callbacks.onContextMenu;
     this.resizeHandler = callbacks.onResize;
   }

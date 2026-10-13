@@ -22,6 +22,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - [安装与使用](#安装与使用)
 - [项目文件（owl-bt.json）](#项目文件owl-btjson)
 - [项目编辑器（图形化编辑 owl-bt.json）](#项目编辑器图形化编辑-owl-btjson)
+- [运行模式（模拟执行行为树）](#运行模式模拟执行行为树)
 - [树文件（tree）格式](#树文件tree格式)
 - [导出 Erlang / Lua / TypeScript / C#](#导出-erlang--lua--typescript--c)
 - [桌面版（Electron）](#桌面版electron)
@@ -41,6 +42,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
 - **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
+- **运行模式**：在编辑器里按 tick 模拟执行行为树，带黑板、场景、断点、回放和日志，无需游戏引擎。
 - **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
 - **主题**：默认明亮主题，可切换为原版风格的深色主题。
@@ -78,6 +80,7 @@ npm run dev          # 打开 http://localhost:5173
 │   │       ├── navigation.ts     # 键盘导航
 │   │       ├── validation.ts     # 属性校验、缺失类型检查
 │   │       ├── describe.ts       # 描述模板 {{Prop}} 替换
+│   │       ├── runtime/          # 运行模式：表达式解析器（expr.ts）、行为树模拟引擎（engine.ts）、simulate 校验
 │       ├── projectEdit.ts     # 项目文件编辑（增删改名、继承、属性、自定义类型）与校验
 │   │       ├── fuzzy.ts          # 模糊搜索与匹配高亮
 │   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# 生成器
@@ -100,9 +103,9 @@ npm run dev          # 打开 http://localhost:5173
 │   │   ├── scripts/              # gen-icons.mjs：生成 src/lib/faIcons.generated.ts（Font Awesome 实心图标名）
 │   │   └── src/
 │   │       ├── views/            # 首页（Home）、树编辑器（Editor）与项目编辑器（ProjectEditor）
-│   │       ├── components/       # 画布、属性面板、类型面板、对话框、菜单等；ProjectEditor/ 为项目编辑器的各面板
+│   │       ├── components/       # 画布、属性面板、类型面板、对话框、菜单等；ProjectEditor/ 为项目编辑器的各面板，RunMode/ 为运行模式的工具条、左侧面板与日志
 │   │       ├── commands/         # 命令注册、快捷键、导出命令
-│   │       ├── store/            # zustand 状态（树、项目、项目编辑器、提示、对话框、类型查看）
+│   │       ├── store/            # zustand 状态（树、项目、项目编辑器、运行模式 runStore、提示、对话框、类型查看）
 │   │       ├── lib/              # API 封装、剪贴板、最近打开、主题、页面跳转、图标列表等
 │   │       └── styles/           # 全局样式与主题变量
 │   └── desktop/                  # @owlbt/desktop：Electron 桌面版
@@ -111,7 +114,8 @@ npm run dev          # 打开 http://localhost:5173
 │       ├── build/                # 应用图标
 │       └── electron-builder.yml  # 安装包 / 便携版配置
 ├── samples/
-│   └── basic/                    # 示例项目：owl-bt.json、owl-bt.js 插件、trees/demo.json
+│   ├── basic/                    # 示例项目：owl-bt.json、owl-bt.js 插件、trees/demo.json
+│   └── simulation/               # 运行模式示例：simulate 规则、三个场景、trees/guard.json
 ├── package.bat                   # Windows 一键打包桌面版
 ├── package.sh                    # macOS / Linux 一键打包桌面版
 ├── CHANGELOG.md
@@ -397,6 +401,102 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 - 文件在磁盘上被其他程序修改后，若没有未保存的修改，编辑器会自动重新载入并保留当前选中项；若有未保存的修改，顶部显示「项目文件已在磁盘上改变」，可选择「Reload」（放弃修改，使用磁盘内容）或「Keep mine」（保留修改，之后保存时会再次询问）。
 - 保存时若文件已被修改，会弹出对话框：「Reload from disk」（放弃修改，重新载入）、「Overwrite」（用当前修改覆盖文件）或「Cancel」。
 - 离开页面时若有未保存的修改，浏览器会提示确认。
+
+</details>
+
+## 运行模式（模拟执行行为树）
+
+在树编辑器里点击顶部的「Run」（或按 `F5`）进入运行模式，不需要游戏引擎就能按 tick 单步或连续地模拟一棵树：观察每个节点的状态、黑板的变化，并在断点处停下。
+
+<details>
+<summary>运行控制、黑板与场景、断点与回放、simulate 规则、表达式语法、tick 语义</summary>
+
+### 运行控制
+
+- 运行模式下树是只读的：编辑命令（添加、删除、移动、粘贴、撤销 / 重做、设置节点类型）不可用，右侧属性面板的输入框被禁用。再次点击「Exit run」或按 `F5` 返回编辑。
+- 面包屑下方的工具条：**Play / Pause**（`F8`）、**Step**（`F10`，执行一个 tick）、**Reset**（用当前的树、项目、起始黑板和参数覆盖重新开始）、速度滑块（0.5 – 10 tick/秒）、当前 tick、状态（Ready / Running / Success / Failure / Waiting for manual result）。
+- **Loops**（循环次数）：紧跟 Play / Step / Reset 之后的数字输入框（整数 ≥ 0，默认 1，记在浏览器的 `owlbt.runLoops` 里）。1 表示根节点结束就停止；N 表示整棵树连续运行 N 次；0 表示一直循环，直到点击 Pause、命中断点或遇到手动节点。每次运行之间黑板的值和 tick 计数保持不变，冷却（cooldown）时间戳也保留；节点状态、复合节点的进度、loop 装饰器的计数、时间限制和服务则随新的一次运行重新开始。运行中可随时修改 Loops，调低到不超过当前轮数时当前这一轮就是最后一轮。循环时工具条显示「Run 2/5」（无限时为「Run 3/∞」），结束后显示「Finished after 5 runs: Success」；日志里每个 tick 带「Run N」标记，每轮之间有分隔线，日志过滤器新增「Run」类别。为避免内存无限增长，只保留最近 5000 个 tick，更早的会被丢弃并在日志里提示。
+- 遇到手动节点（见下文）时运行暂停，工具条出现「Succeed / Fail」按钮，同时聚焦该节点；按下后再 Step 或 Play 继续。
+- 画布上：运行中的节点有蓝色光环并轻微脉动；成功为绿色环加 ✓，失败为红色环加 ✕；装饰器显示通过 / 失败徽标，服务在执行当拍显示闪电徽标。
+- 运行结束（根节点成功或失败）后不会自动重新开始：点「Reset」，或点「Replay」从头播放。
+
+### 黑板与场景
+
+左侧「Run」面板（替代物品面板）分三部分：
+
+- **Scenario**：场景是一组命名的起始黑板，保存在 `owl-bt.json` 的 `scenarios` 中。选择场景即载入并重置运行；「Save as scenario…」把当前起始黑板保存为场景（同名会询问是否覆盖，保存时若文件已被修改会提示冲突而不覆盖）；「Delete」删除所选场景。
+- **Blackboard**：键、类型（number / string / boolean / null）、值。显示的是当前查看的那一拍的值，相对上一拍发生变化的键会高亮；运行过程中由 effects 新建的键标为 runtime。在最新一拍修改会**立即作用于正在运行的黑板**，同时记为起始值（重置后依然有效）；查看过去的 tick 时只读。
+- **Node parameters**：为所选节点 / 装饰器 / 服务的属性设置**仅限本次运行**的覆盖值（不会修改树）。覆盖过的属性高亮显示，可逐项清除或「Clear overrides」。修改覆盖值会重新开始运行。
+
+### 断点、回放与日志
+
+- **断点**：点节点卡片左上角的小圆点，或右键菜单「Toggle breakpoint」。连续播放时，只要某个设有断点的节点在这一拍被进入，播放就会暂停并聚焦该节点。
+- **日志**（底部可折叠面板）：每行形如 `[tick 3] Attack (Fire): Ammo: 1 → 0`，可按类别（Enter / Result / Decorator / Service / Blackboard / Error）过滤，点击一行选中并聚焦对应节点、装饰器或服务。
+- **回放**：日志面板的时间轴滑块可回看任意已执行的 tick，画布、黑板和日志都显示那一拍的状态，工具条提示「Viewing tick 3 of 7 — back to live」。回放时 Play / Step 会先回到最新一拍再继续。
+
+### simulate 规则（owl-bt.json）
+
+模拟需要知道每个类型怎么「执行」，这些规则写在类型的 `simulate` 字段里；全部可选，旧项目不受影响，`simulate` 按字段从基类继承（子类型的同名字段覆盖基类）。
+
+```json
+{
+  "name": "Attack",
+  "simulate": {
+    "mode": "rule",
+    "duration": 1,
+    "condition": "Ammo > 0",
+    "effects": ["Ammo = Ammo - 1"]
+  }
+}
+```
+
+| 字段 | 适用 | 说明 |
+| --- | --- | --- |
+| `mode` | 行为节点 | `success` / `failure`：直接得出结果；`manual`：停下来等你点 Succeed / Fail；`rule`：按 `duration` 和 `condition` 得出结果。省略时为 `manual`；但只要设置了 `condition`、`duration` 或 `effects` 之一，默认改为 `rule` |
+| `duration` | 行为节点 | 节点保持 RUNNING 的 tick 数，数字或表达式（如 `"{{Duration}}"`、`"{{Distance}} / {{Speed}}"`）。默认 0：在进入的同一拍就结束 |
+| `condition` | 行为节点、装饰器 | 表达式。行为节点（`rule`）结束时结果为 `condition ? success : failure`，不写则成功；装饰器见下 |
+| `effects` | 行为节点、服务 | 黑板赋值列表，如 `["Ammo = Ammo - 1", "Target = {{Key}}"]`。行为节点成功时依次执行；服务在每次触发时执行 |
+| `composite` | 组合节点 | `selector` / `sequence` / `parallel` / `randomSelector`。省略时按类型名（不区分大小写，也看直接基类）匹配 Selector、Sequence、Parallel、RandomSelector，都不匹配则为 sequence |
+| `decorator` | 装饰器 | 内置行为：`invert`（反转结果）、`forceSuccess`、`forceFailure`、`loop`、`cooldown`、`timeLimit` |
+| `count` | `loop` | 重复次数，数字或表达式，默认 1；负数表示无限循环 |
+| `ticks` | `cooldown`、`timeLimit` | 冷却 / 限时的 tick 数，数字或表达式 |
+
+要点：
+
+- **装饰器**不按名字猜含义。有 `condition` 的装饰器在所属节点开始时检查，不通过则节点直接失败；若勾选了 *Periodic check*，节点运行期间每个 tick 再检查，变为不通过时中止节点（连同运行中的子节点）并失败。*Inverse check condition* 会把检查结果取反。没有 `condition` 且不是内置类型的装饰器总是通过。同一节点上有多个结果类装饰器时，从最内层（列表中最后一个）开始依次作用于结果。多个 `loop` 的次数相乘。
+- **Parallel**：默认全部子节点成功才成功，任一失败则立即失败；若节点有名为 `Policy` 的属性且值为 `RequireOne`，则任一子节点成功即成功、全部失败才失败。结束时会中止仍在运行的子节点。
+- **RandomSelector**：每次进入时按带种子的伪随机数打乱子节点顺序（默认种子 1，同样的输入得到同样的结果）；如有 `Weights` 属性（逗号分隔的权重），则按权重抽取。
+- **服务**：所属节点运行期间，从节点开始的那一拍起每 `timeBetweenTicks` 个 tick（至少 1，向下取整）执行一次 `effects`，`firstTickTime` 为首次执行相对节点开始的偏移 tick 数。1 tick 视为 1 秒。
+- `cooldown`：节点结束（成功或失败）后的 `ticks` 个 tick 内再次进入会直接失败；`timeLimit`：节点运行满 `ticks` 个 tick 仍未结束则中止并失败。
+- 运行时的表达式错误（语法、除零、类型不符）会让节点失败并在日志中记一条 Error；服务里的错误只记录日志。
+
+默认模板为 Wait、Log、MoveTo、Succeed、Fail 以及 Failure / Invert / Success / Cooldown / Loop / TimeLimit 装饰器预置了规则。项目编辑器的类型表单有可折叠的「Simulation」区（模式、时长、条件、effects 列表、组合 / 装饰器类型，并用同一套解析器即时校验表达式），左侧列表有「Scenarios」入口用于编辑场景；`validateProjectFile` 会报告无效的表达式和重复的场景名。
+
+### 场景（scenarios）
+
+```json
+{
+  "scenarios": [
+    { "name": "Enemy in sight", "description": "有敌人，只剩 1 发弹药", "blackboard": { "Enemy": true, "Ammo": 1 } },
+    { "name": "No enemy", "blackboard": { "Enemy": false, "Ammo": 3 } }
+  ]
+}
+```
+
+### 表达式语法
+
+用于 `condition`、`effects`、`duration`、`count`、`ticks`。不使用 `eval`，由自带的解析器求值。
+
+- 字面量：数字、字符串（`'…'` 或 `"…"`）、`true`、`false`、`null`。
+- 标识符：黑板键（不存在时为 `null`）。`{{Prop}}`：当前节点 / 装饰器 / 服务的属性值（先看「Node parameters」的覆盖值，再看树上设置的值，最后是默认值）。
+- 运算符（优先级从低到高）：`||`、`&&`、`== !=`、`< <= > >=`、`+ -`、`* / %`、一元 `- !`，以及括号。`+` 遇到字符串时拼接；缺失的键（`null`）参与数值运算时按 0 处理；`!`、`&&`、`||` 按真值判断（`null`、`false`、`0`、`""` 为假）。
+- 赋值只能出现在 `effects` 中：`Key = 表达式`。
+
+### tick 语义
+
+1 tick = 1 秒。每个 tick 从根节点开始遍历，RUNNING 的节点从上次的位置继续（Sequence / Selector 记住当前子节点，Parallel 记住各子节点的结果）。节点状态为 idle / running / success / failure；节点重新进入时，其整棵子树先回到 idle。根节点结束后运行即结束。一个 tick 内，Sequence / Selector 会在子节点结束后立刻继续下一个子节点，所以 `duration` 为 0 的行为节点不占用 tick；`loop` 的每一轮在下一个 tick 开始，避免无限循环。
+
+示例见 `samples/simulation`：用 `guard.json` 配合三个场景（Enemy in sight / No enemy / Out of ammo）体验战斗、装填、冷却、巡逻与手动节点。
 
 </details>
 
@@ -717,6 +817,9 @@ module.exports = {
 | `←` / `→` | 选择左侧 / 右侧节点 |
 | `Shift+←` / `Shift+→` | 左移 / 右移节点 |
 | `Shift+↑` / `Shift+↓` | 上移 / 下移装饰器或服务 |
+| `F5` | 进入 / 退出运行模式 |
+| `F8` | 运行模式：播放 / 暂停 |
+| `F10` | 运行模式：单步（一个 tick） |
 
 「聚焦选中节点」和「设置节点类型」没有默认快捷键，可在命令面板（`Ctrl+Shift+P`）中执行。
 

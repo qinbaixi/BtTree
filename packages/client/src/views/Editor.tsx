@@ -9,6 +9,9 @@ import ContextMenu, {
 import { FuzzyDialogHost } from '../components/FuzzyDialog/FuzzyDialog';
 import ItemPalette from '../components/ItemPalette/ItemPalette';
 import PluginBanner from '../components/PluginBanner/PluginBanner';
+import RunLog from '../components/RunMode/RunLog';
+import RunPanel from '../components/RunMode/RunPanel';
+import RunToolbar from '../components/RunMode/RunToolbar';
 import PropertyPanel from '../components/PropertyPanel/PropertyPanel';
 import SidePanel from '../components/SidePanel/SidePanel';
 import TopMenu from '../components/TopMenu/TopMenu';
@@ -21,6 +24,7 @@ import { setNavigator } from '../lib/appNavigation';
 import { getPathLastSegment, registerMru } from '../lib/mru';
 import { alertStore, alerts } from '../store/alertStore';
 import { projectStore, useProjectStore } from '../store/projectStore';
+import { runStore, useRunStore } from '../store/runStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
 
@@ -43,6 +47,7 @@ function EditorPage({ treePath }: { treePath: string }) {
   const project = useProjectStore((state) => state.project);
   const dirty = useTreeStore((state) => state.dirty);
   const loadCount = useTreeStore((state) => state.loadCount);
+  const runActive = useRunStore((state) => state.active);
   const missingAlertId = useRef<number | undefined>(undefined);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | undefined>(undefined);
 
@@ -71,6 +76,7 @@ function EditorPage({ treePath }: { treePath: string }) {
     void treeStore.getState().load(treePath);
     return () => {
       projectStore.getState().disconnect();
+      runStore.getState().exit();
     };
   }, [treePath]);
 
@@ -129,13 +135,23 @@ function EditorPage({ treePath }: { treePath: string }) {
         </ol>
         <PluginBanner treePath={treePath} />
         <AlertPanel />
+        {runActive && <RunToolbar />}
       </div>
       <div className={styles.main}>
-        <SidePanel title="Item palette" name="item-palette" position="left">
-          <ItemPalette />
+        <SidePanel
+          key={runActive ? 'run' : 'palette'}
+          title={runActive ? 'Run' : 'Item palette'}
+          name={runActive ? 'run-panel' : 'item-palette'}
+          position="left"
+          width={runActive ? 300 : undefined}
+        >
+          {runActive ? <RunPanel /> : <ItemPalette />}
         </SidePanel>
         <div className={styles.treeArea}>
-          <TreeCanvas onContextMenu={openContextMenu} />
+          <div className={styles.canvasWrap}>
+            <TreeCanvas onContextMenu={openContextMenu} />
+          </div>
+          {runActive && <RunLog />}
         </div>
         <SidePanel title="Item Details" name="item-details" position="right">
           <PropertyPanel />

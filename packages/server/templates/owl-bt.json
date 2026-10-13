@@ -70,6 +70,10 @@
             "base": "ActionBase",
             "icon": "hourglass-half",
             "description": "等待 {{Duration}} 秒",
+            "simulate": {
+                "mode": "rule",
+                "duration": "{{Duration}}"
+            },
             "properties": [
                 {
                     "name": "Duration",
@@ -85,6 +89,9 @@
             "base": "ActionBase",
             "icon": "message",
             "description": "输出日志 [{{Level}}] {{Message}}",
+            "simulate": {
+                "mode": "success"
+            },
             "properties": [
                 {
                     "name": "Message",
@@ -104,6 +111,10 @@
             "base": "ActionBase",
             "icon": "person-walking",
             "description": "以速度 {{Speed}} 移动到 {{Target}}",
+            "simulate": {
+                "mode": "success",
+                "duration": 2
+            },
             "properties": [
                 {
                     "name": "Target",
@@ -130,6 +141,9 @@
             "base": "ActionBase",
             "icon": "pen",
             "description": "设置黑板值 {{Key}} = {{Value}}",
+            "simulate": {
+                "mode": "success"
+            },
             "properties": [
                 {
                     "name": "Key",
@@ -147,13 +161,19 @@
             "name": "Succeed",
             "base": "ActionBase",
             "icon": "check",
-            "description": "总是成功"
+            "description": "总是成功",
+            "simulate": {
+                "mode": "success"
+            }
         },
         {
             "name": "Fail",
             "base": "ActionBase",
             "icon": "xmark",
-            "description": "总是失败"
+            "description": "总是失败",
+            "simulate": {
+                "mode": "failure"
+            }
         },
         {
             "name": "RandomChance",
@@ -172,15 +192,24 @@
     "decorators": [
         {
             "name": "Failure",
-            "icon": "thumbs-down"
+            "icon": "thumbs-down",
+            "simulate": {
+                "decorator": "forceFailure"
+            }
         },
         {
             "name": "Invert",
-            "icon": "right-left"
+            "icon": "right-left",
+            "simulate": {
+                "decorator": "invert"
+            }
         },
         {
             "name": "Success",
-            "icon": "thumbs-up"
+            "icon": "thumbs-up",
+            "simulate": {
+                "decorator": "forceSuccess"
+            }
         },
         {
             "name": "IsBlackboardValueSet",
@@ -197,6 +226,10 @@
             "name": "Cooldown",
             "icon": "clock",
             "description": "冷却 {{Seconds}} 秒",
+            "simulate": {
+                "decorator": "cooldown",
+                "ticks": "{{Seconds}}"
+            },
             "properties": [
                 {
                     "name": "Seconds",
@@ -211,6 +244,10 @@
             "icon": "repeat",
             "color": "#6fa8c6",
             "description": "循环 {{Count}} 次",
+            "simulate": {
+                "decorator": "loop",
+                "count": "{{Count}}"
+            },
             "properties": [
                 {
                     "name": "Count",
@@ -230,6 +267,10 @@
             "name": "TimeLimit",
             "icon": "stopwatch",
             "description": "限时 {{Seconds}} 秒",
+            "simulate": {
+                "decorator": "timeLimit",
+                "ticks": "{{Seconds}}"
+            },
             "properties": [
                 {
                     "name": "Seconds",

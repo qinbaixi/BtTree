@@ -3,9 +3,11 @@ import { commandContext, commandRegistry, execCommand } from '../../commands/reg
 import {
   EDIT_PROJECT_COMMAND_ID,
   EXPORT_COMMAND_IDS,
+  RUN_COMMAND_IDS,
   THEME_COMMAND_IDS,
 } from '../../commands/coreCommands';
 import { useProjectStore } from '../../store/projectStore';
+import { useRunStore } from '../../store/runStore';
 import { useTreeStore } from '../../store/treeStore';
 import { useTheme, type ThemeId } from '../../lib/theme';
 import styles from './TopMenu.module.css';
@@ -53,6 +55,16 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
       { title: 'Theme: Classic dark', commandId: THEME_COMMAND_IDS.classic, themeId: 'classic' },
     ],
   },
+  {
+    name: 'Run',
+    items: [
+      { title: 'Toggle run mode', commandId: RUN_COMMAND_IDS.toggle, hotkey: 'F5' },
+      { title: 'Step', commandId: RUN_COMMAND_IDS.step, hotkey: 'F10' },
+      { title: 'Play', commandId: RUN_COMMAND_IDS.play, hotkey: 'F8' },
+      { title: 'Pause', commandId: RUN_COMMAND_IDS.pause, hotkey: 'F8' },
+      { title: 'Reset', commandId: RUN_COMMAND_IDS.reset },
+    ],
+  },
 ];
 
 function isEnabled(commandId: string): boolean {
@@ -68,6 +80,9 @@ export default function TopMenu() {
   // Re-evaluate enabled state when the tree (incl. undo/redo) or the project changes.
   useTreeStore((state) => state.version);
   useProjectStore((state) => state.version);
+  const runActive = useRunStore((state) => state.active);
+  useRunStore((state) => state.history.length);
+  useRunStore((state) => state.playing);
 
   useEffect(() => {
     if (openSection === undefined) {
@@ -144,6 +159,19 @@ export default function TopMenu() {
           </li>
         );
       })}
+      <li className={styles.runItem}>
+        <button
+          type="button"
+          className={`${styles.runButton} ${runActive ? styles.runButtonActive : ''}`}
+          aria-pressed={runActive}
+          title={runActive ? 'Exit run mode (F5)' : 'Simulate the tree (F5)'}
+          disabled={!isEnabled(RUN_COMMAND_IDS.toggle)}
+          onClick={() => void execCommand(RUN_COMMAND_IDS.toggle)}
+        >
+          <i className={`fa-solid ${runActive ? 'fa-stop' : 'fa-play'}`} aria-hidden="true" />
+          {runActive ? 'Exit run' : 'Run'}
+        </button>
+      </li>
     </ul>
   );
 }

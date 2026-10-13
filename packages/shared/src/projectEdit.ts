@@ -1,11 +1,13 @@
 import { resolveProperty } from './compileProject';
 import { validatePropertyValue } from './validation';
+import { validateSimulate } from './runtime/simulateValidation';
 import type {
   CustomTypeJson,
   ItemKind,
   ItemTypeDescJson,
   ProjectFile,
   PropertyDescJson,
+  ScenarioJson,
 } from './types';
 
 /*
@@ -543,8 +545,28 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
           push(`${propPath}.default`, defaultMessage(prop));
         }
       });
+      for (const issue of validateSimulate(desc.simulate)) {
+        push(`${path}.simulate${issue.field ? '.' + issue.field : ''}`, issue.message);
+      }
     });
   }
+
+  const scenarioNames = new Set<string>();
+  (file.scenarios ?? []).forEach((scenario, index) => {
+    const path = `scenarios[${index}]`;
+    const name = typeof scenario.name === 'string' ? scenario.name.trim() : '';
+    if (name === '') {
+      push(`${path}.name`, 'Scenario name is required');
+    } else if (scenarioNames.has(name)) {
+      push(`${path}.name`, `Duplicate scenario name '${name}'`);
+    } else {
+      scenarioNames.add(name);
+    }
+    const bb = scenario.blackboard;
+    if (typeof bb !== 'object' || bb === null || Array.isArray(bb)) {
+      push(`${path}.blackboard`, 'Scenario blackboard must be an object');
+    }
+  });
 
   return issues;
 }
@@ -654,4 +676,86 @@ export function setBases(file: ProjectFile, kind: ItemKind, name: string, bases:
   updateType(file, kind, name, {
     base: unique.length === 0 ? undefined : unique.length === 1 ? unique[0] : unique,
   });
+}
+
+// ---------- Scenarios (run mode) ----------
+
+export function getScenarios(file: ProjectFile): ScenarioJson[] {
+  return file.scenarios ?? [];
+}
+
+export function findScenario(file: ProjectFile, name: string): ScenarioJson | undefined {
+  return getScenarios(file).find((scenario) => scenario.name === name);
+}
+
+/** `base`, `base 2`, ... — first scenario name that is not used yet. */
+export function uniqueScenarioName(file: ProjectFile, base: string): string {
+  if (!findScenario(file, base)) {
+    return base;
+  }
+  for (let i = 2; ; i++) {
+    const candidate = `${base} ${i}`;
+    if (!findScenario(file, candidate)) {
+      return candidate;
+    }
+  }
+}
+
+/** Appends a scenario. Throws for empty or duplicate names. */
+export function addScenario(file: ProjectFile, scenario: ScenarioJson): void {
+  const name = scenario.name.trim();
+  if (name === '') {
+    throw new Error('Scenario name must not be empty');
+  }
+  if (findScenario(file, name)) {
+    throw new Error(`Duplicate scenario name '${name}'`);
+  }
+  if (!file.scenarios) {
+    file.scenarios = [];
+  }
+  file.scenarios.push({ ...scenario, name });
+}
+
+/** Removes the scenario (and the `scenarios` field when it becomes empty). */
+export function removeScenario(file: ProjectFile, name: string): ScenarioJson | undefined {
+  const list = file.scenarios;
+  const index = list ? list.findIndex((scenario) => scenario.name === name) : -1;
+  if (!list || index < 0) {
+    return undefined;
+  }
+  const [removed] = list.splice(index, 1);
+  if (list.length === 0) {
+    delete file.scenarios;
+  }
+  return removed;
+}
+
+/** Updates a scenario. Undefined values remove the field; renaming to a taken name throws. */
+export function updateScenario(
+  file: ProjectFile,
+  name: string,
+  patch: Partial<ScenarioJson>,
+): void {
+  const scenario = findScenario(file, name);
+  if (!scenario) {
+    throw new Error(`Unknown scenario '${name}'`);
+  }
+  if (typeof patch.name === 'string') {
+    const renamed = patch.name.trim();
+    if (renamed === '') {
+      throw new Error('Scenario name must not be empty');
+    }
+    if (renamed !== name && findScenario(file, renamed)) {
+      throw new Error(`Duplicate scenario name '${renamed}'`);
+    }
+    patch = { ...patch, name: renamed };
+  }
+  const target = scenario as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) {
+      delete target[key];
+    } else {
+      target[key] = value;
+    }
+  }
 }

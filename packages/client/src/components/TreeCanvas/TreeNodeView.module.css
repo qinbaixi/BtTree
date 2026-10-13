@@ -209,6 +209,145 @@
   opacity: 0.8;
 }
 
+/* ---------- Run mode ---------- */
+
+.run_idle {
+  opacity: 0.85;
+}
+
+.node.run_running {
+  box-shadow:
+    0 0 0 3px var(--info),
+    var(--shadow-sm);
+  animation: runPulse 1.2s ease-in-out infinite;
+}
+
+.node.run_success {
+  box-shadow:
+    0 0 0 3px var(--success),
+    var(--shadow-sm);
+}
+
+.node.run_failure {
+  box-shadow:
+    0 0 0 3px var(--danger),
+    var(--shadow-sm);
+}
+
+@keyframes runPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 3px var(--info),
+      0 0 0 3px transparent;
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 3px var(--info),
+      0 0 0 8px color-mix(in srgb, var(--info) 28%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node.run_running {
+    animation: none;
+  }
+}
+
+.runBadge {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.badge_success {
+  background: var(--success);
+}
+
+.badge_failure {
+  background: var(--danger);
+}
+
+/* Breakpoint toggle at the top-left corner of the card: hollow on hover, solid red when set. */
+.breakpoint {
+  position: absolute;
+  top: -7px;
+  left: -7px;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  background: var(--surface);
+  border: 2px solid var(--danger);
+  border-radius: 50%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.node:hover .breakpoint,
+.breakpoint:focus-visible {
+  opacity: 0.7;
+}
+
+.breakpointOn,
+.node:hover .breakpointOn {
+  background: var(--danger);
+  opacity: 1;
+}
+
+.subStatus {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  border-radius: 50%;
+  font-size: 9px;
+  color: #fff;
+}
+
+.sub_pass {
+  background: var(--success);
+}
+
+.sub_fail {
+  background: var(--danger);
+}
+
+.sub_ran {
+  background: var(--info);
+  animation: subPulse 0.9s ease-out 1;
+}
+
+@keyframes subPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--info) 60%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub_ran {
+    animation: none;
+  }
+}
+
 /*
  * Classic dark theme: the original owl-bt look. The node header is filled with the type color
  * (white text), sub items are light rows with a colored left border, selection is a thick outline.
@@ -279,4 +418,37 @@
 :global([data-theme='classic']) .item.invalid .desc,
 :global([data-theme='classic']) .item.invalid .nameSub {
   color: #fff;
+}
+
+/* Export node id (#N) in run mode. Absolutely positioned so the measured card size does not change. */
+.exportId {
+  position: absolute;
+  top: -9px;
+  right: 14px;
+  z-index: 2;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.itemExportId {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  padding: 0 3px;
+  color: var(--text-muted);
+  background: var(--node-bg);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 12px;
+  opacity: 0.9;
+  pointer-events: none;
 }

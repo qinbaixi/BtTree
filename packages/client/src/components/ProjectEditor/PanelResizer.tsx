@@ -28,26 +28,48 @@ export function usePreviewWidth(): [number, (width: number) => void] {
 }
 
 interface PanelResizerProps {
-  width: number;
-  onResize(width: number): void;
+  /** Current size (px) of the panel: its width for a vertical handle, its height for a horizontal one. */
+  value: number;
+  onResize(value: number): void;
+  /** Vertical = handle on the left edge of a panel (col-resize), horizontal = on its top edge. */
+  orientation?: 'vertical' | 'horizontal';
+  min?: number;
+  max?: number;
+  defaultValue?: number;
+  label?: string;
+  title?: string;
 }
 
+const KEY_STEP = 20;
+
 /**
- * Vertical drag handle on the left edge of the preview panel. Dragging left widens the preview;
- * arrow keys resize in 20px steps.
+ * Drag handle on one edge of a panel. Vertical: on the left edge, dragging left grows the panel and
+ * ArrowLeft / ArrowRight resize in 20px steps. Horizontal: on the top edge, dragging up grows the
+ * panel and ArrowUp / ArrowDown resize in 20px steps. Double click restores the default size.
  */
-export function PanelResizer({ width, onResize }: PanelResizerProps) {
+export function PanelResizer({
+  value,
+  onResize,
+  orientation = 'vertical',
+  min = PREVIEW_MIN_WIDTH,
+  max = PREVIEW_MAX_WIDTH,
+  defaultValue = PREVIEW_DEFAULT_WIDTH,
+  label = 'Resize preview',
+  title = 'Drag to resize the preview',
+}: PanelResizerProps) {
   const [dragging, setDragging] = useState(false);
+  const horizontal = orientation === 'horizontal';
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = width;
+    const start = horizontal ? event.clientY : event.clientX;
+    const startValue = value;
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     setDragging(true);
     const move = (moveEvent: globalThis.PointerEvent) => {
-      onResize(startWidth + (startX - moveEvent.clientX));
+      const now = horizontal ? moveEvent.clientY : moveEvent.clientX;
+      onResize(startValue + (start - now));
     };
     const up = () => {
       setDragging(false);
@@ -61,29 +83,33 @@ export function PanelResizer({ width, onResize }: PanelResizerProps) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === 'ArrowLeft') {
+    const grow = horizontal ? 'ArrowUp' : 'ArrowLeft';
+    const shrink = horizontal ? 'ArrowDown' : 'ArrowRight';
+    if (event.key === grow) {
       event.preventDefault();
-      onResize(width + 20);
-    } else if (event.key === 'ArrowRight') {
+      onResize(value + KEY_STEP);
+    } else if (event.key === shrink) {
       event.preventDefault();
-      onResize(width - 20);
+      onResize(value - KEY_STEP);
     }
   };
 
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize preview"
-      aria-valuenow={width}
-      aria-valuemin={PREVIEW_MIN_WIDTH}
-      aria-valuemax={PREVIEW_MAX_WIDTH}
+      aria-orientation={orientation}
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
       tabIndex={0}
-      title="Drag to resize the preview"
-      className={`${styles.resizer} ${dragging ? styles.resizerActive : ''}`}
+      title={title}
+      className={`${horizontal ? styles.resizerHorizontal : styles.resizer} ${
+        dragging ? styles.resizerActive : ''
+      }`}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
-      onDoubleClick={() => onResize(PREVIEW_DEFAULT_WIDTH)}
+      onDoubleClick={() => onResize(defaultValue)}
     />
   );
 }

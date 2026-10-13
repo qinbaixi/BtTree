@@ -3,6 +3,7 @@ import { LIST_KEY } from '@owlbt/shared';
 import type { ProjectSelection } from '../../store/projectEditorStore';
 
 const LIST_PATH = /^(nodes|decorators|services)\[(\d+)\]/;
+const SCENARIO_PATH = /^scenarios\[/;
 const CUSTOM_PATH = /^types\.(.+)\.(type|pattern)$/;
 
 const KIND_OF_KEY: Record<'nodes' | 'decorators' | 'services', ItemKind> = {
@@ -34,6 +35,9 @@ export function selectionForPath(draft: ProjectFile, path: string): ProjectSelec
   const custom = CUSTOM_PATH.exec(path);
   if (custom) {
     return { view: 'custom', name: custom[1] };
+  }
+  if (SCENARIO_PATH.test(path)) {
+    return { view: 'scenarios' };
   }
   return undefined;
 }

@@ -20,6 +20,7 @@ import { projectEditorStore, useProjectEditorStore } from '../../store/projectEd
 import { IconPicker } from './IconPicker';
 import { unknownPlaceholders } from './issues';
 import { PropertyTable, runEdit, type ProjectRecipe } from './PropertyTable';
+import { SimulationSection } from './SimulationSection';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
@@ -34,6 +35,7 @@ export const KNOWN_TYPE_KEYS: readonly string[] = [
   'properties',
   'isComposite',
   'export',
+  'simulate',
 ];
 
 export const KIND_LABEL: Record<ItemKind, string> = {
@@ -473,6 +475,8 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           />
         </div>
       </details>
+
+      <SimulationSection kind={kind} name={name} desc={desc} isComposite={isComposite} />
 
       {unknown.length > 0 && (
         <section className={styles.section} aria-label="Unknown fields">

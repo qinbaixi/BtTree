@@ -613,3 +613,11 @@ select.control {
 .headTags .kind {
   margin-left: 0;
 }
+
+/* Read-only editors in run mode (a disabled fieldset without its own chrome). */
+.runLock {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}

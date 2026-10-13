@@ -5,10 +5,13 @@ import {
   validateItem,
   type CompiledItemType,
   type CompiledProject,
+  type RunStatus,
   type Selection,
+  type SubStatus,
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
+import { runStore } from '../../store/runStore';
 import { treeStore } from '../../store/treeStore';
 import { TreeCanvasContext } from './canvasController';
 import styles from './TreeNodeView.module.css';
@@ -25,6 +28,16 @@ export interface TreeNodeViewProps {
   selectedSubId?: string;
   /** False renders a static card: no selection and no context menu (project editor preview). */
   interactive?: boolean;
+  /** Run mode: the run panels are shown, so the breakpoint toggle is visible. */
+  runActive?: boolean;
+  /** Run mode: status of the node in the viewed tick. */
+  runStatus?: RunStatus;
+  /** Run mode: statuses of decorators / services in the viewed tick (by item id). */
+  subStatuses?: Record<string, SubStatus>;
+  /** Run mode: a breakpoint is set on the node. */
+  breakpoint?: boolean;
+  /** Run mode: export number (#N) by node / decorator / service id; set to show the id badges. */
+  exportIds?: ReadonlyMap<string, number>;
 }
 
 interface ItemViewProps {
@@ -38,7 +51,16 @@ interface ItemViewProps {
   inverseCheckCondition?: boolean;
   selected: boolean;
   interactive: boolean;
+  subStatus?: SubStatus;
+  /** Export number shown as a tiny badge (run mode). */
+  exportId?: number;
 }
+
+const SUB_STATUS_ICON: Record<SubStatus, { icon: string; label: string }> = {
+  pass: { icon: 'fa-check', label: 'Passed' },
+  fail: { icon: 'fa-xmark', label: 'Failed' },
+  ran: { icon: 'fa-bolt', label: 'Ran in this tick' },
+};
 
 const KIND_TAG: Record<ItemViewProps['kind'], string | undefined> = {
   node: undefined,
@@ -65,6 +87,8 @@ function ItemView({
   inverseCheckCondition,
   selected,
   interactive,
+  subStatus,
+  exportId,
 }: ItemViewProps) {
   const canvas = useContext(TreeCanvasContext);
   const invalid = !validateItem(type, properties).isValid;
@@ -137,6 +161,20 @@ function ItemView({
         )}
         {type.description && <div className={styles.desc}>{description ?? ''}</div>}
       </div>
+      {exportId !== undefined && kind !== 'node' && (
+        <span className={styles.itemExportId} data-export-id={exportId}>
+          #{exportId}
+        </span>
+      )}
+      {subStatus && (
+        <span
+          className={`${styles.subStatus} ${styles[`sub_${subStatus}`]}`}
+          title={SUB_STATUS_ICON[subStatus].label}
+          data-sub-status={subStatus}
+        >
+          <i className={`fa-solid ${SUB_STATUS_ICON[subStatus].icon}`} aria-hidden="true" />
+        </span>
+      )}
     </div>
   );
 }
@@ -149,6 +187,11 @@ export const TreeNodeView = memo(function TreeNodeView({
   selected,
   selectedSubId,
   interactive = true,
+  runActive = false,
+  runStatus,
+  subStatuses,
+  breakpoint = false,
+  exportIds,
 }: TreeNodeViewProps) {
   const canvas = useContext(TreeCanvasContext);
   // The element is registered for measuring; the controller is stable so this callback is too.
@@ -158,11 +201,14 @@ export const TreeNodeView = memo(function TreeNodeView({
   );
 
   const nodeType = getItemType(project, 'node', node.type);
+  const ids = runActive ? exportIds : undefined;
+  const nodeExportId = ids?.get(node.id);
   const nodeInvalid = !validateItem(nodeType, node.properties).isValid;
   const cardClass = [
     styles.node,
     selected ? styles.nodeSelected : '',
     nodeInvalid ? styles.nodeInvalid : '',
+    runActive ? styles[`run_${runStatus ?? 'idle'}`] : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -172,6 +218,7 @@ export const TreeNodeView = memo(function TreeNodeView({
       ref={registerRef}
       className={cardClass}
       data-node-id={node.id}
+      data-run-status={runActive ? (runStatus ?? 'idle') : undefined}
       style={
         {
           left: x,
@@ -180,6 +227,31 @@ export const TreeNodeView = memo(function TreeNodeView({
         } as CSSProperties
       }
     >
+      {runActive && (
+        <button
+          type="button"
+          className={`${styles.breakpoint} ${breakpoint ? styles.breakpointOn : ''}`}
+          title={breakpoint ? 'Remove breakpoint' : 'Add breakpoint'}
+          aria-label="Toggle breakpoint"
+          aria-pressed={breakpoint}
+          data-breakpoint={breakpoint ? 'true' : undefined}
+          onClick={(event) => {
+            event.stopPropagation();
+            runStore.getState().toggleBreakpoint(node.id);
+          }}
+          onContextMenu={(event) => event.stopPropagation()}
+        />
+      )}
+      {nodeExportId !== undefined && (
+        <span className={styles.exportId} data-export-id={nodeExportId} title="Export node id">
+          #{nodeExportId}
+        </span>
+      )}
+      {runActive && (runStatus === 'success' || runStatus === 'failure') && (
+        <span className={`${styles.runBadge} ${styles[`badge_${runStatus}`]}`} aria-hidden="true">
+          <i className={`fa-solid ${runStatus === 'success' ? 'fa-check' : 'fa-xmark'}`} />
+        </span>
+      )}
       <ItemView
         kind="node"
         nodeId={node.id}
@@ -203,6 +275,8 @@ export const TreeNodeView = memo(function TreeNodeView({
           inverseCheckCondition={decorator.inverseCheckCondition}
           selected={selectedSubId === decorator.id}
           interactive={interactive}
+          subStatus={runActive ? subStatuses?.[decorator.id] : undefined}
+          exportId={ids?.get(decorator.id)}
         />
       ))}
       {node.services.map((service: SubItem) => (
@@ -218,6 +292,8 @@ export const TreeNodeView = memo(function TreeNodeView({
           inverseCheckCondition={service.inverseCheckCondition}
           selected={selectedSubId === service.id}
           interactive={interactive}
+          subStatus={runActive ? subStatuses?.[service.id] : undefined}
+          exportId={ids?.get(service.id)}
         />
       ))}
     </div>

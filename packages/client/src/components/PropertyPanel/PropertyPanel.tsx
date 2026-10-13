@@ -11,6 +11,7 @@ import {
   type TreeNode,
 } from '@owlbt/shared';
 import { useInspectStore } from '../../store/inspectStore';
+import { useRunStore } from '../../store/runStore';
 import { useProjectStore } from '../../store/projectStore';
 import {
   getSelectedItem,
@@ -76,7 +77,23 @@ export default function PropertyPanel() {
   if (!project) {
     return <p className={styles.hint}>Loading project...</p>;
   }
-  return <ItemDetails selected={selected} project={project} />;
+  return <RunLock>{<ItemDetails selected={selected} project={project} />}</RunLock>;
+}
+
+/** The tree is read-only in run mode: the editors are disabled and a note says why. */
+function RunLock({ children }: { children: ReactNode }) {
+  const runActive = useRunStore((state) => state.active);
+  if (!runActive) {
+    return <>{children}</>;
+  }
+  return (
+    <>
+      <p className={styles.hint}>Read-only in run mode. Leave run mode to edit.</p>
+      <fieldset disabled className={styles.runLock}>
+        {children}
+      </fieldset>
+    </>
+  );
 }
 
 interface ItemDetailsProps {

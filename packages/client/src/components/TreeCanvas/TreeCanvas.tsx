@@ -18,8 +18,11 @@ import {
   type ZoomTransform,
 } from 'd3-zoom';
 import { forEachNode, type Selection, type TreeNode } from '@owlbt/shared';
+import { buildExportIdMap } from '../RunMode/runHelpers';
 import { inspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
+import { selectViewed, useRunStore } from '../../store/runStore';
+import { useRunViewStore } from '../../store/runViewStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import { CanvasController, TreeCanvasContext, type ContextMenuHandler } from './canvasController';
 import { computeTreeLayout, linkPath, MIN_CANVAS_SIZE, type Size, type TreeLayout } from './layout';
@@ -77,6 +80,10 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const selection = useTreeStore((state) => state.selection);
   const project = useProjectStore((state) => state.project);
   const projectError = useProjectStore((state) => state.error);
+  const runActive = useRunStore((state) => state.active);
+  const viewed = useRunStore(selectViewed);
+  const breakpoints = useRunStore((state) => state.breakpoints);
+  const showIds = useRunViewStore((state) => state.showIds);
 
   const [controller] = useState(() => new CanvasController());
   const [sizes, setSizes] = useState<Map<string, Size>>(() => new Map());
@@ -87,6 +94,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const transformRef = useRef<ZoomTransform>(zoomIdentity);
   const layoutRef = useRef<TreeLayout>(undefined);
   const centeredRef = useRef(false);
+
+  const exportIds = useMemo(
+    () => (runActive && showIds ? buildExportIdMap(root) : undefined),
+    [runActive, showIds, root],
+  );
 
   const layout = useMemo(() => (root ? computeTreeLayout(root, sizes) : undefined), [root, sizes]);
 
@@ -292,6 +304,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
                     y={position.y}
                     selected={selected}
                     selectedSubId={selectedSubId}
+                    runActive={runActive}
+                    runStatus={viewed?.statuses[node.id]}
+                    subStatuses={viewed?.subStatuses}
+                    breakpoint={breakpoints.has(node.id)}
+                    exportIds={exportIds}
                   />
                 );
               })}

@@ -30,7 +30,8 @@ enablePatches();
 export type ProjectSelection =
   | { view: 'type'; kind: ItemKind; name: string }
   | { view: 'custom'; name?: string }
-  | { view: 'export' };
+  | { view: 'export' }
+  | { view: 'scenarios' };
 
 export interface ProjectHistoryEntry {
   label: string;

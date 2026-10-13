@@ -1,0 +1,273 @@
+{
+  "types": {
+    "blackboardKey": {
+      "type": "string",
+      "pattern": "[A-Za-z_][A-Za-z0-9_]*"
+    },
+    "ticks": {
+      "type": "number"
+    }
+  },
+  "nodes": [
+    {
+      "name": "Selector",
+      "icon": "question",
+      "color": "#d08038",
+      "isComposite": true,
+      "description": "依次执行子节点，直到有一个成功"
+    },
+    {
+      "name": "Sequence",
+      "icon": "arrow-right",
+      "color": "#d08038",
+      "isComposite": true,
+      "description": "依次执行子节点，直到有一个失败"
+    },
+    {
+      "name": "Parallel",
+      "icon": "bars",
+      "color": "#d08038",
+      "isComposite": true,
+      "description": "同时执行所有子节点（{{Policy}}）",
+      "properties": [
+        {
+          "name": "Policy",
+          "type": "enum",
+          "values": ["RequireAll", "RequireOne"],
+          "default": "RequireAll",
+          "description": "RequireAll：全部成功才成功；RequireOne：一个成功就成功"
+        }
+      ]
+    },
+    {
+      "name": "ActionBase",
+      "isAbstract": true,
+      "icon": "gear",
+      "description": "动作基类"
+    },
+    {
+      "name": "MoveTo",
+      "base": "ActionBase",
+      "icon": "person-walking",
+      "description": "以速度 {{Speed}} 移动到 {{Target}}（距离 {{Distance}}）",
+      "properties": [
+        {
+          "name": "Target",
+          "type": "string",
+          "default": "Waypoint"
+        },
+        {
+          "name": "Speed",
+          "type": "number",
+          "min": 0.5,
+          "max": 10,
+          "default": 1,
+          "description": "每 tick 的移动距离"
+        },
+        {
+          "name": "Distance",
+          "type": "number",
+          "min": 0,
+          "default": 3,
+          "description": "到达所需距离"
+        }
+      ],
+      "simulate": {
+        "mode": "rule",
+        "duration": "{{Distance}} / {{Speed}}",
+        "effects": ["Position = {{Target}}"]
+      }
+    },
+    {
+      "name": "Attack",
+      "base": "ActionBase",
+      "icon": "crosshairs",
+      "description": "攻击（需要弹药，消耗 1 发）",
+      "simulate": {
+        "mode": "rule",
+        "duration": 1,
+        "condition": "Ammo > 0",
+        "effects": ["Ammo = Ammo - 1"]
+      }
+    },
+    {
+      "name": "Reload",
+      "base": "ActionBase",
+      "icon": "rotate",
+      "description": "装填弹药，耗时 2 tick",
+      "simulate": {
+        "mode": "rule",
+        "duration": 2,
+        "effects": ["Ammo = 3"]
+      }
+    },
+    {
+      "name": "Wait",
+      "base": "ActionBase",
+      "icon": "hourglass-half",
+      "description": "等待 {{Duration}} tick",
+      "properties": [
+        {
+          "name": "Duration",
+          "type": "ticks",
+          "min": 0,
+          "default": 2
+        }
+      ],
+      "simulate": {
+        "mode": "rule",
+        "duration": "{{Duration}}"
+      }
+    },
+    {
+      "name": "Say",
+      "base": "ActionBase",
+      "icon": "message",
+      "description": "喊话：{{Message}}",
+      "properties": [
+        {
+          "name": "Message",
+          "type": "string",
+          "default": "Hello"
+        }
+      ],
+      "simulate": {
+        "mode": "success",
+        "effects": ["LastSaid = {{Message}}"]
+      }
+    },
+    {
+      "name": "Fail",
+      "base": "ActionBase",
+      "icon": "xmark",
+      "description": "总是失败",
+      "simulate": {
+        "mode": "failure"
+      }
+    },
+    {
+      "name": "AskDesigner",
+      "base": "ActionBase",
+      "icon": "user",
+      "color": "#c6a35c",
+      "description": "手动决定结果（运行模式里点 Succeed / Fail）"
+    }
+  ],
+  "decorators": [
+    {
+      "name": "HasEnemy",
+      "icon": "eye",
+      "description": "视野内有敌人",
+      "simulate": {
+        "condition": "Enemy == true"
+      }
+    },
+    {
+      "name": "Invert",
+      "icon": "right-left",
+      "description": "反转结果",
+      "simulate": {
+        "decorator": "invert"
+      }
+    },
+    {
+      "name": "ForceSuccess",
+      "icon": "thumbs-up",
+      "description": "强制成功",
+      "simulate": {
+        "decorator": "forceSuccess"
+      }
+    },
+    {
+      "name": "Cooldown",
+      "icon": "clock",
+      "description": "冷却 {{Seconds}} 秒（1 tick = 1 秒）",
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "ticks",
+          "min": 0,
+          "default": 5
+        }
+      ],
+      "simulate": {
+        "decorator": "cooldown",
+        "ticks": "{{Seconds}}"
+      }
+    },
+    {
+      "name": "Loop",
+      "icon": "repeat",
+      "description": "循环 {{Count}} 次",
+      "properties": [
+        {
+          "name": "Count",
+          "type": "number",
+          "min": -1,
+          "default": 3,
+          "description": "-1 表示无限循环"
+        }
+      ],
+      "simulate": {
+        "decorator": "loop",
+        "count": "{{Count}}"
+      }
+    },
+    {
+      "name": "TimeLimit",
+      "icon": "stopwatch",
+      "description": "限时 {{Seconds}} 秒",
+      "properties": [
+        {
+          "name": "Seconds",
+          "type": "ticks",
+          "min": 0,
+          "default": 5
+        }
+      ],
+      "simulate": {
+        "decorator": "timeLimit",
+        "ticks": "{{Seconds}}"
+      }
+    }
+  ],
+  "services": [
+    {
+      "name": "ScanForEnemy",
+      "icon": "binoculars",
+      "description": "每 tick 扫描一次，计数 ScanCount",
+      "simulate": {
+        "effects": ["ScanCount = ScanCount + 1"]
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "Enemy in sight",
+      "description": "有敌人，只剩 1 发弹药：打一枪后需要装填",
+      "blackboard": {
+        "Enemy": true,
+        "Ammo": 1,
+        "ScanCount": 0
+      }
+    },
+    {
+      "name": "No enemy",
+      "description": "没有敌人：巡逻",
+      "blackboard": {
+        "Enemy": false,
+        "Ammo": 3,
+        "ScanCount": 0
+      }
+    },
+    {
+      "name": "Out of ammo",
+      "description": "有敌人但没有弹药：先装填再攻击",
+      "blackboard": {
+        "Enemy": true,
+        "Ammo": 0,
+        "ScanCount": 0
+      }
+    }
+  ]
+}

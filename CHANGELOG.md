@@ -4,6 +4,23 @@
 
 ## [未发布]
 
+## [0.2.0] - 2026-10-13
+
+新增运行模式：在编辑器中按 tick 模拟执行行为树，可编辑黑板、使用测试场景、设置断点、回放和循环运行。
+
+### 新增
+
+- 运行模式：在树编辑器中模拟执行行为树（`F5` 进入，`F8` 播放 / 暂停，`F10` 单步）。按 tick 运行，画布上显示节点的运行 / 成功 / 失败状态以及装饰器、服务的状态；支持速度调节、重置、手动节点（Succeed / Fail）、断点、时间轴回放和可过滤的运行日志；运行中树为只读。
+- 运行模式的黑板与场景：可编辑起始黑板、实时修改正在运行的黑板，并把黑板保存为 `owl-bt.json` 中的场景；可为所选节点设置仅限本次运行的属性覆盖值。
+- 项目文件新增可选的 `simulate`（类型的模拟规则：`mode`、`duration`、`condition`、`effects`、`composite`、`decorator`、`count`、`ticks`，按字段继承）和 `scenarios`（命名的起始黑板）；旧项目不受影响，未知字段仍原样保留。
+- 共享包新增 `runtime`：不使用 `eval` 的表达式解析器和确定性的行为树模拟引擎（Sequence / Selector / Parallel / RandomSelector、条件与 periodic 装饰器、invert / forceSuccess / forceFailure / loop / cooldown / timeLimit、服务、带种子的随机）。
+- 项目编辑器：类型表单新增可折叠的「Simulation」区并即时校验表达式，新增「Scenarios」视图；`validateProjectFile` 会报告无效的 simulate 表达式和重复的场景名。
+- 运行模式支持循环运行：工具条新增「Loops」输入框（0 = 一直循环，默认 1，会记住上次的值）。每次运行之间保留黑板、tick 计数和冷却，节点状态、loop 装饰器和服务重新开始；工具条显示「Run 2/5」，日志带「Run N」标记、结果标签和分隔线，历史只保留最近 5000 个 tick。
+- 运行日志：按 tick 分组折叠，折叠时显示节点编号（与导出的 `node_id` 一致）、名称、类型、带参数的描述和运行状态，展开后按树深度缩进显示进入节点、结果、装饰器、服务和黑板变化；面板高度可拖动调整，支持全部展开 / 折叠和回放到某个 tick。
+- 运行模式下节点卡片显示 `#编号` 标签，可在日志顶部关闭。
+- 工具条的播放和暂停改为两个独立按钮，Run 菜单同样分开。
+- 示例 `samples/simulation`（守卫行为树与三个场景）；默认模板为内置节点和装饰器预置了 simulate 规则。
+
 ## [0.1.0] - 2026-10-11
 
 首个版本：以 TypeScript 与 React 19 重写 [owl-bt](https://github.com/pruttned/owl-bt)，保持项目文件、树文件和 `owl-bt.js` 插件格式兼容。
@@ -35,5 +52,6 @@
 - 保存请求体上限提高到 50 MB；服务端异常不再导致进程退出。
 - 保存树文件时保留原文件的缩进、换行与 BOM；无效 JSON 返回清晰的错误信息。
 
-[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.1.0...HEAD
+[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/qinbaixi/BtTree/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/qinbaixi/BtTree/releases/tag/v0.1.0

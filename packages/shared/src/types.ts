@@ -36,7 +36,42 @@ export interface ItemTypeDescJson {
   isComposite?: boolean;
   /** Erlang/Lua export settings. */
   export?: ItemExportJson;
+  /** Run mode (simulator) rules. Inherited field by field from the bases. */
+  simulate?: SimulateJson;
   [key: string]: unknown;
+}
+
+export type SimulateMode = 'success' | 'failure' | 'manual' | 'rule';
+export type SimulateComposite = 'selector' | 'sequence' | 'parallel' | 'randomSelector';
+export type SimulateDecorator =
+  'invert' | 'forceSuccess' | 'forceFailure' | 'loop' | 'cooldown' | 'timeLimit';
+
+/** Per-type simulation rules of run mode (`simulate` of an item type in owl-bt.json). */
+export interface SimulateJson {
+  /** Actions. Default: 'manual' (or 'rule' when condition / duration / effects are set). */
+  mode?: SimulateMode;
+  /** Ticks an action stays RUNNING before it finishes: a number or an expression such as "{{Duration}}". */
+  duration?: number | string;
+  /** Expression: action / decorator result = condition ? success : failure. */
+  condition?: string;
+  /** Blackboard assignments: on success (actions) or on every service tick (services). */
+  effects?: string[];
+  /** Composite nodes. Default: inferred from the type name, else sequence. */
+  composite?: SimulateComposite;
+  /** Built-in decorator behaviour. */
+  decorator?: SimulateDecorator;
+  /** Loop decorator: iterations (number or expression); negative = forever. Default 1. */
+  count?: number | string;
+  /** Cooldown / timeLimit decorators: ticks (number or expression). */
+  ticks?: number | string;
+  [key: string]: unknown;
+}
+
+/** A named set of initial blackboard values for run mode (`scenarios` of owl-bt.json). */
+export interface ScenarioJson {
+  name: string;
+  description?: string;
+  blackboard: Record<string, unknown>;
 }
 
 /** Per-type export settings (`export` of an item type in owl-bt.json). */
@@ -72,6 +107,7 @@ export interface ProjectFile {
   decorators?: ItemTypeDescJson[];
   services?: ItemTypeDescJson[];
   export?: ProjectExportJson;
+  scenarios?: ScenarioJson[];
 }
 
 // ---------- Compiled project ----------
@@ -112,6 +148,8 @@ export interface CompiledItemType {
   properties: CompiledProperty[];
   /** Erlang/Lua export settings. */
   export?: ItemExportJson;
+  /** Run mode rules (merged with the ones of the bases). */
+  simulate?: SimulateJson;
   /** True for fallback descriptors of types missing from the project file. */
   isInvalid?: boolean;
 }

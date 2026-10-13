@@ -306,6 +306,14 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
           >
             <i className="fa-solid fa-file-export" aria-hidden="true" /> Export settings
           </button>
+          <button
+            type="button"
+            className={`${styles.navRow} ${selection?.view === 'scenarios' ? styles.rowSelected : ''}`}
+            onClick={() => select({ view: 'scenarios' })}
+          >
+            <i className="fa-solid fa-flask" aria-hidden="true" /> Scenarios
+            <span className={styles.count}>{draft.scenarios?.length ?? 0}</span>
+          </button>
         </div>
       </div>
     </aside>

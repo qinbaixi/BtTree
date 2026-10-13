@@ -10,6 +10,7 @@ import {
   nodeFromJson,
   type ProjectFile,
   type TreeNodeJson,
+  validateProjectFile,
 } from '@owlbt/shared';
 import { describe, expect, it } from 'vitest';
 import { TEMPLATES_DIR } from './workspace';
@@ -143,5 +144,26 @@ describe('samples/basic', () => {
   it('still compiles', () => {
     const file = readJson<ProjectFile>(join(repoRoot, 'samples', 'basic', 'owl-bt.json'));
     expect(() => compileProject(file)).not.toThrow();
+  });
+});
+
+describe('owl-bt.json template simulation rules', () => {
+  const project = readJson<ProjectFile>(join(TEMPLATES_DIR, 'owl-bt.json'));
+
+  it('has valid simulate settings', () => {
+    expect(validateProjectFile(project).filter((issue) => issue.path.includes('simulate'))).toEqual(
+      [],
+    );
+  });
+
+  it('simulates the built-in nodes and decorators', () => {
+    const compiled = compileProject(project);
+    expect(compiled.nodes.Wait.simulate).toMatchObject({ mode: 'rule', duration: '{{Duration}}' });
+    expect(compiled.nodes.Succeed.simulate?.mode).toBe('success');
+    expect(compiled.nodes.Fail.simulate?.mode).toBe('failure');
+    expect(compiled.nodes.RandomChance.simulate).toBeUndefined();
+    expect(compiled.decorators.Invert.simulate?.decorator).toBe('invert');
+    expect(compiled.decorators.Cooldown.simulate?.decorator).toBe('cooldown');
+    expect(compiled.decorators.Loop.simulate?.decorator).toBe('loop');
   });
 });

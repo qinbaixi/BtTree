@@ -1,6 +1,6 @@
 {
   "name": "@owlbt/client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "gen:icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
-    "@owlbt/shared": "0.1.0",
+    "@owlbt/shared": "*",
     "@fortawesome/fontawesome-free": "^6.7.2",
     "d3-hierarchy": "^3.1.2",
     "d3-interpolate": "^3.0.1",

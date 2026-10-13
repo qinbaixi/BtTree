@@ -83,8 +83,16 @@
 
 .treeArea {
   position: relative;
+  display: flex;
   flex: 1 1;
+  flex-direction: column;
   min-width: 0;
+}
+
+.canvasWrap {
+  position: relative;
+  flex: 1 1;
+  min-height: 0;
 }
 
 .placeholder {

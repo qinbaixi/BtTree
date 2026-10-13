@@ -1104,9 +1104,40 @@ details.section > summary {
   z-index: 1;
 }
 
+/* Horizontal variant: on the top edge of a bottom panel. */
+.resizerHorizontal {
+  position: relative;
+  flex: 0 0 5px;
+  margin: -3px 0 -2px;
+  cursor: row-resize;
+  background: transparent;
+  z-index: 2;
+}
+
 .resizer:hover,
 .resizer:focus-visible,
+.resizerHorizontal:hover,
+.resizerHorizontal:focus-visible,
 .resizerActive {
   background: var(--accent);
   outline: none;
+}
+
+/* Simulation effects and scenario rows. */
+.effectRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 6px;
+  align-items: center;
+}
+
+.effectRow > :nth-child(3) {
+  grid-column: 1 / -1;
+}
+
+.scenarioRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
 }

@@ -78,7 +78,7 @@ export function computeTreeLayout(root: TreeNode, sizes: SizeMap): TreeLayout {
     .nodeSize([BASE_WIDTH, BASE_HEIGHT])
     .separation(
       (a, b) =>
-        ((sizeOf(a.data.id).width + sizeOf(b.data.id).width) + SEPARATION_X) / BASE_WIDTH * 0.5,
+        ((sizeOf(a.data.id).width + sizeOf(b.data.id).width + SEPARATION_X) / BASE_WIDTH) * 0.5,
     )(hierarchyRoot);
 
   const all = positioned.descendants();

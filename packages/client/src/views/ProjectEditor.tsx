@@ -4,6 +4,7 @@ import { validateProjectFile, type ProjectIssue } from '@owlbt/shared';
 import { isEditableTarget, matchesHotkey } from '../commands/useHotkeys';
 import { CustomTypesView } from '../components/ProjectEditor/CustomTypesView';
 import { ExportSettingsView } from '../components/ProjectEditor/ExportSettingsView';
+import { ScenariosView } from '../components/ProjectEditor/ScenariosView';
 import { ProblemsBar } from '../components/ProjectEditor/ProblemsBar';
 import { TypeForm } from '../components/ProjectEditor/TypeForm';
 import { TypeList } from '../components/ProjectEditor/TypeList';
@@ -285,7 +286,7 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
             <CenterPanel selection={selection} />
           </section>
           {selection?.view === 'type' && (
-            <PanelResizer width={previewWidth} onResize={setPreviewWidth} />
+            <PanelResizer value={previewWidth} onResize={setPreviewWidth} />
           )}
           {selection?.view === 'type' && (
             <TypePreview
@@ -356,6 +357,9 @@ function CenterPanel({ selection }: { selection?: ProjectSelection }) {
   }
   if (selection?.view === 'export') {
     return <ExportSettingsView />;
+  }
+  if (selection?.view === 'scenarios') {
+    return <ScenariosView />;
   }
   return (
     <p className={styles.muted}>Select a type on the left, or add a node, decorator or service.</p>

@@ -1,0 +1,173 @@
+{
+	"type": "Selector",
+	"label": "Guard AI",
+	"comment": "守卫：有敌人就战斗，否则巡逻。运行模式里选择场景后按 F5 / F8 运行。",
+	"services": [
+		{
+			"type": "ScanForEnemy",
+			"label": "Scan"
+		}
+	],
+	"childNodes": [
+		{
+			"type": "Sequence",
+			"label": "Combat",
+			"comment": "战斗 4 轮；敌人消失时（periodic）立即中止",
+			"decorators": [
+				{
+					"type": "HasEnemy",
+					"periodic": true
+				},
+				{
+					"type": "Loop",
+					"properties": [
+						{
+							"name": "Count",
+							"value": 4
+						}
+					]
+				}
+			],
+			"childNodes": [
+				{
+					"type": "Say",
+					"properties": [
+						{
+							"name": "Message",
+							"value": "Alert!"
+						}
+					]
+				},
+				{
+					"type": "Selector",
+					"label": "Engage",
+					"childNodes": [
+						{
+							"type": "Attack",
+							"label": "Fire"
+						},
+						{
+							"type": "Sequence",
+							"label": "Reload and fire",
+							"decorators": [
+								{
+									"type": "Cooldown",
+									"properties": [
+										{
+											"name": "Seconds",
+											"value": 8
+										}
+									]
+								}
+							],
+							"childNodes": [
+								{
+									"type": "Reload"
+								},
+								{
+									"type": "Attack"
+								}
+							]
+						},
+						{
+							"type": "Fail",
+							"label": "Hold position",
+							"comment": "没弹药且换弹冷却中：原地坚守（Invert 让它成功）",
+							"decorators": [
+								{
+									"type": "Invert"
+								}
+							]
+						}
+					]
+				}
+			]
+		},
+		{
+			"type": "Sequence",
+			"label": "Patrol",
+			"comment": "敌人出现时中止（反向检查，periodic）",
+			"decorators": [
+				{
+					"type": "HasEnemy",
+					"inverseCheckCondition": true,
+					"periodic": true
+				}
+			],
+			"childNodes": [
+				{
+					"type": "MoveTo",
+					"label": "To A",
+					"properties": [
+						{
+							"name": "Target",
+							"value": "Waypoint A"
+						},
+						{
+							"name": "Distance",
+							"value": 3
+						}
+					]
+				},
+				{
+					"type": "Parallel",
+					"label": "Look around",
+					"properties": [
+						{
+							"name": "Policy",
+							"value": "RequireOne"
+						}
+					],
+					"childNodes": [
+						{
+							"type": "Wait",
+							"properties": [
+								{
+									"name": "Duration",
+									"value": 1
+								}
+							]
+						},
+						{
+							"type": "Wait",
+							"properties": [
+								{
+									"name": "Duration",
+									"value": 4
+								}
+							]
+						}
+					]
+				},
+				{
+					"type": "MoveTo",
+					"label": "To B",
+					"properties": [
+						{
+							"name": "Target",
+							"value": "Waypoint B"
+						},
+						{
+							"name": "Speed",
+							"value": 2
+						},
+						{
+							"name": "Distance",
+							"value": 4
+						}
+					]
+				},
+				{
+					"type": "AskDesigner",
+					"label": "Report in",
+					"comment": "手动节点：在运行模式里决定结果",
+					"decorators": [
+						{
+							"type": "ForceSuccess"
+						}
+					]
+				}
+			]
+		}
+	]
+}

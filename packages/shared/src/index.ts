@@ -1,4 +1,4 @@
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 export * from './types';
 export * from './compileProject';
@@ -10,3 +10,4 @@ export * from './describe';
 export * from './projectEdit';
 export * from './fuzzy';
 export * from './export';
+export * from './runtime';

@@ -7,6 +7,7 @@ import type {
   ItemTypeDescJson,
   ProjectFile,
   PropertyDescJson,
+  SimulateJson,
 } from './types';
 
 export const DEFAULT_COLORS = {
@@ -88,6 +89,16 @@ function sortByBases(descs: Map<string, ItemTypeDescJson>): string[] {
   return order;
 }
 
+function mergeSimulate(
+  base: SimulateJson | undefined,
+  own: SimulateJson | undefined,
+): SimulateJson | undefined {
+  if (!base && !own) {
+    return undefined;
+  }
+  return { ...base, ...own };
+}
+
 /** Produces the descriptor with inherited fields and properties merged in (bases must already be resolved). */
 function resolveInheritance(
   desc: ItemTypeDescJson,
@@ -109,6 +120,14 @@ function resolveInheritance(
     props = props.concat(baseDesc.properties ?? []);
   }
   props = props.concat(desc.properties ?? []);
+  let simulate: SimulateJson | undefined;
+  for (const base of bases) {
+    simulate = mergeSimulate(simulate, resolved.get(base)?.simulate);
+  }
+  simulate = mergeSimulate(simulate, desc.simulate);
+  if (simulate) {
+    merged.simulate = simulate;
+  }
   merged.properties = dedupeProperties(props);
   return merged;
 }
@@ -159,6 +178,7 @@ function compileItem(
   if (desc.icon !== undefined) item.icon = desc.icon;
   if (desc.description !== undefined) item.description = desc.description;
   if (desc.export !== undefined) item.export = desc.export;
+  if (desc.simulate !== undefined) item.simulate = desc.simulate;
   if (bases.length > 0) item.bases = bases;
   return item;
 }
