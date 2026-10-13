@@ -63,8 +63,20 @@ const LUA_KEYWORDS: ReadonlySet<string> = new Set([
   'while',
 ]);
 
+/**
+ * Characters the string escapers below change: backslash, the quote and control characters.
+ * Most exported strings have none, and then the text is used as it is (no per-character copy).
+ */
+// eslint-disable-next-line no-control-regex -- control characters are what these look for
+const NEEDS_ESCAPE_DOUBLE = /[\\"\u0000-\u001f\u007f]/;
+// eslint-disable-next-line no-control-regex -- control characters are what these look for
+const NEEDS_ESCAPE_SINGLE = /[\\'\u0000-\u001f\u007f]/;
+
 /** Escapes control characters as `\x{HEX}` (Erlang) so the result can sit inside a quoted literal. */
-function escapeErlangChars(text: string, quote: string): string {
+function escapeErlangChars(text: string, quote: "'" | '"'): string {
+  if (!(quote === '"' ? NEEDS_ESCAPE_DOUBLE : NEEDS_ESCAPE_SINGLE).test(text)) {
+    return text;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -103,6 +115,9 @@ export function erlangString(text: string): string {
 
 /** Lua string literal with double quotes. Control characters use the decimal `\ddd` form. */
 export function luaString(text: string): string {
+  if (!NEEDS_ESCAPE_DOUBLE.test(text)) {
+    return `"${text}"`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -142,6 +157,9 @@ export function sanitizeModuleName(name: string): string {
 
 /** TypeScript string literal with single quotes. Control characters use `\uXXXX`. */
 export function tsString(text: string): string {
+  if (!NEEDS_ESCAPE_SINGLE.test(text)) {
+    return `'${text}'`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -249,6 +267,9 @@ const CSHARP_KEYWORDS: ReadonlySet<string> = new Set([
 
 /** C# string literal with double quotes. Control characters use `\uXXXX`. */
 export function csharpString(text: string): string {
+  if (!NEEDS_ESCAPE_DOUBLE.test(text)) {
+    return `"${text}"`;
+  }
   let out = '';
   for (const ch of text) {
     const code = ch.codePointAt(0) ?? 0;
@@ -321,5 +342,118 @@ export function parseCsNamespace(raw: unknown): { namespace: string; warning?: s
   return {
     namespace: DEFAULT_CS_NAMESPACE,
     warning: `Invalid C# namespace ${JSON.stringify(raw)}, using ${DEFAULT_CS_NAMESPACE}`,
+  };
+}
+
+/** Go keywords; package names must not be one of them. */
+const GO_KEYWORDS: ReadonlySet<string> = new Set([
+  'break',
+  'case',
+  'chan',
+  'const',
+  'continue',
+  'default',
+  'defer',
+  'else',
+  'fallthrough',
+  'for',
+  'func',
+  'go',
+  'goto',
+  'if',
+  'import',
+  'interface',
+  'map',
+  'package',
+  'range',
+  'return',
+  'select',
+  'struct',
+  'switch',
+  'type',
+  'var',
+]);
+
+/**
+ * Text that goString can quote as is: no quote, backslash, control character, byte order mark or
+ * surrogate (surrogate pairs take the slow path too, which leaves them unchanged).
+ */
+// eslint-disable-next-line no-control-regex
+const GO_STRING_PLAIN = /^[^"\\\x00-\x1f\x7f\ufeff\ud800-\udfff]*$/;
+
+/**
+ * Go interpreted string literal. Control characters use `\xHH`; a byte order mark and lone
+ * surrogates (which Go source cannot hold) become `\uFEFF` and `\uFFFD`.
+ */
+export function goString(text: string): string {
+  if (GO_STRING_PLAIN.test(text)) {
+    return `"${text}"`;
+  }
+  let out = '';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === '\\' || ch === '"') {
+      out += `\\${ch}`;
+    } else if (ch === '\n') {
+      out += '\\n';
+    } else if (ch === '\r') {
+      out += '\\r';
+    } else if (ch === '\t') {
+      out += '\\t';
+    } else if (code < 0x20 || code === 0x7f) {
+      out += `\\x${code.toString(16).padStart(2, '0')}`;
+    } else if (code === 0xfeff) {
+      out += '\\uFEFF';
+    } else if (code >= 0xd800 && code <= 0xdfff) {
+      out += '\\uFFFD';
+    } else {
+      out += ch;
+    }
+  }
+  return `"${out}"`;
+}
+
+/**
+ * Exported Go identifier prefix from a file name: words separated by anything that is not a letter
+ * or digit, each with an upper case first letter (`bt_mon_1000` -> `BtMon1000`). Go identifiers may
+ * hold any Unicode letter, so non-ASCII names keep their text (`巡逻_a` -> `Bt巡逻A`). A `Bt` prefix
+ * is added when the result does not start with an upper case letter, so the name stays exported.
+ */
+export function goNamePrefix(fileName: string): string {
+  const pascal = fileName
+    .split(/[^\p{L}\p{Nd}]+/u)
+    .filter((word) => word !== '')
+    .map((word) => {
+      const [first, ...rest] = word;
+      return first.toUpperCase() + rest.join('');
+    })
+    .join('');
+  if (pascal === '') {
+    return 'BehaviorTree';
+  }
+  return /^\p{Lu}/u.test(pascal) ? pascal : `Bt${pascal}`;
+}
+
+export const DEFAULT_GO_PACKAGE = 'behaviortrees';
+
+/**
+ * Validates the `export.go.package` setting: a Go identifier that is not a keyword or `_`.
+ * Anything else falls back to DEFAULT_GO_PACKAGE and comes back with a warning.
+ */
+export function parseGoPackage(raw: unknown): { package: string; warning?: string } {
+  if (raw === undefined) {
+    return { package: DEFAULT_GO_PACKAGE };
+  }
+  if (
+    typeof raw === 'string' &&
+    /^[A-Za-z_][A-Za-z0-9_]*$/.test(raw) &&
+    raw !== '_' &&
+    !GO_KEYWORDS.has(raw)
+  ) {
+    return { package: raw };
+  }
+  return {
+    package: DEFAULT_GO_PACKAGE,
+    warning: `Invalid Go package ${JSON.stringify(raw)}, using ${DEFAULT_GO_PACKAGE}`,
   };
 }

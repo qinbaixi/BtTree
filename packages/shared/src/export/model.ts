@@ -74,3 +74,25 @@ export function toExportValue(value: unknown): ExportValue {
   }
   return null;
 }
+
+/** Cached results are dropped when there are more than this many (keys and atoms repeat a lot). */
+const FORMAT_CACHE_LIMIT = 1000;
+
+/**
+ * Remembers the results of a name formatter (object keys, atoms). An export writes the same few
+ * keys and type names for every entry, so each one is escaped and checked only once.
+ */
+export function cachedFormatter(format: (name: string) => string): (name: string) => string {
+  const cache = new Map<string, string>();
+  return (name) => {
+    let text = cache.get(name);
+    if (text === undefined) {
+      text = format(name);
+      if (cache.size >= FORMAT_CACHE_LIMIT) {
+        cache.clear();
+      }
+      cache.set(name, text);
+    }
+    return text;
+  };
+}

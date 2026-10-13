@@ -14,6 +14,28 @@ export interface MissingTypes {
   services: string[];
 }
 
+/** Compiled custom type patterns (null for invalid ones). Patterns come from a handful of custom types. */
+const PATTERN_CACHE = new Map<string, RegExp | null>();
+const PATTERN_CACHE_LIMIT = 1000;
+
+/** Anchored regex for a custom type pattern, compiled once; null when the pattern is invalid. */
+function patternRegex(pattern: string): RegExp | null {
+  let regex = PATTERN_CACHE.get(pattern);
+  if (regex === undefined) {
+    try {
+      regex = new RegExp(`^(?:${pattern})$`);
+    } catch {
+      regex = null;
+    }
+    if (PATTERN_CACHE.size >= PATTERN_CACHE_LIMIT) {
+      // Patterns typed in the project editor create new entries; start over instead of growing.
+      PATTERN_CACHE.clear();
+    }
+    PATTERN_CACHE.set(pattern, regex);
+  }
+  return regex;
+}
+
 /**
  * Validates a value against a compiled property.
  * null, undefined and '' are always valid. A pattern (from a custom type) takes precedence over the type checks.
@@ -24,13 +46,8 @@ export function validatePropertyValue(prop: CompiledProperty, value: unknown): b
   }
 
   if (prop.pattern) {
-    let regex: RegExp;
-    try {
-      regex = new RegExp(`^(?:${prop.pattern})$`);
-    } catch {
-      return false;
-    }
-    return regex.test(String(value));
+    const regex = patternRegex(prop.pattern);
+    return regex !== null && regex.test(String(value));
   }
 
   switch (prop.type) {
@@ -73,6 +90,19 @@ export function validateItem(
     invalidProperties,
     isValid: !missingType && invalidProperties.length === 0,
   };
+}
+
+/** Same as `validateItem(type, properties).isValid`, without building the result. */
+export function isItemValid(type: CompiledItemType, properties: Record<string, unknown>): boolean {
+  if (type.isInvalid === true) {
+    return false;
+  }
+  for (const prop of type.properties) {
+    if (!validatePropertyValue(prop, getEffectiveValue(prop, properties))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /** Collects the unique, sorted type names used in the tree that are missing from the project. */
@@ -122,23 +152,25 @@ export function formatMissingTypes(missing: MissingTypes): string[] | null {
   return lines.length > 0 ? lines : null;
 }
 
-/** True when no item uses a missing type and every item's properties are valid. */
+/** True when no item uses a missing type and every item's properties are valid. Stops at the first invalid item. */
 export function isTreeValid(root: TreeNode, project: CompiledProject): boolean {
-  let valid = true;
-  forEachNode(root, (n) => {
-    if (!validateItem(getItemType(project, 'node', n.type), n.properties).isValid) {
-      valid = false;
+  if (!isItemValid(getItemType(project, 'node', root.type), root.properties)) {
+    return false;
+  }
+  for (const d of root.decorators) {
+    if (!isItemValid(getItemType(project, 'decorator', d.type), d.properties)) {
+      return false;
     }
-    for (const d of n.decorators) {
-      if (!validateItem(getItemType(project, 'decorator', d.type), d.properties).isValid) {
-        valid = false;
-      }
+  }
+  for (const s of root.services) {
+    if (!isItemValid(getItemType(project, 'service', s.type), s.properties)) {
+      return false;
     }
-    for (const s of n.services) {
-      if (!validateItem(getItemType(project, 'service', s.type), s.properties).isValid) {
-        valid = false;
-      }
+  }
+  for (const child of root.childNodes) {
+    if (!isTreeValid(child, project)) {
+      return false;
     }
-  });
-  return valid;
+  }
+  return true;
 }

@@ -1,4 +1,5 @@
 import {
+  cachedFormatter,
   isExportAtom,
   isExportMap,
   type ExportEntry,
@@ -7,6 +8,9 @@ import {
   type ExportValue,
 } from './model';
 import { csharpString } from './names';
+
+/** Keys repeat for every entry; atoms are type and enum names. */
+const csharpName = cachedFormatter(csharpString);
 
 export interface CSharpOptions {
   /** Tree file path relative to the project directory, forward slashes. */
@@ -28,8 +32,11 @@ const INT64_LIMIT = 2 ** 63;
 /** Line terminators in comments: CR, LF, NEL, U+2028 and U+2029. */
 const LINE_BREAKS = new RegExp('[\\r\\n\\u0085\\u2028\\u2029]+', 'g');
 
+/** Indents used by the generator, built once. */
+const PADS: string[] = [];
+
 function pad(indent: number): string {
-  return ' '.repeat(indent);
+  return (PADS[indent] ??= ' '.repeat(indent));
 }
 
 /**
@@ -77,7 +84,7 @@ function inline(value: ExportValue): string {
     );
   }
   if (isExportAtom(value)) {
-    return csharpString(value.atom);
+    return csharpName(value.atom);
   }
   return dictionaryInline(value);
 }
@@ -91,7 +98,7 @@ function dictionaryInline(map: ExportMap): string {
   if (map.map.length === 0) {
     return 'new Dictionary<string, object>()';
   }
-  const pairs = map.map.map(([key, inner]) => `[${csharpString(key)}] = ${inline(inner)},`);
+  const pairs = map.map.map(([key, inner]) => `[${csharpName(key)}] = ${inline(inner)},`);
   return `new Dictionary<string, object> { ${pairs.join(' ')} }`;
 }
 
@@ -99,40 +106,40 @@ function dictionaryInline(map: ExportMap): string {
  * Lines of one top-level entry field. Id lists become `int[]`, other arrays `object[]`, and
  * non-empty maps are written one key per line.
  */
-function fieldLines(key: string, value: ExportValue, indent: number): string[] {
-  const head = `${pad(indent)}[${csharpString(key)}] = `;
+function pushFieldLines(lines: string[], key: string, value: ExportValue, indent: number): void {
+  const head = `${pad(indent)}[${csharpName(key)}] = `;
   if (Array.isArray(value) && ID_LIST_FIELDS.has(key)) {
-    return [
+    lines.push(
       `${head}${arrayLiteral(
         'int',
         value.map((item) => inline(item)),
       )},`,
-    ];
+    );
+    return;
   }
   if (isExportMap(value) && value.map.length > 0) {
-    const lines = [`${head}new Dictionary<string, object>`, `${pad(indent)}{`];
+    lines.push(`${head}new Dictionary<string, object>`, `${pad(indent)}{`);
     for (const [innerKey, inner] of value.map) {
-      lines.push(`${pad(indent + 4)}[${csharpString(innerKey)}] = ${inline(inner)},`);
+      lines.push(`${pad(indent + 4)}[${csharpName(innerKey)}] = ${inline(inner)},`);
     }
     lines.push(`${pad(indent)}},`);
-    return lines;
+    return;
   }
-  return [`${head}${inline(value)},`];
+  lines.push(`${head}${inline(value)},`);
 }
 
-function entryLines(entry: ExportEntry): string[] {
+function pushEntryLines(lines: string[], entry: ExportEntry): void {
   const indent = 12;
   const comment = entry.comment.replace(LINE_BREAKS, ' ');
-  const lines = [
+  lines.push(
     `${pad(indent)}// ${comment}`,
     `${pad(indent)}[${entry.id}] = new Dictionary<string, object>`,
     `${pad(indent)}{`,
-  ];
+  );
   for (const [key, value] of entry.fields) {
-    lines.push(...fieldLines(key, value, indent + 4));
+    pushFieldLines(lines, key, value, indent + 4);
   }
   lines.push(`${pad(indent)}},`);
-  return lines;
 }
 
 /**
@@ -156,7 +163,7 @@ export function toCSharp(model: ExportModel, options: CSharpOptions): string {
     `${pad(8)}{`,
   ];
   for (const entry of model.entries) {
-    lines.push(...entryLines(entry));
+    pushEntryLines(lines, entry);
   }
   lines.push(
     `${pad(8)}};`,

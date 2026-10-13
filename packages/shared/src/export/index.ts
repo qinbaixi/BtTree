@@ -1,6 +1,7 @@
 export * from './buildExportModel';
 export * from './csharp';
 export * from './erlang';
+export * from './go';
 export * from './lua';
 export * from './model';
 export * from './names';

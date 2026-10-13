@@ -56,10 +56,36 @@ function idList(items: object[], idOf: Map<object, number>): ExportValue {
   return items.map((item) => idOf.get(item) ?? 0);
 }
 
+/** Fields that are the same for every item of a type, computed once per type and export. */
+interface TypeFields {
+  type: ExportValue;
+  subType: ExportValue;
+  /** Constant `export.fields` of the type. */
+  constants: ExportField[];
+  /** The type declares a property that goes to `properties` (not to the node's top level). */
+  declaresProperties: boolean;
+}
+
+function typeFieldsOf(kind: ItemKind, type: CompiledItemType): TypeFields {
+  const constants: ExportField[] = [];
+  for (const [key, value] of Object.entries(type.export?.fields ?? {})) {
+    if (value !== undefined) {
+      constants.push([key, toExportValue(value)]);
+    }
+  }
+  return {
+    type: atom(exportedType(kind, type)),
+    subType: exportedSubType(type),
+    constants,
+    declaresProperties: type.properties.some((prop) => prop.exportTo !== 'node'),
+  };
+}
+
 function buildEntry(
   numbered: NumberedItem,
   project: CompiledProject,
   idOf: Map<object, number>,
+  typeFields: Map<CompiledItemType, TypeFields>,
   warnings: string[],
 ): ExportEntry {
   const { id, kind, item, path } = numbered;
@@ -67,11 +93,16 @@ function buildEntry(
   if (type.isInvalid) {
     throw new ExportError(`Missing ${KIND_LABEL[kind]} type '${item.type}' at ${path}`);
   }
+  let shared = typeFields.get(type);
+  if (!shared) {
+    shared = typeFieldsOf(kind, type);
+    typeFields.set(type, shared);
+  }
 
   const fields: ExportField[] = [
     ['node_id', id],
-    ['type', atom(exportedType(kind, type))],
-    ['sub_type', exportedSubType(type)],
+    ['type', shared.type],
+    ['sub_type', shared.subType],
   ];
 
   if (kind === 'decorator') {
@@ -90,11 +121,7 @@ function buildEntry(
     }
   }
 
-  for (const [key, value] of Object.entries(type.export?.fields ?? {})) {
-    if (value !== undefined) {
-      fields.push([key, toExportValue(value)]);
-    }
-  }
+  fields.push(...shared.constants);
 
   // Property values are the effective values (explicit value, else the declared default).
   const nodeFields: ExportField[] = [];
@@ -120,8 +147,7 @@ function buildEntry(
     const node = item as TreeNode;
     fields.push(['decorators', idList(node.decorators, idOf)]);
     fields.push(['services', idList(node.services, idOf)]);
-    const declaresProperties = type.properties.some((prop) => prop.exportTo !== 'node');
-    if (!type.isComposite || declaresProperties) {
+    if (!type.isComposite || shared.declaresProperties) {
       fields.push(['properties', { map: propertyFields }]);
     }
     if (type.isComposite) {
@@ -147,6 +173,7 @@ export function buildExportModel(root: TreeNode, project: CompiledProject): Expo
   }
 
   const warnings: string[] = [];
-  const entries = numbered.map((entry) => buildEntry(entry, project, idOf, warnings));
+  const typeFields = new Map<CompiledItemType, TypeFields>();
+  const entries = numbered.map((entry) => buildEntry(entry, project, idOf, typeFields, warnings));
   return { rootId: idOf.get(root) ?? 1, entries, warnings };
 }

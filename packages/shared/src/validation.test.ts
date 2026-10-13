@@ -4,6 +4,7 @@ import {
   collectMissingTypes,
   formatMissingTypes,
   getEffectiveValue,
+  isItemValid,
   isTreeValid,
   validateItem,
   validatePropertyValue,
@@ -92,6 +93,23 @@ describe('validatePropertyValue', () => {
     expect(validatePropertyValue(prop({ type: 'string', pattern: '(' }), 'x')).toBe(false);
   });
 
+  it('gives the same answers when a pattern is reused or changed', () => {
+    for (let i = 0; i < 3; i++) {
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[a-z]+' }), 'abc')).toBe(true);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[a-z]+' }), 'ABC')).toBe(false);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '[A-Z]+' }), 'ABC')).toBe(true);
+      expect(validatePropertyValue(prop({ type: 'string', pattern: '(' }), 'x')).toBe(false);
+    }
+  });
+
+  it('keeps working after many distinct patterns', () => {
+    for (let i = 0; i < 1500; i++) {
+      expect(
+        validatePropertyValue(prop({ type: 'string', pattern: `x{${i}}` }), 'x'.repeat(i)),
+      ).toBe(true);
+    }
+  });
+
   it('ignores an empty pattern and falls back to the type checks', () => {
     expect(validatePropertyValue(prop({ type: 'bool', pattern: '' }), 'x')).toBe(false);
   });
@@ -132,6 +150,20 @@ describe('validateItem', () => {
     ],
   });
   const waitType = getItemType(project, 'node', 'Wait');
+
+  it('isItemValid agrees with validateItem().isValid', () => {
+    const cases: Record<string, unknown>[] = [
+      {},
+      { Time: 3, Mode: 'b', Code: '42' },
+      { Time: -5 },
+      { Mode: 'c' },
+      { Code: 'abc' },
+    ];
+    for (const properties of cases) {
+      expect(isItemValid(waitType, properties)).toBe(validateItem(waitType, properties).isValid);
+    }
+    expect(isItemValid(getItemType(project, 'node', 'Missing'), {})).toBe(false);
+  });
 
   it('is valid for a valid item (defaults count as values)', () => {
     expect(validateItem(waitType, {})).toEqual({

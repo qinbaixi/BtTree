@@ -24,7 +24,8 @@
     "package:current": "npm run build && npm run build -w @owlbt/desktop && npm run dist:current -w @owlbt/desktop",
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "bench": "node --expose-gc --min-semi-space-size=128 --max-semi-space-size=128 --import tsx scripts/bench/bench.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

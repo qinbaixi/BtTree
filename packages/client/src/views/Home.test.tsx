@@ -460,7 +460,7 @@ describe('Home', () => {
     const isChecked = (name: string) =>
       (screen.getByRole('checkbox', { name }) as HTMLInputElement).checked;
 
-    it('shows four format checkboxes and defaults to Erlang and Lua', async () => {
+    it('shows five format checkboxes and defaults to Erlang and Lua', async () => {
       renderWorkspace();
       await screen.findByText('trees/a.json');
 
@@ -468,6 +468,7 @@ describe('Home', () => {
       expect(isChecked('Lua')).toBe(true);
       expect(isChecked('TypeScript')).toBe(false);
       expect(isChecked('C#')).toBe(false);
+      expect(isChecked('Go')).toBe(false);
     });
 
     it('keeps the default when the stored value is not valid JSON', async () => {
@@ -515,6 +516,19 @@ describe('Home', () => {
       await screen.findByRole('list', { name: 'Export results' });
       const batchCall = calls.find((c) => c.url.pathname === '/api/export/batch');
       expect(batchCall?.body).toEqual({ dir: '/work/trees', formats: ['ts', 'cs'] });
+    });
+
+    it('stores and exports Go when it is ticked', async () => {
+      const calls = renderWorkspace();
+      await screen.findByText('trees/a.json');
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Go' }));
+      expect(window.localStorage.getItem(EXPORT_FORMATS_STORAGE_KEY)).toBe('["erlang","lua","go"]');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
+      await screen.findByRole('list', { name: 'Export results' });
+      const batchCall = calls.find((c) => c.url.pathname === '/api/export/batch');
+      expect(batchCall?.body).toEqual({ dir: '/work/trees', formats: ['erlang', 'lua', 'go'] });
     });
 
     it('exports the folder with the ticked formats and lists the results per tree', async () => {

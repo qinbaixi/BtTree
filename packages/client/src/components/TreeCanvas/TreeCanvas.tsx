@@ -17,7 +17,7 @@ import {
   type ZoomBehavior,
   type ZoomTransform,
 } from 'd3-zoom';
-import { forEachNode, type Selection, type TreeNode } from '@owlbt/shared';
+import { forEachNode, type CompiledProject, type Selection, type TreeNode } from '@owlbt/shared';
 import { buildExportIdMap } from '../RunMode/runHelpers';
 import { inspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
@@ -94,6 +94,9 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const transformRef = useRef<ZoomTransform>(zoomIdentity);
   const layoutRef = useRef<TreeLayout>(undefined);
   const centeredRef = useRef(false);
+  const measuredRef = useRef<{ root?: TreeNode; project?: CompiledProject; layout?: TreeLayout }>(
+    {},
+  );
 
   const exportIds = useMemo(
     () => (runActive && showIds ? buildExportIdMap(root) : undefined),
@@ -157,13 +160,20 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     };
   }, []);
 
-  // Node sizes are read from the DOM after every commit (an external system), so the layout
-  // can depend on them. Sizes are only stored when they differ, so this settles. The root is
-  // centered once the sizes of the rendered layout are stable (wrapping can still change sizes
-  // when the layout moves nodes).
+  // Node sizes are read from the DOM (an external system) after every commit that rendered a new
+  // tree, project or layout, so the layout can depend on them. Sizes are only stored when they
+  // differ, so this settles. Other commits (e.g. a selection change) skip the measurement, which
+  // forces a synchronous reflow of every node; size changes from styling alone are reported by the
+  // ResizeObserver. The root is centered once the sizes of the rendered layout are stable
+  // (wrapping can still change sizes when the layout moves nodes).
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs after every commit
   useLayoutEffect(() => {
     layoutRef.current = layout;
+    const measured = measuredRef.current;
+    if (measured.root === root && measured.project === project && measured.layout === layout) {
+      return;
+    }
+    measuredRef.current = { root, project, layout };
     const next = controller.measure();
     if (sameSizes(sizes, next)) {
       if (!centeredRef.current && root && layout && sizes.has(root.id)) {

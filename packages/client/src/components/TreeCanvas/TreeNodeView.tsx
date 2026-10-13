@@ -2,7 +2,7 @@ import { memo, useCallback, useContext, type CSSProperties, type MouseEvent } fr
 import {
   describeItem,
   getItemType,
-  validateItem,
+  isItemValid,
   type CompiledItemType,
   type CompiledProject,
   type RunStatus,
@@ -91,7 +91,7 @@ function ItemView({
   exportId,
 }: ItemViewProps) {
   const canvas = useContext(TreeCanvasContext);
-  const invalid = !validateItem(type, properties).isValid;
+  const invalid = !isItemValid(type, properties);
   const defaultName = `${inverseCheckCondition ? '[not] ' : ''}${type.name}`;
   const description = type.description ? describeItem(type, properties) : undefined;
   // Invalid items are painted red by the stylesheet; valid ones take the type color from the variable.
@@ -203,7 +203,7 @@ export const TreeNodeView = memo(function TreeNodeView({
   const nodeType = getItemType(project, 'node', node.type);
   const ids = runActive ? exportIds : undefined;
   const nodeExportId = ids?.get(node.id);
-  const nodeInvalid = !validateItem(nodeType, node.properties).isValid;
+  const nodeInvalid = !isItemValid(nodeType, node.properties);
   const cardClass = [
     styles.node,
     selected ? styles.nodeSelected : '',
