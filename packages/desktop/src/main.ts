@@ -29,6 +29,7 @@ import {
   treePathFromArgs,
   type WindowState,
 } from './launch';
+import { Updater } from './updater';
 
 const APP_NAME = 'owl-bt';
 const HOST = '127.0.0.1';
@@ -36,6 +37,8 @@ const DEFAULT_PORT = 18955;
 /** Ports tried in order: 18955 through 18975. */
 const PORT_COUNT = 21;
 const SMOKE_TIMEOUT_MS = 30_000;
+/** First update check, a little after startup so it does not compete with loading the page. */
+const UPDATE_CHECK_DELAY_MS = 5_000;
 
 // Keeps userData at %APPDATA%/owl-bt in development too (the package name contains a slash).
 app.setName(APP_NAME);
@@ -107,6 +110,8 @@ function isLocalUrl(url: string): boolean {
   }
 }
 
+const updater = new Updater({ isTrustedSender: isLocalUrl, openExternal });
+
 /** Opens http(s) links in the system browser. Other schemes are ignored. */
 function openExternal(url: string): void {
   try {
@@ -177,6 +182,7 @@ function createMainWindow(route: string): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      preload: join(__dirname, 'preload.cjs'),
     },
   });
   mainWindow = win;
@@ -219,6 +225,8 @@ function createMainWindow(route: string): BrowserWindow {
     });
     if (choice === 0) {
       event.preventDefault(); // Ignores the page's beforeunload prompt and lets the window close.
+    } else {
+      updater.cancelRestart(); // "Restart to update" waits until the user closes the window.
     }
   });
   win.webContents.on('render-process-gone', (_event, details) => {
@@ -400,7 +408,9 @@ function start(): void {
   });
 
   app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    if (updater.restartRequested) {
+      updater.finishRestart();
+    } else if (process.platform !== 'darwin') {
       app.quit();
     }
   });
@@ -423,6 +433,7 @@ function start(): void {
     .whenReady()
     .then(async () => {
       setupMenu();
+      updater.registerIpc();
       try {
         serverResult = await startServer();
       } catch (err) {
@@ -436,6 +447,9 @@ function start(): void {
         startupRoute(pendingRoute, routeFromArgs(process.argv.slice(1), process.cwd())),
       );
       pendingRoute = undefined;
+      if (!smokeMode) {
+        setTimeout(() => void updater.check(), UPDATE_CHECK_DELAY_MS);
+      }
     })
     .catch((err: unknown) => {
       console.error('owl-bt:', err);

@@ -56,9 +56,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body_path: release-notes.md
+          # latest.yml tells installed apps about this release (auto update).
           files: |
             release/*.exe
             release/*.blockmap
+            release/latest.yml
 
   notes:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
