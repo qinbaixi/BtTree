@@ -33,6 +33,23 @@ export interface HistoryEntry {
 
 export type SelectionArg = Selection | ((draft: TreeNode) => Selection | undefined);
 
+/** The data fields of the tree state (everything but the actions). */
+export type TreeStateData = {
+  [
+    K in keyof TreeState as TreeState[K] extends (...args: never[]) => unknown ? never : K
+  ]: TreeState[K];
+};
+
+/**
+ * Copy of a tree store's state, including its saved marker. Editor tabs keep one per inactive tree
+ * and put it back with `restore`.
+ */
+export interface TreeSnapshot {
+  data: TreeStateData;
+  /** Undo-stack top when the tree was loaded or last saved (see `dirty`). */
+  savedTop?: HistoryEntry;
+}
+
 export interface TreeState {
   treePath?: string;
   root?: TreeNode;
@@ -62,6 +79,10 @@ export interface TreeState {
   /** True when no item of the tree is invalid for the project (always true without a tree). */
   isValid(project: CompiledProject): boolean;
   getIdGen(): IdGen;
+  /** Copies the current state (for editor tabs). */
+  snapshot(): TreeSnapshot;
+  /** Replaces the state by a snapshot. A pending load is cancelled. */
+  restore(snapshot: TreeSnapshot): void;
 }
 
 export interface TreeStoreDeps {
@@ -248,6 +269,27 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
       getIdGen() {
         return deps.idGen;
+      },
+
+      snapshot() {
+        const data: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(get())) {
+          if (typeof value !== 'function') {
+            data[key] = value;
+          }
+        }
+        return { data: data as TreeStateData, savedTop };
+      },
+
+      restore(snapshot) {
+        loadToken++;
+        savedTop = snapshot.savedTop;
+        // version keeps increasing so that views see a change; loadCount is not a new load.
+        set((state) => ({
+          ...snapshot.data,
+          version: Math.max(state.version, snapshot.data.version) + 1,
+          loadCount: state.loadCount,
+        }));
       },
     };
   });
