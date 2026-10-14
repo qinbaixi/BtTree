@@ -27,7 +27,7 @@ import { treeStore, useTreeStore } from '../../store/treeStore';
 import { CanvasController, TreeCanvasContext, type ContextMenuHandler } from './canvasController';
 import { computeTreeLayout, linkPath, MIN_CANVAS_SIZE, type Size, type TreeLayout } from './layout';
 import { TreeNodeView } from './TreeNodeView';
-import { viewportStore } from './viewportStore';
+import { reportViewTransform, takeViewTransform, viewportStore } from './viewportStore';
 import styles from './TreeCanvas.module.css';
 
 export const MIN_ZOOM = 0.1;
@@ -147,12 +147,14 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
       .on('zoom', (event: D3ZoomEvent<HTMLDivElement, unknown>) => {
         const t = event.transform;
         transformRef.current = t;
+        reportViewTransform({ x: t.x, y: t.y, k: t.k });
         content.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.k})`;
         // The dot grid moves and scales with the content.
         container.style.backgroundPosition = `${t.x}px ${t.y}px`;
         container.style.backgroundSize = `${GRID_SIZE * t.k}px ${GRID_SIZE * t.k}px`;
       });
     zoomRef.current = behavior;
+    reportViewTransform(undefined);
     const containerSelection = select(container).call(behavior).on('dblclick.zoom', null);
     return () => {
       containerSelection.on('.zoom', null);
@@ -178,7 +180,16 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     if (sameSizes(sizes, next)) {
       if (!centeredRef.current && root && layout && sizes.has(root.id)) {
         centeredRef.current = true;
-        centerOn(root.id);
+        // A tab switch restores the pan and zoom the tree had; a new tree centers its root.
+        const saved = takeViewTransform(treeStore.getState().treePath);
+        if (saved && zoomRef.current && containerRef.current) {
+          select(containerRef.current).call(
+            zoomRef.current.transform,
+            zoomIdentity.translate(saved.x, saved.y).scale(saved.k),
+          );
+        } else {
+          centerOn(root.id);
+        }
       }
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM measurement sync

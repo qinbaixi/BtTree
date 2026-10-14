@@ -6,6 +6,7 @@ import {
   RUN_COMMAND_IDS,
   THEME_COMMAND_IDS,
 } from '../../commands/coreCommands';
+import { TAB_COMMAND_IDS } from '../../commands/tabCommands';
 import { useProjectStore } from '../../store/projectStore';
 import { useRunStore } from '../../store/runStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -31,7 +32,10 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
   {
     name: 'File',
     items: [
+      { title: 'Open tree…', commandId: TAB_COMMAND_IDS.open, hotkey: 'Ctrl+O' },
       { title: 'Save', commandId: 'core:Save', hotkey: 'Ctrl+S' },
+      { title: 'Save all', commandId: TAB_COMMAND_IDS.saveAll, hotkey: 'Ctrl+Shift+S' },
+      { title: 'Close tab', commandId: TAB_COMMAND_IDS.close, hotkey: 'Ctrl+W' },
       { title: 'Export: Erlang', commandId: EXPORT_COMMAND_IDS.erlang },
       { title: 'Export: Lua', commandId: EXPORT_COMMAND_IDS.lua },
       { title: 'Export: TypeScript', commandId: EXPORT_COMMAND_IDS.ts },
