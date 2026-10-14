@@ -10,6 +10,7 @@ import {
   renameType,
   setBases,
   snakeCase,
+  SUBTREE_PROPERTY,
   updateType,
   type ItemKind,
   type ItemExportJson,
@@ -34,6 +35,7 @@ export const KNOWN_TYPE_KEYS: readonly string[] = [
   'description',
   'properties',
   'isComposite',
+  'subtree',
   'export',
   'simulate',
 ];
@@ -134,7 +136,8 @@ export function TypeForm({ kind, name }: TypeFormProps) {
     .filter((other) => !bases.includes(other) && canAddBase(draft, kind, name, other));
   const references = findTypeReferences(draft, kind, name);
   const unknown = Object.keys(desc).filter((key) => !KNOWN_TYPE_KEYS.includes(key));
-  const isComposite = kind === 'node' && desc.isComposite === true;
+  const isSubtree = kind === 'node' && desc.subtree === true;
+  const isComposite = kind === 'node' && desc.isComposite === true && !isSubtree;
   const color = desc.color ?? defaultColorFor(kind, isComposite);
   const placeholders = desc.description ? unknownPlaceholders(desc.description, propNames) : [];
   const exp = desc.export;
@@ -228,7 +231,9 @@ export function TypeForm({ kind, name }: TypeFormProps) {
         </div>
         <span className={styles.kindTag}>{KIND_LABEL[kind]}</span>
         {kind === 'node' && (
-          <span className={styles.kindTag}>{isComposite ? 'Composite' : 'Action'}</span>
+          <span className={styles.kindTag}>
+            {isSubtree ? 'Subtree' : isComposite ? 'Composite' : 'Action'}
+          </span>
         )}
         {desc.isAbstract === true && <span className={styles.kindTag}>abstract</span>}
       </div>
@@ -239,11 +244,38 @@ export function TypeForm({ kind, name }: TypeFormProps) {
             <input
               type="checkbox"
               checked={isComposite}
+              disabled={isSubtree}
               onChange={(event) =>
                 patchType('Set composite', { isComposite: event.target.checked })
               }
             />
             Composite (has child nodes)
+          </label>
+        )}
+        {kind === 'node' && (
+          <label
+            className={styles.checkLabel}
+            title={`Runs the tree file named by its ${SUBTREE_PROPERTY} property (relative to the project folder)`}
+          >
+            <input
+              type="checkbox"
+              checked={isSubtree}
+              onChange={(event) => {
+                const on = event.target.checked;
+                set(on ? 'Make subtree reference' : 'Remove subtree reference', (d) => {
+                  updateType(d, kind, name, { subtree: on ? true : undefined });
+                  // A new subtree type gets the property that holds the referenced tree.
+                  const target = findType(d, kind, name);
+                  if (on && target && !propNames.includes(SUBTREE_PROPERTY)) {
+                    target.properties = [
+                      ...(target.properties ?? []),
+                      { name: SUBTREE_PROPERTY, type: 'string', default: '' },
+                    ];
+                  }
+                });
+              }}
+            />
+            Subtree reference (runs another tree file)
           </label>
         )}
         <label className={styles.checkLabel}>

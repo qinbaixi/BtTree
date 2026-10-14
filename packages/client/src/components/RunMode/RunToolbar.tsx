@@ -31,7 +31,10 @@ export default function RunToolbar() {
   const canStepBack = useRunStore(selectCanStepBack);
   const tickNumber = useRunStore((state) => state.history[state.viewIndex]?.tick ?? 0);
   const lastTick = useRunStore((state) => state.history[state.history.length - 1]?.tick ?? 0);
-  const root = useTreeStore((state) => state.root);
+  const treeRoot = useTreeStore((state) => state.root);
+  const runRoot = useRunStore((state) => state.runRoot);
+  // The pending node may be in a referenced tree: names come from the tree that runs.
+  const root = runRoot ?? treeRoot;
 
   const run = runStore.getState();
   const latest = useRunStore((state) => state.history[state.history.length - 1]);

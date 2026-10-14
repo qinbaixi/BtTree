@@ -6,7 +6,9 @@ import {
   type Run,
   type RunCheckpoint,
   type ScenarioJson,
+  subtreeOwnerId,
   type Selection,
+  type SubtreeLibrary,
   type TickResult,
   type TreeNode,
 } from '@owlbt/shared';
@@ -23,6 +25,7 @@ import {
 import { getJson, setJson } from '../lib/storage';
 import { alerts } from './alertStore';
 import { projectStore } from './projectStore';
+import { subtreeStore } from './subtreeStore';
 import { treeStore } from './treeStore';
 
 export const MIN_SPEED = 0.5;
@@ -56,6 +59,8 @@ export interface RunState {
   dropped: number;
   /** Increases whenever a new run is built. */
   runId: number;
+  /** The tree that runs: the open tree with the referenced trees of subtree nodes attached. */
+  runRoot?: TreeNode;
   /** Number of times the tree runs; 0 = endless. */
   loops: number;
   playing: boolean;
@@ -109,6 +114,10 @@ export interface RunStoreDeps {
   saveProject(path: string, body: ProjectSaveBody): Promise<{ hash: string }>;
   focus(nodeId: string): void;
   select(selection: Selection | undefined): void;
+  /** Trees referenced by subtree nodes, and the open tree's project-relative path. */
+  getSubtrees?(): { library: SubtreeLibrary; treeRef?: string };
+  /** Reloads the referenced trees; resolves true when they changed. */
+  refreshSubtrees?(): Promise<boolean>;
   notify: {
     error(message: string): void;
     success(message: string): void;
@@ -124,6 +133,11 @@ const defaultDeps: RunStoreDeps = {
   saveProject,
   focus: focusNode,
   select: (selection) => treeStore.getState().select(selection),
+  getSubtrees: () => {
+    const state = subtreeStore.getState();
+    return { library: state.library, treeRef: state.self };
+  },
+  refreshSubtrees: () => subtreeStore.getState().refresh(),
   notify: {
     error: (message) => void alerts.error(message),
     success: (message) => void alerts.success(message),
@@ -180,7 +194,9 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       }, 1000 / get().speed);
     };
 
-    const focusAndSelect = (nodeId: string): void => {
+    /** Nodes of referenced trees are not in the open tree: their subtree node is shown instead. */
+    const focusAndSelect = (runNodeId: string): void => {
+      const nodeId = subtreeOwnerId(runNodeId);
       deps.select({ kind: 'node', nodeId });
       deps.focus(nodeId);
     };
@@ -248,18 +264,22 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       if (!root || !project) {
         run = undefined;
         checkpoints = [];
-        set({ history: [], viewIndex: 0, dropped: 0, playing: false });
+        set({ history: [], viewIndex: 0, dropped: 0, playing: false, runRoot: undefined });
         return false;
       }
       const state = get();
+      const subtrees = deps.getSubtrees?.() ?? { library: {} };
       run = createRun(root, project, {
         blackboard: entriesToRecord(state.blackboard),
         seed: state.seed,
         overrides: state.overrides,
         loops: state.loops,
+        subtrees: subtrees.library,
+        treeRef: subtrees.treeRef,
       });
       checkpoints = [run.checkpoint()];
       set({
+        runRoot: run.root,
         history: [run.snapshot()],
         viewIndex: 0,
         dropped: 0,
@@ -374,6 +394,16 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         }
         set({ active: true });
         build();
+        // Referenced trees are reloaded before the run starts; a change rebuilds the fresh run.
+        void (deps.refreshSubtrees?.() ?? Promise.resolve(false)).then(
+          (changed) => {
+            const current = get();
+            if (changed && current.active && current.history.length === 1 && !current.playing) {
+              build();
+            }
+          },
+          () => undefined,
+        );
         return true;
       },
 
@@ -381,7 +411,14 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         stopTimer();
         run = undefined;
         checkpoints = [];
-        set({ active: false, history: [], viewIndex: 0, dropped: 0, playing: false });
+        set({
+          active: false,
+          history: [],
+          viewIndex: 0,
+          dropped: 0,
+          playing: false,
+          runRoot: undefined,
+        });
       },
 
       reset() {

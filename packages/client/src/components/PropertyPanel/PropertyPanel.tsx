@@ -2,8 +2,10 @@ import { useState, type CSSProperties, type InputHTMLAttributes, type ReactNode 
 import {
   getEffectiveValue,
   getItemType,
+  isSubtreeType,
   setBaseProperty,
   setPropertyValue,
+  SUBTREE_PROPERTY,
   validatePropertyValue,
   type CompiledProject,
   type CompiledProperty,
@@ -20,6 +22,7 @@ import {
   useTreeStore,
   type SelectedItem,
 } from '../../store/treeStore';
+import { SubtreeSection } from './SubtreeSection';
 import { TreeOverview } from './TreeOverview';
 import { TypeDetails } from './TypeDetails';
 import styles from './PropertyPanel.module.css';
@@ -106,6 +109,11 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
   const type = getItemType(project, selected.kind, item.type);
   const sub = selected.subItem;
   const itemId = item.id;
+  // Subtree references edit their Tree property in their own section.
+  const subtree = selected.kind === 'node' && !sub && isSubtreeType(type);
+  const customProperties = subtree
+    ? type.properties.filter((prop) => prop.name !== SUBTREE_PROPERTY)
+    : type.properties;
 
   return (
     <div className={styles.details}>
@@ -157,10 +165,22 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
         )}
       </fieldset>
 
-      {!type.isInvalid && (
+      {subtree && (
+        <SubtreeSection
+          node={selected.node}
+          type={type}
+          onCommit={(value) =>
+            commitToSelection('Set Tree', (target) =>
+              setPropertyValue(target, SUBTREE_PROPERTY, value),
+            )
+          }
+        />
+      )}
+
+      {!type.isInvalid && (!subtree || customProperties.length > 0) && (
         <fieldset className={styles.fieldset}>
           <legend>Custom properties</legend>
-          {type.properties.map((prop) => (
+          {customProperties.map((prop) => (
             <PropertyField
               key={prop.name}
               itemId={itemId}

@@ -1,4 +1,4 @@
-import type { TreeNodeJson } from '@owlbt/shared';
+import type { SubtreeLibrary, TreeNodeJson } from '@owlbt/shared';
 
 /** A failed request. `message` is the server's text (or its JSON `message`) when it sent one. */
 export class ApiError extends Error {
@@ -191,4 +191,26 @@ export async function fetchPluginState(treePath: string): Promise<PluginState> {
 export async function trustPlugin(treePath: string): Promise<PluginState> {
   const response = await request('/api/plugin/trust', postJson({ path: treePath }));
   return (await response.json()) as PluginState;
+}
+
+/** Referenced trees of a tree's subtree nodes, as POST /api/subtrees resolves them. */
+export interface SubtreeResolution {
+  /** Folder of owl-bt.json; references are relative to it. */
+  projectDir: string;
+  /** Project-relative path of the tree itself; null when it is not inside the project folder. */
+  self: string | null;
+  /** Loaded trees (or why they cannot be used) by reference, including nested references. */
+  library: SubtreeLibrary;
+}
+
+/**
+ * Loads the trees named by `refs` (project-relative paths) and the trees they reference. Without
+ * `refs` the references of the tree file on disk are used.
+ */
+export async function resolveSubtrees(
+  treePath: string,
+  refs?: readonly string[],
+): Promise<SubtreeResolution> {
+  const response = await request('/api/subtrees', postJson({ path: treePath, refs }));
+  return (await response.json()) as SubtreeResolution;
 }

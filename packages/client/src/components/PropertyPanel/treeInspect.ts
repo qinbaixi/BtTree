@@ -6,6 +6,7 @@ import {
   type CompiledProject,
   type Selection,
   type ItemKind,
+  type SubtreeProblem,
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
@@ -131,8 +132,15 @@ export interface TreeSummary {
   usedTypes: Record<ItemKind, UsedType[]>;
 }
 
-/** Counts, problems and used types of a tree. */
-export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSummary {
+/**
+ * Counts, problems and used types of a tree. `subtreeProblems` (by node id) adds the problems of
+ * subtree references: missing files, references outside the project and cycles.
+ */
+export function summarizeTree(
+  root: TreeNode,
+  project: CompiledProject,
+  subtreeProblems?: ReadonlyMap<string, SubtreeProblem>,
+): TreeSummary {
   const summary: TreeSummary = {
     nodes: 0,
     composite: 0,
@@ -192,6 +200,16 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
     }
     countType('node', node.type, type.isInvalid);
     addProblem('node', node, ancestors, node);
+    const subtreeProblem = subtreeProblems?.get(node.id);
+    if (subtreeProblem) {
+      summary.problems.push({
+        kind: 'node',
+        nodeId: node.id,
+        type: node.type,
+        path: formatPath([...ancestors, itemName(node)]),
+        message: subtreeProblem.message,
+      });
+    }
 
     for (const decorator of node.decorators) {
       summary.decorators += 1;

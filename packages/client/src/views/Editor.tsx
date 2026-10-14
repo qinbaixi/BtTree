@@ -18,6 +18,7 @@ import TopMenu from '../components/TopMenu/TopMenu';
 import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
 // Registers the core commands (side effect of the module).
 import '../commands/coreCommands';
+import '../commands/subtreeCommands';
 import { commandContext } from '../commands/registry';
 import { useHotkeys } from '../commands/useHotkeys';
 import { setNavigator } from '../lib/appNavigation';
@@ -25,6 +26,7 @@ import { getPathLastSegment, registerMru } from '../lib/mru';
 import { alertStore, alerts } from '../store/alertStore';
 import { projectStore, useProjectStore } from '../store/projectStore';
 import { runStore, useRunStore } from '../store/runStore';
+import { startSubtreeSync } from '../store/subtreeStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
 
@@ -79,6 +81,9 @@ function EditorPage({ treePath }: { treePath: string }) {
       runStore.getState().exit();
     };
   }, [treePath]);
+
+  // Load the trees referenced by subtree nodes and keep their problems up to date.
+  useEffect(() => startSubtreeSync(treePath), [treePath]);
 
   // Warn about types used by the tree but missing from the project (after each load and reload).
   useEffect(() => {

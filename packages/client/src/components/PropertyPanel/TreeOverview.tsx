@@ -3,6 +3,7 @@ import type { CompiledProject, ItemKind, TreeNode } from '@owlbt/shared';
 import { fetchWorkspace } from '../../lib/api';
 import { getPathLastSegment } from '../../lib/mru';
 import { inspectStore } from '../../store/inspectStore';
+import { useSubtreeStore } from '../../store/subtreeStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import { focusNode } from '../TreeCanvas/viewportStore';
 import { selectionFor, summarizeTree, type TreeProblem, type UsedType } from './treeInspect';
@@ -202,7 +203,11 @@ interface OverviewBodyProps {
 }
 
 function OverviewBody({ root, project }: OverviewBodyProps) {
-  const summary = useMemo(() => summarizeTree(root, project), [root, project]);
+  const subtreeProblems = useSubtreeStore((state) => state.problems);
+  const summary = useMemo(
+    () => summarizeTree(root, project, subtreeProblems),
+    [root, project, subtreeProblems],
+  );
   const stats: { label: string; value: number }[] = [
     { label: 'Nodes', value: summary.nodes },
     { label: 'Composite', value: summary.composite },
