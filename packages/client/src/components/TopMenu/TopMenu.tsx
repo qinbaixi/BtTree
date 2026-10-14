@@ -6,6 +6,7 @@ import {
   RUN_COMMAND_IDS,
   THEME_COMMAND_IDS,
 } from '../../commands/coreCommands';
+import { VIEW_COMMAND_IDS } from '../../commands/viewCommands';
 import { useProjectStore } from '../../store/projectStore';
 import { useRunStore } from '../../store/runStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -46,12 +47,20 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
     items: [
       { title: 'Undo', commandId: 'core:Undo', hotkey: 'Ctrl+Z' },
       { title: 'Redo', commandId: 'core:Redo', hotkey: 'Ctrl+Y' },
+      { title: 'Find in tree', commandId: VIEW_COMMAND_IDS.find, hotkey: 'Ctrl+F' },
     ],
   },
   {
     name: 'View',
     items: [
       { title: 'Command Palette', commandId: 'core:CommandPalette', hotkey: 'Ctrl+Shift+P' },
+      {
+        title: 'Collapse / Expand subtree',
+        commandId: VIEW_COMMAND_IDS.toggleCollapse,
+        hotkey: 'Space',
+      },
+      { title: 'Collapse all', commandId: VIEW_COMMAND_IDS.collapseAll },
+      { title: 'Expand all', commandId: VIEW_COMMAND_IDS.expandAll },
       { title: 'Theme: Light', commandId: THEME_COMMAND_IDS.light, themeId: 'light' },
       { title: 'Theme: Classic dark', commandId: THEME_COMMAND_IDS.classic, themeId: 'classic' },
     ],

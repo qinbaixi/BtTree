@@ -11,6 +11,7 @@ import {
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
+import { collapseStore } from '../../store/collapseStore';
 import { runStore } from '../../store/runStore';
 import { treeStore } from '../../store/treeStore';
 import { TreeCanvasContext } from './canvasController';
@@ -38,6 +39,16 @@ export interface TreeNodeViewProps {
   breakpoint?: boolean;
   /** Run mode: export number (#N) by node / decorator / service id; set to show the id badges. */
   exportIds?: ReadonlyMap<string, number>;
+  /** Number of direct children; a collapse toggle is shown when > 0 (interactive cards only). */
+  childCount?: number;
+  /** The subtree is collapsed: descendants are hidden and `hiddenCount` is shown as "+N". */
+  collapsed?: boolean;
+  /** Number of hidden descendants of a collapsed node. */
+  hiddenCount?: number;
+  /** Search: keys (node or sub item ids) of all matching items of the tree. */
+  searchHits?: ReadonlySet<string>;
+  /** Search: key of the current result when it belongs to this node. */
+  searchCurrent?: string;
 }
 
 interface ItemViewProps {
@@ -54,6 +65,9 @@ interface ItemViewProps {
   subStatus?: SubStatus;
   /** Export number shown as a tiny badge (run mode). */
   exportId?: number;
+  /** Search: the item matches / is the current result (sub items only; nodes mark the card). */
+  searchHit?: boolean;
+  searchCurrent?: boolean;
 }
 
 const SUB_STATUS_ICON: Record<SubStatus, { icon: string; label: string }> = {
@@ -89,6 +103,8 @@ function ItemView({
   interactive,
   subStatus,
   exportId,
+  searchHit = false,
+  searchCurrent = false,
 }: ItemViewProps) {
   const canvas = useContext(TreeCanvasContext);
   const invalid = !isItemValid(type, properties);
@@ -121,6 +137,8 @@ function ItemView({
     kind === 'node' ? styles.nodeDesc : styles[kind],
     invalid ? styles.invalid : '',
     selected ? styles.selected : '',
+    searchHit ? styles.searchHit : '',
+    searchCurrent ? styles.searchCurrent : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -130,6 +148,8 @@ function ItemView({
       className={className}
       style={style}
       data-item-kind={kind}
+      data-item-id={itemId}
+      data-search-hit={searchHit ? (searchCurrent ? 'current' : 'true') : undefined}
       data-item-invalid={invalid ? 'true' : undefined}
       onClick={onClick}
       onContextMenu={onContextMenu}
@@ -192,6 +212,11 @@ export const TreeNodeView = memo(function TreeNodeView({
   subStatuses,
   breakpoint = false,
   exportIds,
+  childCount = 0,
+  collapsed = false,
+  hiddenCount = 0,
+  searchHits,
+  searchCurrent,
 }: TreeNodeViewProps) {
   const canvas = useContext(TreeCanvasContext);
   // The element is registered for measuring; the controller is stable so this callback is too.
@@ -204,9 +229,13 @@ export const TreeNodeView = memo(function TreeNodeView({
   const ids = runActive ? exportIds : undefined;
   const nodeExportId = ids?.get(node.id);
   const nodeInvalid = !isItemValid(nodeType, node.properties);
+  const nodeHit = searchHits?.has(node.id) ?? false;
+  const nodeCurrent = searchCurrent === node.id;
   const cardClass = [
     styles.node,
     selected ? styles.nodeSelected : '',
+    nodeHit ? styles.nodeSearchHit : '',
+    nodeCurrent ? styles.nodeSearchCurrent : '',
     nodeInvalid ? styles.nodeInvalid : '',
     runActive ? styles[`run_${runStatus ?? 'idle'}`] : '',
   ]
@@ -219,6 +248,8 @@ export const TreeNodeView = memo(function TreeNodeView({
       className={cardClass}
       data-node-id={node.id}
       data-run-status={runActive ? (runStatus ?? 'idle') : undefined}
+      data-collapsed={collapsed ? 'true' : undefined}
+      data-search-hit={nodeHit ? (nodeCurrent ? 'current' : 'true') : undefined}
       style={
         {
           left: x,
@@ -277,6 +308,8 @@ export const TreeNodeView = memo(function TreeNodeView({
           interactive={interactive}
           subStatus={runActive ? subStatuses?.[decorator.id] : undefined}
           exportId={ids?.get(decorator.id)}
+          searchHit={searchHits?.has(decorator.id)}
+          searchCurrent={searchCurrent === decorator.id}
         />
       ))}
       {node.services.map((service: SubItem) => (
@@ -294,8 +327,29 @@ export const TreeNodeView = memo(function TreeNodeView({
           interactive={interactive}
           subStatus={runActive ? subStatuses?.[service.id] : undefined}
           exportId={ids?.get(service.id)}
+          searchHit={searchHits?.has(service.id)}
+          searchCurrent={searchCurrent === service.id}
         />
       ))}
+      {interactive && childCount > 0 && (
+        <button
+          type="button"
+          className={`${styles.collapseToggle} ${collapsed ? styles.collapsedBadge : ''}`}
+          title={collapsed ? 'Expand subtree' : 'Collapse subtree'}
+          aria-label={collapsed ? 'Expand subtree' : 'Collapse subtree'}
+          aria-expanded={!collapsed}
+          data-collapse-toggle={collapsed ? 'collapsed' : 'expanded'}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (!canvas.isPanned()) {
+              collapseStore.getState().toggle(node.id);
+            }
+          }}
+          onContextMenu={(event) => event.stopPropagation()}
+        >
+          {collapsed ? `+${hiddenCount}` : <i className="fa-solid fa-minus" aria-hidden="true" />}
+        </button>
+      )}
     </div>
   );
 });

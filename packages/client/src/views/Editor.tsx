@@ -18,6 +18,7 @@ import TopMenu from '../components/TopMenu/TopMenu';
 import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
 // Registers the core commands (side effect of the module).
 import '../commands/coreCommands';
+import '../commands/viewCommands';
 import { commandContext } from '../commands/registry';
 import { useHotkeys } from '../commands/useHotkeys';
 import { setNavigator } from '../lib/appNavigation';

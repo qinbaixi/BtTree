@@ -88,6 +88,11 @@ export class CanvasController {
     }
   }
 
+  /** Marks the current press as moved (e.g. a drag started), so the following click is ignored. */
+  markMoved(): void {
+    this.panned = true;
+  }
+
   endPress(): void {
     this.pressOrigin = undefined;
   }
