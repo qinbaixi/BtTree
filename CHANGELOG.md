@@ -11,6 +11,9 @@
 - 桌面版左下角显示当前版本，并在启动时检查 GitHub Releases 是否有新版本。安装版点击即可下载新版本，下载完成后点击「Restart to update」立即重启安装，或在下次关闭应用时自动安装；便携版点击后打开下载页面。
 - 发布流程额外上传 `latest.yml`，供已安装的应用检查和下载更新。
 - 运行模式支持后退一步：工具条新增「Back」按钮（`Shift+F10`），撤销最近一个 tick，节点状态、黑板、手动节点、随机数和循环轮数都回到上一个 tick，之后再 Step / Play 会从该状态继续执行。
+- 场景测试：新增 `owlbt test [path]` 命令，不启动服务即可用模拟引擎批量运行「树 × 场景」并检查期望，支持 `--json`、`--junit <file>`、`--tree`、`--scenario`；退出码 0 通过、1 失败、2 配置错误，适合 CI。
+- 场景新增可选字段 `trees`、`maxTicks`、`seed`、`manual` 和 `expect`（`result`、`ticks`、`blackboard`），由 `validateProjectFile` 校验；旧项目不受影响，未知字段原样保留。`samples/simulation` 的场景已加上期望。
+- 项目编辑器的「Scenarios」视图可编辑测试期望（期望结果、tick 数、Max ticks、手动节点结果、适用的树、期望的黑板值），并新增「Run scenario tests」按钮显示测试结果（接口 `POST /api/scenario-tests`）。
 
 ## [0.2.0] - 2026-10-13
 

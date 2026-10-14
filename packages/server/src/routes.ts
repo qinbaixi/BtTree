@@ -14,6 +14,7 @@ import {
 } from './picker';
 import { exportProject, exportTree, parseExportFormats } from './export';
 import { formatJsonLike, sha256 } from './projectFile';
+import { runScenarioTests, ScenarioConfigError } from './scenarioTests';
 import {
   getProject,
   isPathInDir,
@@ -395,6 +396,39 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     const dir = requireAbsolutePath(body.dir, 'dir');
     const formats = parseExportFormats(body.formats);
     res.json(await exportProject(dir, formats));
+  });
+
+  router.post('/scenario-tests', async (req, res) => {
+    const body = objectBody(req.body);
+    const path = requireAbsolutePath(body.path, 'path');
+    const stringList = (raw: unknown, name: string): string[] | undefined => {
+      if (raw === undefined) return undefined;
+      if (!Array.isArray(raw) || raw.some((item) => typeof item !== 'string')) {
+        throw new HttpError(400, `${name} must be an array of strings`);
+      }
+      return raw as string[];
+    };
+    const project = body.project;
+    if (
+      project !== undefined &&
+      (typeof project !== 'object' || project === null || Array.isArray(project))
+    ) {
+      throw new HttpError(400, 'project must be an object');
+    }
+    try {
+      res.json(
+        await runScenarioTests(path, {
+          trees: stringList(body.trees, 'trees'),
+          scenarios: stringList(body.scenarios, 'scenarios'),
+          project: project as ProjectFile | undefined,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof ScenarioConfigError) {
+        throw new HttpError(400, err.message);
+      }
+      throw err;
+    }
   });
 
   return router;

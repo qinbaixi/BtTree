@@ -67,11 +67,34 @@ export interface SimulateJson {
   [key: string]: unknown;
 }
 
+/** Expected outcome of a scenario test (`owlbt test`). */
+export type ScenarioExpectedResult = 'success' | 'failure' | 'running';
+
+/** Expectations of a scenario test (`expect` of a scenario). Every field is optional. */
+export interface ScenarioExpectJson {
+  /** Result of the root node; `running` = still running after `maxTicks`. */
+  result?: ScenarioExpectedResult;
+  /** Exact number of ticks until the root finishes. */
+  ticks?: number;
+  /** Blackboard values after the run (deep equality; `null` also matches an unset key). */
+  blackboard?: Record<string, unknown>;
+}
+
 /** A named set of initial blackboard values for run mode (`scenarios` of owl-bt.json). */
 export interface ScenarioJson {
   name: string;
   description?: string;
   blackboard: Record<string, unknown>;
+  /** Scenario tests: tree paths or globs (relative to the project folder) to run on. Default: all trees. */
+  trees?: string | string[];
+  /** Scenario tests: tick budget of one run. Default 1000. */
+  maxTicks?: number;
+  /** Scenario tests: seed of the random generator (RandomSelector). Default 1. */
+  seed?: number;
+  /** Scenario tests: how actions without simulation (manual) finish. Default 'success'. */
+  manual?: 'success' | 'failure';
+  /** Scenario tests: expected outcome. Without it the scenario only reports its result. */
+  expect?: ScenarioExpectJson;
 }
 
 /** Per-type export settings (`export` of an item type in owl-bt.json). */

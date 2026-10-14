@@ -1141,3 +1141,16 @@ details.section > summary {
   gap: 6px;
   align-items: center;
 }
+
+/* Scenario test expectations. */
+.scenarioTests {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.scenarioTests > summary {
+  cursor: pointer;
+}
