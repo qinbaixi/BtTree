@@ -43,6 +43,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
 - **运行模式**：在编辑器里按 tick 模拟执行行为树，带黑板、场景、断点、回放和日志，无需游戏引擎。
+- **场景测试**：`owlbt test` 在命令行批量运行「树 × 场景」的模拟并检查期望结果，可输出 JSON 和 JUnit XML，适合放进 CI。
 - **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# / Go 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
 - **主题**：默认明亮主题，可切换为原版风格的深色主题。
@@ -86,7 +87,7 @@ npm run dev          # 打开 http://localhost:5173
 │   │       └── export/           # 导出：节点编号、导出模型、Erlang / Lua / TS / C# / Go 生成器
 │   ├── server/                   # @owlbt/server：Express 5 + socket.io 4 服务端与 owlbt CLI
 │   │   ├── src/
-│   │   │   ├── cli.ts            # owlbt 命令（init / create / open / export）
+│   │   │   ├── cli.ts            # owlbt 命令（init / create / open / export / test）
 │   │   │   ├── run.ts            # 启动 HTTP + socket.io 服务
 │   │   │   ├── app.ts            # Express 应用与静态资源
 │   │   │   ├── routes.ts         # /api/* 路由（含 owl-bt.json 的读取与保存）
@@ -178,6 +179,7 @@ owlbt open <树文件路径>
 | `owlbt create <path>` | `c` | 创建树文件（自动创建父目录）并打开；路径必须位于某个项目内 |
 | `owlbt open <path>` | `o` | 打开已有的树文件 |
 | `owlbt export <path>` | | 导出为 Erlang / Lua / TypeScript / C# / Go，见下文「导出 Erlang / Lua / TypeScript / C# / Go」；不启动服务 |
+| `owlbt test [path]` | `t` | 运行场景测试（树文件、文件夹或项目，默认当前目录）；`--json`、`--junit <file>`、`--tree <tree>`、`--scenario <name>`。退出码 0 全部通过、1 有测试失败、2 配置错误。见下文「场景测试（owlbt test）」；不启动服务 |
 | `owlbt --no-open ...` | | 不打开浏览器，只打印 URL（适合测试和无界面环境） |
 | `OWLBT_NO_OPEN=1` | | 与 `--no-open` 相同的环境变量形式 |
 | `owlbt --host <host>` | | 监听指定的网卡地址（默认 `127.0.0.1`）。指定其他地址会暴露无认证的 API，见「网络与安全」 |
@@ -391,6 +393,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 - 右侧：实时预览。使用与树编辑器相同的节点卡片，同时显示明亮与深色两种主题；带装饰器与服务的示例节点（项目中没有组合节点时使用示例节点），可切换「With label」「Invalid」，并可在「Sample values」中填写属性值（只影响预览）。预览下方可展开查看编译后的类型 JSON。
 - 自定义类型：表格编辑名称、基础类型（string / number）、正则，并可在「Test」中实时测试是否匹配；重命名会同时更新属性的类型。
 - 导出设置：Erlang / Lua / TypeScript / C# / Go 的输出目录、文件名模板、C# 命名空间与 Go 包名，空白时使用默认值。
+- 场景：编辑场景的名称、描述和起始黑板；每个场景下可折叠的「Test expectations」用于编辑场景测试的期望结果、期望 tick 数、Max ticks、手动节点的结果、适用的树和期望的黑板值，并即时校验。顶部的「Run scenario tests」用当前（包括未保存的）内容运行全部场景测试，并以表格显示每个「树 × 场景」的结果。
 - 底部「Problems」栏列出校验问题（错误与警告），点击即可跳到对应的类型或自定义类型。
 
 **保存与冲突**
@@ -409,7 +412,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 在树编辑器里点击顶部的「Run」（或按 `F5`）进入运行模式，不需要游戏引擎就能按 tick 单步或连续地模拟一棵树：观察每个节点的状态、黑板的变化，并在断点处停下。
 
 <details>
-<summary>运行控制、黑板与场景、断点与回放、simulate 规则、表达式语法、tick 语义</summary>
+<summary>运行控制、黑板与场景、断点与回放、simulate 规则、场景测试、表达式语法、tick 语义</summary>
 
 ### 运行控制
 
@@ -483,6 +486,76 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 }
 ```
 
+### 场景测试（owlbt test）
+
+`owlbt test [path]` 不启动服务，直接用模拟引擎把每棵树在每个场景下运行一遍，检查场景里写的期望，适合在 CI 中检查行为树。`path` 可以是树文件（只测这棵树）、项目内的文件夹（只测其中的树）或项目目录（全部树），默认当前目录。
+
+场景可以加上以下可选字段（都可省略，旧项目不受影响，未知字段原样保留）：
+
+```json
+{
+  "name": "Enemy in sight",
+  "blackboard": { "Enemy": true, "Ammo": 1 },
+  "trees": ["trees/guard.json", "trees/ai/*.json"],
+  "maxTicks": 200,
+  "seed": 1,
+  "manual": "success",
+  "expect": {
+    "result": "success",
+    "ticks": 11,
+    "blackboard": { "Ammo": 0, "LastSaid": "Alert!", "Target": null }
+  }
+}
+```
+
+| 字段 | 说明 |
+| --- | --- |
+| `trees` | 场景适用的树：相对项目目录的路径或通配符（`*` 不跨目录，`**` 跨目录，`?` 单个字符），字符串或数组。默认全部树 |
+| `maxTicks` | 一次运行最多执行的 tick 数，1 – 1000000，默认 1000。到达上限仍未结束时结果为 `running` |
+| `seed` | 随机数种子（RandomSelector），整数，默认 1 |
+| `manual` | 手动节点（没有 simulate 规则的行为节点）的自动结果：`success`（默认）或 `failure` |
+| `expect.result` | 期望的根节点结果：`success`、`failure`，或 `running`（到 `maxTicks` 时仍在运行，用于无限循环的树） |
+| `expect.ticks` | 期望的 tick 数（精确匹配，不能大于 `maxTicks`） |
+| `expect.blackboard` | 运行结束后期望的黑板值，按 JSON 深度比较；`null` 表示该键未设置或值为 `null`。未列出的键不检查 |
+
+规则：
+
+- 有 `expect`（即使是空对象）的场景是一个测试：所有期望都满足才通过；没写 `expect.result` 时，树必须在 `maxTicks` 内结束。没有 `expect` 的场景同样会运行，只报告结果，不算失败。
+- 运行中的表达式错误会在报告中列出（不会单独导致失败）；无法读取或解析的树记为错误（ERR）。
+- 字段格式由 `validateProjectFile` 校验（项目编辑器的 Problems 栏同样显示）；场景字段无效时 `owlbt test` 按配置错误处理。
+- 项目插件（`owl-bt.js`）不会被执行。
+
+选项：
+
+| 选项 | 说明 |
+| --- | --- |
+| `--json` | 以 JSON 输出完整报告（每个用例的状态、结果、tick 数、失败原因、不匹配的黑板值、引擎错误和汇总） |
+| `--junit <file>` | 另外写一份 JUnit XML 报告：每棵树一个 testsuite，每个场景一个 testcase |
+| `--tree <tree>` | 只测匹配的树：相对路径、不带 `.json` 的名称或通配符，可重复 |
+| `--scenario <name>` | 只运行指定名称的场景，可重复 |
+
+退出码：`0` 全部通过（包括只报告结果的场景）；`1` 有测试失败或树出错；`2` 配置错误（路径不存在、不在项目内、`owl-bt.json` 无效、没有场景、过滤条件没有匹配，或无法写入 JUnit 文件）。
+
+```sh
+owlbt test samples/simulation
+owlbt test ./my-project --tree guard --scenario "No enemy"
+owlbt test ./my-project --json > report.json
+owlbt test ./my-project --junit build/owlbt-junit.xml
+```
+
+输出示例：
+
+```text
+PASS trees/guard.json › Enemy in sight → success in 11 ticks
+FAIL trees/guard.json › No enemy → success in 8 ticks
+       blackboard Position: expected "Waypoint A", got "Waypoint B"
+RAN  trees/patrol.json › Smoke → failure in 3 ticks
+
+3 scenario tests: 1 passed, 1 failed, 1 without expectations
+```
+
+在项目编辑器的「Scenarios」视图中也可以编辑这些字段，并点击「Run scenario tests」直接查看结果（对应接口 `POST /api/scenario-tests`）。
+
 ### 表达式语法
 
 用于 `condition`、`effects`、`duration`、`count`、`ticks`。不使用 `eval`，由自带的解析器求值。
@@ -496,7 +569,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 
 1 tick = 1 秒。每个 tick 从根节点开始遍历，RUNNING 的节点从上次的位置继续（Sequence / Selector 记住当前子节点，Parallel 记住各子节点的结果）。节点状态为 idle / running / success / failure；节点重新进入时，其整棵子树先回到 idle。根节点结束后运行即结束。一个 tick 内，Sequence / Selector 会在子节点结束后立刻继续下一个子节点，所以 `duration` 为 0 的行为节点不占用 tick；`loop` 的每一轮在下一个 tick 开始，避免无限循环。
 
-示例见 `samples/simulation`：用 `guard.json` 配合三个场景（Enemy in sight / No enemy / Out of ammo）体验战斗、装填、冷却、巡逻与手动节点。
+示例见 `samples/simulation`：用 `guard.json` 配合三个场景（Enemy in sight / No enemy / Out of ammo）体验战斗、装填、冷却、巡逻与手动节点；三个场景都带有期望，`owlbt test samples/simulation` 应全部通过。
 
 </details>
 
@@ -885,6 +958,7 @@ module.exports = {
 | `POST` | `/api/dialog/pick` | 打开本机的系统文件 / 文件夹选择框，见下文 |
 | `POST` | `/api/export` | 导出单个树为 Erlang / Lua / TypeScript / C# / Go，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
 | `POST` | `/api/export/batch` | 导出项目中的全部树，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
+| `POST` | `/api/scenario-tests` | 运行场景测试（同 `owlbt test`）。请求体 `{ path, project?, trees?, scenarios? }`：`path` 为树文件、文件夹或 `owl-bt.json` 的绝对路径；`project` 可代替磁盘上的 `owl-bt.json`（项目编辑器用它测试未保存的修改）；`trees` / `scenarios` 为过滤条件（字符串数组）。返回报告 `{ projectDir, projectPath, cases, warnings, summary, ok }`；配置错误时 400 |
 
 **`GET /api/workspace?dir=...`**
 

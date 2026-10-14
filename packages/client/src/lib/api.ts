@@ -187,6 +187,43 @@ export async function fetchPluginState(treePath: string): Promise<PluginState> {
   return (await response.json()) as PluginState;
 }
 
+export interface ScenarioTestCase {
+  /** Tree path relative to the project folder. */
+  tree: string;
+  treePath: string;
+  scenario: string;
+  status: 'pass' | 'fail' | 'ran' | 'error';
+  expect: boolean;
+  result?: 'success' | 'failure' | 'running';
+  ticks?: number;
+  maxTicks?: number;
+  failures: string[];
+  mismatches: Array<{ key: string; expected: unknown; actual?: unknown }>;
+  errors: string[];
+  durationMs: number;
+}
+
+export interface ScenarioTestReport {
+  projectDir: string;
+  projectPath: string;
+  cases: ScenarioTestCase[];
+  warnings: string[];
+  summary: { total: number; passed: number; failed: number; ran: number; errors: number };
+  ok: boolean;
+}
+
+/**
+ * Runs the scenario tests of the project that contains `path` (like `owlbt test`). `project`
+ * replaces owl-bt.json on disk (unsaved edits). Configuration errors throw ApiError 400.
+ */
+export async function runScenarioTests(
+  path: string,
+  project?: unknown,
+): Promise<ScenarioTestReport> {
+  const response = await request('/api/scenario-tests', postJson({ path, project }));
+  return (await response.json()) as ScenarioTestReport;
+}
+
 /** Trusts the current content of the project's plugin. Resolves with the new state. */
 export async function trustPlugin(treePath: string): Promise<PluginState> {
   const response = await request('/api/plugin/trust', postJson({ path: treePath }));
