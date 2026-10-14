@@ -42,7 +42,6 @@ export const editor: Record<string, string> = {
   'Select Right Node': '选择右侧节点',
   "Referenced tree '{ref}' cannot be opened: the file is missing or invalid":
     '无法打开引用的行为树“{ref}”：文件不存在或无效',
-  'Open referenced tree': '打开引用的行为树',
   'No native file dialog is available. Pick a tree from the list instead.':
     '没有可用的系统文件对话框，请从列表中选择行为树。',
   'Browse…': '浏览…',
@@ -128,8 +127,6 @@ export const editor: Record<string, string> = {
   // Tree canvas
   '{ref} (root: {root}, {count} child nodes)': '{ref}（根节点：{root}，{count} 个子节点）',
   'No tree referenced': '未引用行为树',
-  'Failed to load tree: {error}': '加载行为树失败：{error}',
-  'Loading tree...': '正在加载行为树...',
   'Project not loaded: {error}': '项目未加载：{error}',
   Passed: '通过',
   Failed: '失败',

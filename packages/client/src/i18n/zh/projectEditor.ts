@@ -2,7 +2,6 @@
 export const projectEditor: Record<string, string> = {
   // Page, top bar and dialogs
   'No project path given.': '未指定项目路径。',
-  'Go to the home page': '前往首页',
   'and open a project.': '并打开一个项目。',
   'project types': '项目类型',
   'You have unsaved changes to the project types. Leave without saving?':
@@ -99,7 +98,6 @@ export const projectEditor: Record<string, string> = {
   'Color must look like #rrggbb': '颜色格式应为 #rrggbb',
   'Type name': '类型名称',
   Subtree: '子树',
-  Composite: '组合',
   Action: '动作',
   'Composite (has child nodes)': '组合节点（有子节点）',
   'Runs the tree file named by its {property} property (relative to the project folder)':
@@ -384,7 +382,6 @@ export const projectEditor: Record<string, string> = {
   '{count} without expectations': '{count} 个无预期',
   '1 scenario test: {parts}': '1 个场景测试：{parts}',
   '{count} scenario tests: {parts}': '{count} 个场景测试：{parts}',
-  Tree: '行为树',
   Scenario: '场景',
   Status: '状态',
   Result: '结果',
@@ -422,7 +419,6 @@ export const projectEditor: Record<string, string> = {
   Pattern: '模式',
   Test: '测试',
   'Used by': '使用情况',
-  Actions: '操作',
 
   // Usages
   '{name} (decorator)': '{name}（装饰器）',
@@ -438,4 +434,5 @@ export const projectEditor: Record<string, string> = {
   'Could not read: {files}': '无法读取：{files}',
   'Usages in project': '项目中的引用',
   'Open {file} and select this item': '打开 {file} 并选中此项',
+  'Row actions': '操作',
 };

@@ -227,7 +227,7 @@ export function CustomTypesView({ selectedName }: { selectedName?: string }) {
                 <th>{t('Pattern')}</th>
                 <th>{t('Test')}</th>
                 <th>{t('Used by')}</th>
-                <th aria-label={t('Actions')} />
+                <th aria-label={t('Row actions')} />
               </tr>
             </thead>
             <tbody>
