@@ -14,6 +14,7 @@ import { themeLabel, type ThemeId } from '../../lib/theme';
 import { TreeNodeView } from '../TreeCanvas/TreeNodeView';
 import { TextInput } from './TextInput';
 import { ValueInput } from './PropertyTable';
+import { t } from '../../i18n';
 import styles from './ProjectEditor.module.css';
 
 /** Name of the node that shows a decorator or service when the project has no composite node. */
@@ -58,7 +59,7 @@ export function buildPreview(
   }
   const type = project[BUCKET[kind]][name] as CompiledItemType | undefined;
   if (!type) {
-    return { error: `'${name}' does not compile` };
+    return { error: t("'{name}' does not compile", { name }) };
   }
 
   let hostType = Object.keys(project.nodes).find((node) => project.nodes[node].isComposite) ?? '';
@@ -99,15 +100,15 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
   const model = useMemo(() => buildPreview(draft, kind, name), [draft, kind, name]);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [withLabel, setWithLabel] = useState(false);
-  const [label, setLabel] = useState('Example');
+  const [label, setLabel] = useState(() => t('Example'));
   const [invalid, setInvalid] = useState(false);
 
   if (isError(model)) {
     return (
-      <aside className={styles.preview} aria-label="Preview">
-        <div className={styles.previewHead}>Preview</div>
+      <aside className={styles.preview} aria-label={t('Preview')}>
+        <div className={styles.previewHead}>{t('Preview')}</div>
         <p role="alert" className={styles.errorText}>
-          Cannot preview: {model.error}
+          {t('Cannot preview: {error}', { error: model.error })}
         </p>
       </aside>
     );
@@ -164,10 +165,12 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
   const themes: ThemeId[] = ['light', 'classic'];
 
   return (
-    <aside className={styles.preview} aria-label="Preview">
-      <div className={styles.previewHead}>Live preview</div>
+    <aside className={styles.preview} aria-label={t('Preview')}>
+      <div className={styles.previewHead}>{t('Live preview')}</div>
       {standIn && (
-        <p className={styles.muted}>Shown on an example node: the project has no composite node.</p>
+        <p className={styles.muted}>
+          {t('Shown on an example node: the project has no composite node.')}
+        </p>
       )}
       <div className={styles.previewOptions}>
         <label className={styles.checkLabel}>
@@ -176,12 +179,12 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
             checked={withLabel}
             onChange={(event) => setWithLabel(event.target.checked)}
           />
-          With label
+          {t('With label')}
         </label>
         {withLabel && (
           <TextInput
             value={label}
-            ariaLabel="Preview label"
+            ariaLabel={t('Preview label')}
             className={styles.input}
             onCommit={setLabel}
             live
@@ -193,7 +196,7 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
             checked={invalid}
             onChange={(event) => setInvalid(event.target.checked)}
           />
-          Invalid
+          {t('Invalid')}
         </label>
       </div>
 
@@ -212,8 +215,8 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
       ))}
 
       <details className={styles.section} open>
-        <summary className={styles.sectionTitle}>Sample values</summary>
-        {shownType.properties.length === 0 && <p className={styles.muted}>No properties.</p>}
+        <summary className={styles.sectionTitle}>{t('Sample values')}</summary>
+        {shownType.properties.length === 0 && <p className={styles.muted}>{t('No properties.')}</p>}
         {shownType.properties.map((prop) => (
           <div key={prop.name} className={styles.sampleRow}>
             <span className={styles.small}>{prop.name}</span>
@@ -221,9 +224,11 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
               type={prop.type}
               values={prop.values}
               value={values[prop.name]}
-              ariaLabel={`Sample ${prop.name}`}
+              ariaLabel={t('Sample {name}', { name: prop.name })}
               placeholder={
-                prop.default === undefined ? '(none)' : `default: ${String(prop.default)}`
+                prop.default === undefined
+                  ? t('(none)')
+                  : t('default: {value}', { value: String(prop.default) })
               }
               onChange={(value) =>
                 setValues((current) => {
@@ -241,13 +246,13 @@ export function TypePreview({ draft, kind, name }: TypePreviewProps) {
         ))}
         {Object.keys(values).length > 0 && (
           <button type="button" className={styles.textButton} onClick={() => setValues({})}>
-            Reset sample values
+            {t('Reset sample values')}
           </button>
         )}
       </details>
 
       <details className={styles.section}>
-        <summary className={styles.sectionTitle}>Compiled type</summary>
+        <summary className={styles.sectionTitle}>{t('Compiled type')}</summary>
         <pre className={styles.compiled}>{JSON.stringify(shownType, null, 2)}</pre>
       </details>
     </aside>

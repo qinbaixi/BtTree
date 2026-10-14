@@ -7,6 +7,7 @@ import {
   type ScenarioJson,
 } from '@owlbt/shared';
 import { runScenarioTests, type ScenarioTestCase, type ScenarioTestReport } from '../../lib/api';
+import { t } from '../../i18n';
 import { BlackboardEditor } from './BlackboardEditor';
 import { formatTrees, parseNumberField, parseTrees, withExpectField } from './scenarioTestEdit';
 import { TextInput } from './TextInput';
@@ -51,7 +52,7 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
         <span className={styles.propLabel}>{label}</span>
         <TextInput
           value={typeof value === 'number' ? String(value) : ''}
-          ariaLabel={`${label} of ${name}`}
+          ariaLabel={t('{field} of {name}', { field: label, name })}
           placeholder={placeholder}
           className={styles.input}
           invalid={issue !== undefined}
@@ -67,6 +68,10 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
     );
   };
 
+  // Split at the command so that the translation can put it anywhere in the sentence.
+  const usedBy = t(
+    'Used by {command} and Run scenario tests. Without expectations the scenario only reports its result.',
+  ).split('{command}');
   const resultIssue = issueFor('expect.result');
   const treesIssue = issueFor('trees');
   const blackboardIssue = issueFor('expect.blackboard') ?? issueFor('expect');
@@ -74,18 +79,19 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
   return (
     <details className={styles.scenarioTests} open={expect !== undefined}>
       <summary className={styles.sectionTitle}>
-        Test expectations{expect === undefined ? ' (none)' : ''}
+        {expect === undefined ? t('Test expectations (none)') : t('Test expectations')}
       </summary>
       <p className={styles.muted}>
-        Used by <code>owlbt test</code> and Run scenario tests. Without expectations the scenario
-        only reports its result.
+        {usedBy[0]}
+        <code>owlbt test</code>
+        {usedBy[1]}
       </p>
       <div className={styles.propGrid}>
         <label className={styles.propField}>
-          <span className={styles.propLabel}>Expected result</span>
+          <span className={styles.propLabel}>{t('Expected result')}</span>
           <select
             className={styles.select}
-            aria-label={`Expected result of ${name}`}
+            aria-label={t('Expected result of {name}', { name })}
             aria-invalid={resultIssue !== undefined}
             value={typeof expect?.result === 'string' ? expect.result : ''}
             onChange={(event) =>
@@ -98,7 +104,7 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
               )
             }
           >
-            <option value="">(any)</option>
+            <option value="">{t('(any)')}</option>
             {RESULTS.map((result) => (
               <option key={result} value={result}>
                 {result}
@@ -110,18 +116,18 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
           </select>
           {resultIssue && <span className={styles.fieldError}>{resultIssue.message}</span>}
         </label>
-        {numberField('ticks', 'Expected ticks', expect?.ticks, 'any')}
+        {numberField('ticks', t('Expected ticks'), expect?.ticks, t('any'))}
         {numberField(
           'maxTicks',
-          'Max ticks',
+          t('Max ticks'),
           scenario.maxTicks,
           String(DEFAULT_SCENARIO_MAX_TICKS),
         )}
         <label className={styles.propField}>
-          <span className={styles.propLabel}>Manual actions</span>
+          <span className={styles.propLabel}>{t('Manual actions')}</span>
           <select
             className={styles.select}
-            aria-label={`Manual actions of ${name}`}
+            aria-label={t('Manual actions of {name}', { name })}
             value={scenario.manual === 'failure' ? 'failure' : 'success'}
             onChange={(event) =>
               edit('Set manual result', {
@@ -129,16 +135,16 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
               })
             }
           >
-            <option value="success">succeed</option>
-            <option value="failure">fail</option>
+            <option value="success">{t('succeed')}</option>
+            <option value="failure">{t('fail')}</option>
           </select>
         </label>
         <label className={`${styles.propField} ${styles.propFieldWide}`}>
-          <span className={styles.propLabel}>Trees (paths or globs, comma separated)</span>
+          <span className={styles.propLabel}>{t('Trees (paths or globs, comma separated)')}</span>
           <TextInput
             value={formatTrees(scenario.trees)}
-            ariaLabel={`Trees of ${name}`}
-            placeholder="all trees, e.g. trees/*.json"
+            ariaLabel={t('Trees of {name}', { name })}
+            placeholder={t('all trees, e.g. trees/*.json')}
             className={`${styles.input} ${styles.mono}`}
             invalid={treesIssue !== undefined}
             onCommit={(text) => edit('Set scenario trees', { trees: parseTrees(text) })}
@@ -146,11 +152,13 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
           {treesIssue && <span className={styles.fieldError}>{treesIssue.message}</span>}
         </label>
       </div>
-      <span className={styles.propLabel}>Expected blackboard values (null = unset or null)</span>
+      <span className={styles.propLabel}>
+        {t('Expected blackboard values (null = unset or null)')}
+      </span>
       <BlackboardEditor
         values={expectedBlackboard}
-        scope={`${name} (expected)`}
-        addLabel="+ Expected value"
+        scope={t('{name} (expected)', { name })}
+        addLabel={t('+ Expected value')}
         onChange={(label, next) =>
           setExpect(
             `${label} (expected)`,
@@ -165,10 +173,10 @@ export function ScenarioTestFields({ scenario, edit }: ScenarioTestFieldsProps) 
 }
 
 const STATUS_TEXT: Record<ScenarioTestCase['status'], string> = {
-  pass: 'Pass',
-  fail: 'Fail',
-  ran: 'Ran',
-  error: 'Error',
+  pass: t('Pass'),
+  fail: t('Fail'),
+  ran: t('Ran'),
+  error: t('Error'),
 };
 
 function statusClass(status: ScenarioTestCase['status']): string {
@@ -202,22 +210,23 @@ export function ScenarioTestRunner({ projectPath, draft }: ScenarioTestRunnerPro
   };
 
   return (
-    <section className={styles.section} aria-label="Scenario tests">
+    <section className={styles.section} aria-label={t('Scenario tests')}>
       <div className={styles.inline}>
-        <span className={`${styles.sectionTitle} ${styles.grow}`}>Scenario tests</span>
+        <span className={`${styles.sectionTitle} ${styles.grow}`}>{t('Scenario tests')}</span>
         <button
           type="button"
           className={styles.primary}
           disabled={state.kind === 'running'}
           onClick={() => void run()}
         >
-          {state.kind === 'running' ? 'Running…' : 'Run scenario tests'}
+          {state.kind === 'running' ? t('Running…') : t('Run scenario tests')}
         </button>
       </div>
       {state.kind === 'idle' && (
         <p className={styles.muted}>
-          Runs every tree of the project in every scenario with the simulation, like{' '}
-          <code>owlbt test</code>, and checks the expectations. Unsaved edits are included.
+          {t('Runs every tree of the project in every scenario with the simulation, like')}{' '}
+          <code>owlbt test</code>
+          {t(', and checks the expectations. Unsaved edits are included.')}
         </p>
       )}
       {state.kind === 'error' && (
@@ -232,16 +241,21 @@ export function ScenarioTestRunner({ projectPath, draft }: ScenarioTestRunnerPro
 
 function ScenarioTestResults({ report }: { report: ScenarioTestReport }) {
   const s = report.summary;
-  const parts = [`${s.passed} passed`, `${s.failed} failed`];
-  if (s.errors > 0) parts.push(`${s.errors} errors`);
-  if (s.ran > 0) parts.push(`${s.ran} without expectations`);
+  const parts = [
+    t('{count} passed', { count: s.passed }),
+    t('{count} failed', { count: s.failed }),
+  ];
+  if (s.errors > 0) parts.push(t('{count} errors', { count: s.errors }));
+  if (s.ran > 0) parts.push(t('{count} without expectations', { count: s.ran }));
   return (
     <>
       <p
         className={report.ok ? styles.okText : `${styles.small} ${styles.errorText}`}
         role="status"
       >
-        {s.total} scenario test{s.total === 1 ? '' : 's'}: {parts.join(', ')}
+        {s.total === 1
+          ? t('1 scenario test: {parts}', { parts: parts.join(t(', ')) })
+          : t('{count} scenario tests: {parts}', { count: s.total, parts: parts.join(t(', ')) })}
       </p>
       {report.warnings.map((warning) => (
         <p key={warning} className={styles.warningText}>
@@ -252,12 +266,12 @@ function ScenarioTestResults({ report }: { report: ScenarioTestReport }) {
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Tree</th>
-              <th>Scenario</th>
-              <th>Status</th>
-              <th>Result</th>
-              <th>Ticks</th>
-              <th>Details</th>
+              <th>{t('Tree')}</th>
+              <th>{t('Scenario')}</th>
+              <th>{t('Status')}</th>
+              <th>{t('Result')}</th>
+              <th>{t('Ticks')}</th>
+              <th>{t('Details')}</th>
             </tr>
           </thead>
           <tbody>
@@ -269,7 +283,10 @@ function ScenarioTestResults({ report }: { report: ScenarioTestReport }) {
                 <td>{c.result ?? ''}</td>
                 <td>{c.ticks ?? ''}</td>
                 <td>
-                  {[...c.failures, ...c.errors.map((e) => `engine error: ${e}`)].map((line, i) => (
+                  {[
+                    ...c.failures,
+                    ...c.errors.map((e) => t('engine error: {message}', { message: e })),
+                  ].map((line, i) => (
                     <div key={i}>{line}</div>
                   ))}
                 </td>

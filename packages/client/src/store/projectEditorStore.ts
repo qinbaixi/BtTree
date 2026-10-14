@@ -17,6 +17,7 @@ import {
   type ProjectMeta,
   type ProjectSaveBody,
 } from '../lib/api';
+import { t } from '../i18n';
 import { alerts } from './alertStore';
 import {
   defaultSocketFactory,
@@ -158,7 +159,7 @@ export function parseProjectText(text: string): { json?: string; error?: string 
   try {
     const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return { error: 'Project file must contain a JSON object' };
+      return { error: t('Project file must contain a JSON object') };
     }
     return { json: canonicalJson(parsed) };
   } catch (err) {
@@ -220,7 +221,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       }
       const parsed = parseProjectText(meta.content);
       if (parsed.json === undefined) {
-        set({ loading: false, loadError: parsed.error ?? 'Invalid project file' });
+        set({ loading: false, loadError: parsed.error ?? t('Invalid project file') });
         return;
       }
       const draft = JSON.parse(parsed.json) as ProjectFile;
@@ -249,7 +250,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
     const write = async (force: boolean): Promise<boolean> => {
       const { projectPath, draft, baseHash } = get();
       if (!projectPath || !draft || baseHash === undefined) {
-        alerts.error('Unable to save before the project is loaded');
+        alerts.error(t('Unable to save before the project is loaded'));
         return false;
       }
       try {
@@ -257,7 +258,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       } catch (err) {
         const message = errorText(err);
         set({ saveError: message });
-        alerts.error(`Not saved: ${message}`);
+        alerts.error(t('Not saved: {message}', { message }));
         return false;
       }
 
@@ -284,7 +285,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
               ? collapseRenames([...state.savedRenames, ...saved])
               : state.savedRenames,
         }));
-        alerts.success('Project saved');
+        alerts.success(t('Project saved'));
         return true;
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
@@ -458,7 +459,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         }
         const parsed = parseProjectText(payload.content);
         if (parsed.json === undefined) {
-          set({ externalError: parsed.error ?? 'Invalid project file' });
+          set({ externalError: parsed.error ?? t('Invalid project file') });
           return;
         }
         set({ externalError: undefined });

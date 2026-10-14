@@ -3,6 +3,7 @@ import type { RefKind, TreeUsage } from '@owlbt/shared';
 import { fetchUsages, type FileUsages, type ProjectUsages as UsagesResult } from '../../lib/api';
 import { navigateTo } from '../../lib/appNavigation';
 import { treeEditorUrl } from '../../lib/treeLinks';
+import { t } from '../../i18n';
 import styles from './ProjectUsages.module.css';
 
 export interface ProjectUsagesProps {
@@ -25,15 +26,33 @@ type State =
 
 function usageTitle(usage: TreeUsage): string {
   const name = usage.label ?? usage.type;
-  return usage.itemKind === 'node' ? name : `${name} (${usage.itemKind})`;
+  if (usage.itemKind === 'decorator') {
+    return t('{name} (decorator)', { name });
+  }
+  if (usage.itemKind === 'service') {
+    return t('{name} (service)', { name });
+  }
+  return name;
 }
 
 function usageMeta(usage: TreeUsage): string {
   const parts = [usage.location];
   if (usage.property !== undefined) {
-    parts.push(usage.isDefault ? `${usage.property} (default)` : usage.property);
+    parts.push(
+      usage.isDefault ? t('{property} (default)', { property: usage.property }) : usage.property,
+    );
   }
   return parts.join(' · ');
+}
+
+/** "N usage(s) in M file(s)" with the plural forms of both counts. */
+function usagesSummary(usages: number, files: number): string {
+  if (usages === 1) {
+    return t('1 usage in 1 file');
+  }
+  return files === 1
+    ? t('{count} usages in 1 file', { count: usages })
+    : t('{count} usages in {files} files', { count: usages, files });
 }
 
 function countUsages(files: readonly FileUsages[]): number {
@@ -75,7 +94,7 @@ export function ProjectUsages({ path, kind, name, beforeOpen }: ProjectUsagesPro
         onClick={() => void search()}
       >
         <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />{' '}
-        {state.status === 'loading' ? 'Searching…' : 'Find usages in project'}
+        {state.status === 'loading' ? t('Searching…') : t('Find usages in project')}
       </button>
       {state.status === 'error' && (
         <p role="alert" className={styles.error}>
@@ -86,20 +105,22 @@ export function ProjectUsages({ path, kind, name, beforeOpen }: ProjectUsagesPro
         <>
           <p className={styles.summary} role="status">
             {total === 0
-              ? 'Not used in any tree file'
-              : `${total} usage${total === 1 ? '' : 's'} in ${result.files.length} file${result.files.length === 1 ? '' : 's'}`}
+              ? t('Not used in any tree file')
+              : usagesSummary(total, result.files.length)}
           </p>
           {result.truncated && (
             <p className={styles.warning}>
-              Only the first tree files of the project were searched.
+              {t('Only the first tree files of the project were searched.')}
             </p>
           )}
           {result.errors.length > 0 && (
             <p className={styles.warning}>
-              {`Could not read: ${result.errors.map((error) => error.relPath).join(', ')}`}
+              {t('Could not read: {files}', {
+                files: result.errors.map((error) => error.relPath).join(', '),
+              })}
             </p>
           )}
-          <ul className={styles.files} aria-label="Usages in project">
+          <ul className={styles.files} aria-label={t('Usages in project')}>
             {result.files.map((file) => (
               <li key={file.path}>
                 <span className={styles.fileName} title={file.path}>
@@ -111,7 +132,7 @@ export function ProjectUsages({ path, kind, name, beforeOpen }: ProjectUsagesPro
                       <button
                         type="button"
                         className={styles.usage}
-                        title={`Open ${file.relPath} and select this item`}
+                        title={t('Open {file} and select this item', { file: file.relPath })}
                         onClick={() => open(file, usage)}
                       >
                         <span className={styles.usageLabel}>{usageTitle(usage)}</span>

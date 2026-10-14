@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { FA_SOLID_ICONS } from '../../lib/faIcons.generated';
 import { countIcons, filterIcons } from '../../lib/icons';
+import { t } from '../../i18n';
 import styles from './ProjectEditor.module.css';
 
 /** Most icons shown at once; the rest is reached by typing. */
@@ -74,7 +75,7 @@ export function IconPicker({ current, onPick, onClose }: IconPickerProps) {
         className={styles.iconDialog}
         role="dialog"
         aria-modal="true"
-        aria-label="Choose icon"
+        aria-label={t('Choose icon')}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className={styles.iconSearch}>
@@ -82,8 +83,8 @@ export function IconPicker({ current, onPick, onClose }: IconPickerProps) {
             ref={inputRef}
             type="search"
             className={styles.input}
-            placeholder="Search icons, e.g. arrow or question"
-            aria-label="Search icons"
+            placeholder={t('Search icons, e.g. arrow or question')}
+            aria-label={t('Search icons')}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -92,15 +93,20 @@ export function IconPicker({ current, onPick, onClose }: IconPickerProps) {
             onKeyDown={onKeyDown}
           />
           <button type="button" className={styles.button} onClick={() => onPick(undefined)}>
-            No icon
+            {t('No icon')}
           </button>
         </div>
         <div className={styles.iconInfo}>
           {total > matches.length
-            ? `Showing ${matches.length} of ${total}. Type to narrow down.`
-            : `${total} icon${total === 1 ? '' : 's'}`}
+            ? t('Showing {shown} of {total}. Type to narrow down.', {
+                shown: matches.length,
+                total,
+              })
+            : total === 1
+              ? t('1 icon')
+              : t('{count} icons', { count: total })}
         </div>
-        <div className={styles.iconGrid} role="listbox" aria-label="Icons">
+        <div className={styles.iconGrid} role="listbox" aria-label={t('Icons')}>
           {matches.map((name, i) => (
             <button
               key={name}

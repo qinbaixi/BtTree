@@ -13,6 +13,7 @@ import {
   type ItemTypeDescJson,
   type ProjectFile,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import {
   projectEditorStore,
@@ -56,26 +57,32 @@ export function buildGroups(draft: ProjectFile, query: string): Group[] {
   const groups: Group[] = [
     {
       id: 'composite',
-      label: 'Composite nodes',
+      label: t('Composite nodes'),
       kind: 'node',
       rows: nodes.filter((row) => row.desc.isComposite === true),
       total: 0,
     },
     {
       id: 'action',
-      label: 'Action nodes',
+      label: t('Action nodes'),
       kind: 'node',
       rows: nodes.filter((row) => row.desc.isComposite !== true),
       total: 0,
     },
     {
       id: 'decorator',
-      label: 'Decorators',
+      label: t('Decorators'),
       kind: 'decorator',
       rows: rowsOf('decorator'),
       total: 0,
     },
-    { id: 'service', label: 'Services', kind: 'service', rows: rowsOf('service'), total: 0 },
+    {
+      id: 'service',
+      label: t('Services'),
+      kind: 'service',
+      rows: rowsOf('service'),
+      total: 0,
+    },
   ];
   return groups.map((group) => ({
     ...group,
@@ -115,8 +122,11 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
     const refs = findTypeReferences(draft, row.kind, row.name);
     const message =
       refs.length > 0
-        ? `Delete ${row.name}? It is the base of ${refs.join(', ')}, which will then have a missing base.`
-        : `Delete ${row.name}?`;
+        ? t('Delete {name}? It is the base of {types}, which will then have a missing base.', {
+            name: row.name,
+            types: refs.join(', '),
+          })
+        : t('Delete {name}?', { name: row.name });
     if (!window.confirm(message)) {
       return;
     }
@@ -153,26 +163,26 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
   };
 
   return (
-    <aside className={styles.typeList} aria-label="Project types">
+    <aside className={styles.typeList} aria-label={t('Project types')}>
       <div className={styles.listTools}>
         <input
           ref={searchRef}
           type="search"
           className={styles.input}
-          placeholder="Search types (Ctrl+F)"
-          aria-label="Search types"
+          placeholder={t('Search types (Ctrl+F)')}
+          aria-label={t('Search types')}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
         <div className={styles.addRow}>
           <button type="button" className={styles.button} onClick={() => addNew('node')}>
-            + Node
+            {t('+ Node')}
           </button>
           <button type="button" className={styles.button} onClick={() => addNew('decorator')}>
-            + Decorator
+            {t('+ Decorator')}
           </button>
           <button type="button" className={styles.button} onClick={() => addNew('service')}>
-            + Service
+            {t('+ Service')}
           </button>
         </div>
       </div>
@@ -223,22 +233,24 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                       >
                         {row.name}
                       </span>
-                      {row.desc.isAbstract === true && <span className={styles.tag}>abstract</span>}
+                      {row.desc.isAbstract === true && (
+                        <span className={styles.tag}>{t('abstract')}</span>
+                      )}
                       {bases.length > 0 && (
                         <span className={styles.baseHint}>← {bases.join(', ')}</span>
                       )}
                       {counts && counts.errors > 0 && (
                         <span
                           className={styles.errorDot}
-                          title={`${counts.errors} error(s)`}
-                          aria-label="Has errors"
+                          title={t('{count} error(s)', { count: counts.errors })}
+                          aria-label={t('Has errors')}
                         />
                       )}
                       {counts && counts.errors === 0 && counts.warnings > 0 && (
                         <span
                           className={styles.warnDot}
-                          title={`${counts.warnings} warning(s)`}
-                          aria-label="Has warnings"
+                          title={t('{count} warning(s)', { count: counts.warnings })}
+                          aria-label={t('Has warnings')}
                         />
                       )}
                     </button>
@@ -246,8 +258,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                       <button
                         type="button"
                         className={styles.iconButton}
-                        title="Move up"
-                        aria-label={`Move ${row.name} up`}
+                        title={t('Move up')}
+                        aria-label={t('Move {name} up', { name: row.name })}
                         disabled={row.index === 0}
                         onClick={() => moveRow(row, -1)}
                       >
@@ -256,8 +268,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                       <button
                         type="button"
                         className={styles.iconButton}
-                        title="Move down"
-                        aria-label={`Move ${row.name} down`}
+                        title={t('Move down')}
+                        aria-label={t('Move {name} down', { name: row.name })}
                         disabled={row.index >= count - 1}
                         onClick={() => moveRow(row, 1)}
                       >
@@ -266,8 +278,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                       <button
                         type="button"
                         className={styles.iconButton}
-                        title="Duplicate"
-                        aria-label={`Duplicate ${row.name}`}
+                        title={t('Duplicate')}
+                        aria-label={t('Duplicate {name}', { name: row.name })}
                         onClick={() => duplicateRow(row)}
                       >
                         <i className="fa-regular fa-copy" aria-hidden="true" />
@@ -275,8 +287,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                       <button
                         type="button"
                         className={`${styles.iconButton} ${styles.danger}`}
-                        title="Delete"
-                        aria-label={`Delete ${row.name}`}
+                        title={t('Delete')}
+                        aria-label={t('Delete {name}', { name: row.name })}
                         onClick={() => removeRow(row)}
                       >
                         <i className="fa-solid fa-trash" aria-hidden="true" />
@@ -285,7 +297,7 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                   </li>
                 );
               })}
-              {group.rows.length === 0 && <li className={styles.muted}>No matches</li>}
+              {group.rows.length === 0 && <li className={styles.muted}>{t('No matches')}</li>}
             </ul>
           </section>
         ))}
@@ -296,7 +308,7 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
             className={`${styles.navRow} ${selection?.view === 'custom' ? styles.rowSelected : ''}`}
             onClick={() => select({ view: 'custom' })}
           >
-            <i className="fa-solid fa-puzzle-piece" aria-hidden="true" /> Custom types
+            <i className="fa-solid fa-puzzle-piece" aria-hidden="true" /> {t('Custom types')}
             <span className={styles.count}>{customCount}</span>
           </button>
           <button
@@ -304,14 +316,14 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
             className={`${styles.navRow} ${selection?.view === 'export' ? styles.rowSelected : ''}`}
             onClick={() => select({ view: 'export' })}
           >
-            <i className="fa-solid fa-file-export" aria-hidden="true" /> Export settings
+            <i className="fa-solid fa-file-export" aria-hidden="true" /> {t('Export settings')}
           </button>
           <button
             type="button"
             className={`${styles.navRow} ${selection?.view === 'scenarios' ? styles.rowSelected : ''}`}
             onClick={() => select({ view: 'scenarios' })}
           >
-            <i className="fa-solid fa-flask" aria-hidden="true" /> Scenarios
+            <i className="fa-solid fa-flask" aria-hidden="true" /> {t('Scenarios')}
             <span className={styles.count}>{draft.scenarios?.length ?? 0}</span>
           </button>
           <button
@@ -319,7 +331,7 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
             className={`${styles.navRow} ${selection?.view === 'blackboard' ? styles.rowSelected : ''}`}
             onClick={() => select({ view: 'blackboard' })}
           >
-            <i className="fa-solid fa-table-list" aria-hidden="true" /> Blackboard
+            <i className="fa-solid fa-table-list" aria-hidden="true" /> {t('Blackboard')}
             <span className={styles.count}>
               {Array.isArray(draft.blackboard) ? draft.blackboard.length : 0}
             </span>

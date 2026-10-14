@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ProjectIssue } from '@owlbt/shared';
+import { t } from '../../i18n';
 import styles from './ProjectEditor.module.css';
 
 export interface ProblemsBarProps {
@@ -17,16 +18,20 @@ export function ProblemsBar({ issues, saveError, onGo }: ProblemsBarProps) {
   const warnings = issues.length - errors;
   const summary =
     errors + warnings === 0
-      ? 'No problems'
+      ? t('No problems')
       : [
-          errors > 0 ? `${errors} error${errors === 1 ? '' : 's'}` : '',
-          warnings > 0 ? `${warnings} warning${warnings === 1 ? '' : 's'}` : '',
+          errors > 0 ? (errors === 1 ? t('1 error') : t('{count} errors', { count: errors })) : '',
+          warnings > 0
+            ? warnings === 1
+              ? t('1 warning')
+              : t('{count} warnings', { count: warnings })
+            : '',
         ]
           .filter(Boolean)
-          .join(', ');
+          .join(t(', '));
 
   return (
-    <section className={styles.problems} aria-label="Problems">
+    <section className={styles.problems} aria-label={t('Problems')}>
       <button
         type="button"
         className={styles.problemsToggle}
@@ -37,9 +42,12 @@ export function ProblemsBar({ issues, saveError, onGo }: ProblemsBarProps) {
           className={`fa-solid ${open ? 'fa-chevron-down' : 'fa-chevron-up'}`}
           aria-hidden="true"
         />
-        Problems: {summary}
+        {t('Problems: {summary}', { summary })}
         {saveError !== undefined && (
-          <span className={styles.errorText}> · Not saved: {saveError}</span>
+          <span className={styles.errorText}>
+            {' · '}
+            {t('Not saved: {message}', { message: saveError })}
+          </span>
         )}
       </button>
       {open && (
@@ -56,7 +64,7 @@ export function ProblemsBar({ issues, saveError, onGo }: ProblemsBarProps) {
               </button>
             </li>
           ))}
-          {issues.length === 0 && <li className={styles.muted}>Nothing to report.</li>}
+          {issues.length === 0 && <li className={styles.muted}>{t('Nothing to report.')}</li>}
         </ul>
       )}
     </section>

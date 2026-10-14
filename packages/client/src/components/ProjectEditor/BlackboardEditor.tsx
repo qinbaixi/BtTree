@@ -5,6 +5,7 @@ import {
   VALUE_TYPES,
   type ValueType,
 } from '../RunMode/runHelpers';
+import { t } from '../../i18n';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
@@ -38,7 +39,7 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
           <div key={i} className={styles.scenarioRow}>
             <TextInput
               value={key}
-              ariaLabel={`Key ${key} of ${scope}`}
+              ariaLabel={t('Key {key} of {scope}', { key, scope })}
               className={`${styles.input} ${styles.mono}`}
               onCommit={(next) => {
                 const trimmed = next.trim();
@@ -50,7 +51,7 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
             />
             <select
               className={styles.select}
-              aria-label={`Type of ${key} in ${scope}`}
+              aria-label={t('Type of {key} in {scope}', { key, scope })}
               value={type}
               onChange={(event) =>
                 onChange(
@@ -59,16 +60,16 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
                 )
               }
             >
-              {VALUE_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {VALUE_TYPES.map((option) => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </select>
             {type === 'boolean' ? (
               <input
                 type="checkbox"
-                aria-label={`Value of ${key} in ${scope}`}
+                aria-label={t('Value of {key} in {scope}', { key, scope })}
                 checked={value === true}
                 onChange={(event) =>
                   onChange('Set blackboard value', replaceAt([key, event.target.checked]))
@@ -79,7 +80,7 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
             ) : (
               <TextInput
                 value={String(value)}
-                ariaLabel={`Value of ${key} in ${scope}`}
+                ariaLabel={t('Value of {key} in {scope}', { key, scope })}
                 className={styles.input}
                 onCommit={(text) => {
                   const parsed = parseValueInput(text, type);
@@ -92,8 +93,8 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
             <button
               type="button"
               className={`${styles.iconButton} ${styles.danger}`}
-              aria-label={`Remove ${key} from ${scope}`}
-              title="Remove key"
+              aria-label={t('Remove {key} from {scope}', { key, scope })}
+              title={t('Remove key')}
               onClick={() =>
                 onChange(
                   'Remove blackboard key',
