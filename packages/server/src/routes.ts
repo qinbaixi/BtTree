@@ -2,7 +2,13 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { ErrorRequestHandler, Request, Response } from 'express';
 import express, { Router } from 'express';
-import { compileProject, type ProjectFile, type TreeNodeJson } from '@owlbt/shared';
+import {
+  collectSubtreeRefsJson,
+  compileProject,
+  parseAndCompileProject,
+  type ProjectFile,
+  type TreeNodeJson,
+} from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
 import { withFileLock, writeFileAtomic } from './fileLock';
 import {
@@ -24,6 +30,7 @@ import {
   type ProjectOptions,
 } from './project';
 import { revoke, trust } from './pluginTrust';
+import { loadSubtreeLibrary, treeRefOf } from './subtrees';
 import {
   initProject,
   loadWorkspace,
@@ -381,6 +388,56 @@ export function createApiRouter(options: RouterOptions = {}): Router {
       throw new HttpError(409, 'File already exists');
     }
     res.json({ path: treePath });
+  });
+
+  /**
+   * Resolves subtree references for a tree of the project: loads the trees named by `refs`
+   * (project-relative paths; default: the references of the tree file on disk) and the trees they
+   * reference, recursively. Responds with the project folder, the tree's own project-relative path
+   * (`self`, used to detect cycles back to it) and the loaded trees or their errors by reference.
+   */
+  router.post('/subtrees', async (req, res) => {
+    const body = objectBody(req.body);
+    const treePath = requireAbsolutePath(body.path, 'path');
+    const project = await requireProjectFor(treePath, projectOptions);
+    const compiled = parseAndCompileProject(project.content);
+    if (!compiled.project) {
+      throw new HttpError(422, `Invalid project file: ${compiled.error ?? 'unknown error'}`);
+    }
+    if (body.refs !== undefined && !Array.isArray(body.refs)) {
+      throw new HttpError(400, 'refs must be an array');
+    }
+    let refs: unknown[];
+    if (Array.isArray(body.refs)) {
+      refs = body.refs;
+    } else {
+      let raw: string;
+      try {
+        raw = await readFile(treePath, 'utf8');
+      } catch (err) {
+        if (isErrno(err, 'ENOENT')) {
+          throw new HttpError(404, 'Path not found');
+        }
+        throw err;
+      }
+      try {
+        const tree = JSON.parse(raw.startsWith(UTF8_BOM) ? raw.slice(1) : raw) as TreeNodeJson;
+        refs = collectSubtreeRefsJson(tree, compiled.project);
+      } catch (err) {
+        throw new HttpError(422, `Invalid JSON in tree file: ${messageOf(err)}`);
+      }
+    }
+    const plugin = project.plugin;
+    const library = await loadSubtreeLibrary(project.dir, compiled.project, refs, {
+      transform: plugin?.onTreeLoad
+        ? async (path, tree) => {
+            const ctx = buildContext(project, path, tree);
+            await plugin.onTreeLoad?.(ctx);
+            return ctx.tree;
+          }
+        : undefined,
+    });
+    res.json({ projectDir: project.dir, self: treeRefOf(project.dir, treePath) ?? null, library });
   });
 
   router.post('/export', async (req, res) => {

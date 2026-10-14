@@ -151,6 +151,20 @@
       "icon": "user",
       "color": "#c6a35c",
       "description": "手动决定结果（运行模式里点 Succeed / Fail）"
+    },
+    {
+      "name": "SubTree",
+      "icon": "diagram-project",
+      "subtree": true,
+      "description": "运行子树 {{Tree}}",
+      "properties": [
+        {
+          "name": "Tree",
+          "type": "string",
+          "default": "",
+          "description": "要运行的树文件，相对项目目录的路径"
+        }
+      ]
     }
   ],
   "decorators": [

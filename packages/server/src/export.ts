@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import {
   buildExportModel,
+  collectSubtreeRefsJson,
   createIdGen,
   csharpClassName,
   goNamePrefix,
@@ -17,10 +18,13 @@ import {
   toTypeScript,
   type CompiledProject,
   type ProjectFile,
+  type SubtreeExportMode,
+  type SubtreeLibrary,
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
 import { findProjectFile } from './project';
+import { loadSubtreeLibrary, treeRefOf, type SubtreeFileCache } from './subtrees';
 import { loadWorkspace, type WorkspaceTree } from './workspace';
 
 export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs', 'go'] as const;
@@ -78,6 +82,21 @@ interface ExportProject {
 
 /** Cache of loaded projects by owl-bt.json path, shared by the trees of one batch. */
 type ProjectCache = Map<string, Promise<ExportProject>>;
+
+/** `export.subtrees` of the project: 'reference' unless set to 'inline'; anything else warns. */
+export function subtreeExportMode(file: ProjectFile): {
+  mode: SubtreeExportMode;
+  warning?: string;
+} {
+  const value: unknown = file.export?.subtrees;
+  if (value === undefined || value === 'reference' || value === 'inline') {
+    return { mode: value ?? 'reference' };
+  }
+  return {
+    mode: 'reference',
+    warning: `Unknown export.subtrees value ${JSON.stringify(value)}; using "reference"`,
+  };
+}
 
 async function readExportProject(path: string): Promise<ExportProject> {
   const content = await readFile(path, 'utf8');
@@ -235,6 +254,7 @@ async function exportTreeIn(
   formats: ExportFormat[],
   options: ExportOptions,
   cache?: ProjectCache,
+  subtreeCache?: SubtreeFileCache,
 ): Promise<ExportTreeResult> {
   const project = await loadExportProject(treePath, cache);
   if (!project) {
@@ -264,13 +284,26 @@ async function exportTreeIn(
     return { ...result, error: `Invalid project file: ${project.error ?? 'unknown error'}` };
   }
 
+  const subtrees = subtreeExportMode(project.file);
   let model: ReturnType<typeof buildExportModel>;
   try {
-    model = buildExportModel(nodeFromJson(json, createIdGen()), project.compiled);
+    // Referenced trees are loaded to inline them, or to warn about missing files and cycles.
+    const refs = collectSubtreeRefsJson(json, project.compiled);
+    let library: SubtreeLibrary | undefined;
+    if (refs.length > 0) {
+      library = await loadSubtreeLibrary(project.dir, project.compiled, refs, {
+        cache: subtreeCache,
+      });
+    }
+    model = buildExportModel(nodeFromJson(json, createIdGen()), project.compiled, {
+      subtrees: subtrees.mode,
+      library,
+      treeRef: treeRefOf(project.dir, treePath),
+    });
   } catch (err) {
     return { ...result, error: messageOf(err) };
   }
-  result.warnings = model.warnings;
+  result.warnings = subtrees.warning ? [subtrees.warning, ...model.warnings] : model.warnings;
 
   const projectFile = project.file;
   const sourcePath = relative(project.dir, treePath).split(sep).join('/');
@@ -336,6 +369,7 @@ export async function exportProject(
   // owl-bt.json is read and compiled once per batch; trees are exported a few at a time so file
   // I/O overlaps. Results keep the order of the workspace listing.
   const cache: ProjectCache = new Map();
+  const subtreeCache: SubtreeFileCache = new Map();
   const { trees } = workspace;
   const groups = await writeGroups(trees, formats, options, cache);
   const results: ExportProjectResult['results'] = new Array(trees.length);
@@ -347,7 +381,7 @@ export async function exportProject(
         try {
           results[index] = {
             relPath: tree.relPath,
-            ...(await exportTreeIn(tree.path, formats, options, cache)),
+            ...(await exportTreeIn(tree.path, formats, options, cache, subtreeCache)),
           };
         } catch (err) {
           results[index] = {

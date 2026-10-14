@@ -187,6 +187,20 @@
                     "default": 0.5
                 }
             ]
+        },
+        {
+            "name": "SubTree",
+            "icon": "diagram-project",
+            "subtree": true,
+            "description": "运行子树 {{Tree}}",
+            "properties": [
+                {
+                    "name": "Tree",
+                    "type": "string",
+                    "default": "",
+                    "description": "要运行的树文件，相对项目目录的路径"
+                }
+            ]
         }
     ],
     "decorators": [
