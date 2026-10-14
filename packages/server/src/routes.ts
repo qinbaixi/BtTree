@@ -24,6 +24,8 @@ import {
   type ProjectOptions,
 } from './project';
 import { revoke, trust } from './pluginTrust';
+import { registerReferenceRoutes } from './referenceRoutes';
+import { formatTreeText, parseTreeText } from './treeFile';
 import {
   initProject,
   loadWorkspace,
@@ -43,8 +45,6 @@ export interface RouterOptions {
 
 /** Response header of GET /api/tree when the project has a plugin: trusted, changed or untrusted. */
 export const PLUGIN_HEADER = 'X-Owlbt-Plugin';
-
-const UTF8_BOM = String.fromCharCode(0xfeff);
 
 function requireAbsolutePath(raw: unknown, name = 'path'): string {
   if (typeof raw !== 'string' || raw === '') {
@@ -248,7 +248,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
     let tree: TreeNodeJson;
     try {
-      tree = JSON.parse(raw.startsWith(UTF8_BOM) ? raw.slice(1) : raw) as TreeNodeJson;
+      tree = parseTreeText(raw);
     } catch (err) {
       res.status(422).json({ message: `Invalid JSON in tree file: ${messageOf(err)}` });
       return;
@@ -297,10 +297,8 @@ export function createApiRouter(options: RouterOptions = {}): Router {
         }
       }
       // A new file gets tab indentation. An existing file keeps its indentation, line endings and BOM.
-      const hasBom = original?.startsWith(UTF8_BOM) === true;
-      const text = formatJsonLike(tree, hasBom ? original?.slice(1) : original, '\t');
       try {
-        await writeFileAtomic(treePath, hasBom ? `${UTF8_BOM}${text}` : text);
+        await writeFileAtomic(treePath, formatTreeText(tree, original));
       } catch (err) {
         if (isErrno(err, 'ENOENT')) {
           throw new HttpError(404, 'Path not found');
@@ -389,6 +387,8 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     const formats = parseExportFormats(body.formats);
     res.json(await exportTree(treePath, formats));
   });
+
+  registerReferenceRoutes(router);
 
   router.post('/export/batch', async (req, res) => {
     const body = objectBody(req.body);

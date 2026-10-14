@@ -104,6 +104,21 @@ export interface ProjectExportJson {
   go?: FormatExportJson;
 }
 
+/** Value types of a declared blackboard key. */
+export type BlackboardValueType = 'string' | 'number' | 'bool' | 'any';
+
+/**
+ * A declared blackboard key (`blackboard` of owl-bt.json). Properties whose type is the custom
+ * type `blackboardKey` hold key names; the editor suggests and checks them against these.
+ */
+export interface BlackboardKeyJson {
+  name: string;
+  type: BlackboardValueType | string;
+  default?: unknown;
+  description?: string;
+  [key: string]: unknown;
+}
+
 export interface ProjectFile {
   types?: Record<string, CustomTypeJson>;
   nodes?: ItemTypeDescJson[];
@@ -111,6 +126,8 @@ export interface ProjectFile {
   services?: ItemTypeDescJson[];
   export?: ProjectExportJson;
   scenarios?: ScenarioJson[];
+  /** Declared blackboard keys (optional). */
+  blackboard?: BlackboardKeyJson[];
 }
 
 // ---------- Compiled project ----------
@@ -161,6 +178,8 @@ export interface CompiledProject {
   nodes: Record<string, CompiledItemType>;
   decorators: Record<string, CompiledItemType>;
   services: Record<string, CompiledItemType>;
+  /** Declared blackboard keys with a name. Only set when the project declares at least one. */
+  blackboard?: BlackboardKeyJson[];
 }
 
 // ---------- Tree file ----------

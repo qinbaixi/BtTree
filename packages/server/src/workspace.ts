@@ -94,7 +94,9 @@ async function isTreeFile(path: string): Promise<boolean> {
     if (info.size > MAX_TREE_FILE_BYTES) {
       return false;
     }
-    return isTreeObject(JSON.parse(await readFile(path, 'utf8')));
+    const text = await readFile(path, 'utf8');
+    // Tree files may start with a UTF-8 BOM (the tree editor keeps it).
+    return isTreeObject(JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text));
   } catch {
     return false; // Unreadable or not JSON.
   }
