@@ -7,6 +7,7 @@ import {
   type SimulateJson,
   type SimulateMode,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { runEdit } from './PropertyTable';
 import { TextInput } from './TextInput';
 import { editSimulate, formatNumberOrTemplate, parseNumberOrTemplate } from './simulation';
@@ -29,10 +30,10 @@ const DECORATORS: readonly SimulateDecorator[] = [
 ];
 
 const MODE_HELP: Record<SimulateMode, string> = {
-  manual: 'waits until you press Succeed or Fail in run mode',
-  success: 'finishes with success',
-  failure: 'finishes with failure',
-  rule: 'finishes after the duration; success when the condition is true',
+  manual: t('waits until you press Succeed or Fail in run mode'),
+  success: t('finishes with success'),
+  failure: t('finishes with failure'),
+  rule: t('finishes after the duration; success when the condition is true'),
 };
 
 export interface SimulationSectionProps {
@@ -89,10 +90,10 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
 
   const conditionField = (placeholder: string) => (
     <div className={styles.field}>
-      <span className={styles.fieldLabel}>Condition</span>
+      <span className={styles.fieldLabel}>{t('Condition')}</span>
       <TextInput
         value={sim.condition ?? ''}
-        ariaLabel="Simulation condition"
+        ariaLabel={t('Simulation condition')}
         placeholder={placeholder}
         className={`${styles.input} ${styles.mono} ${issueOf('condition') ? styles.invalidInput : ''}`}
         invalid={issueOf('condition') !== undefined}
@@ -108,21 +109,23 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
 
   return (
     <details className={styles.section} open={desc.simulate !== undefined}>
-      <summary className={styles.sectionTitle}>Simulation (run mode)</summary>
+      <summary className={styles.sectionTitle}>{t('Simulation (run mode)')}</summary>
       <p className={styles.helpText}>
-        Rules for the run mode simulator. One tick is one second. Numbers and conditions are
-        expressions: blackboard keys, <code>{'{{Property}}'}</code> for a property of this item,
-        numbers, strings, <code>true/false/null</code>, <code>+ - * / %</code>,{' '}
-        <code>== != &lt; &lt;= &gt; &gt;=</code>, <code>&amp;&amp; || !</code> and parentheses.
-        Empty fields are inherited from the base types.
+        {t(
+          'Rules for the run mode simulator. One tick is one second. Numbers and conditions are expressions: blackboard keys,',
+        )}{' '}
+        <code>{'{{Property}}'}</code> {t('for a property of this item, numbers, strings,')}{' '}
+        <code>true/false/null</code>, <code>+ - * / %</code>,{' '}
+        <code>== != &lt; &lt;= &gt; &gt;=</code>, <code>&amp;&amp; || !</code>{' '}
+        {t('and parentheses. Empty fields are inherited from the base types.')}
       </p>
 
       {kind === 'node' && isComposite && (
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Composite kind</span>
+          <span className={styles.fieldLabel}>{t('Composite kind')}</span>
           <select
             className={styles.select}
-            aria-label="Composite kind"
+            aria-label={t('Composite kind')}
             value={sim.composite ?? ''}
             onChange={(event) =>
               edit('Set composite kind', (s) => {
@@ -130,7 +133,7 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
               })
             }
           >
-            <option value="">Infer from the type name (default: sequence)</option>
+            <option value="">{t('Infer from the type name (default: sequence)')}</option>
             {COMPOSITES.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -138,8 +141,9 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
             ))}
           </select>
           <p className={styles.muted}>
-            Parallel succeeds when all children succeed; a property named <code>Policy</code> with
-            the value <code>RequireOne</code> makes it succeed when one child succeeds.
+            {t('Parallel succeeds when all children succeed; a property named')} <code>Policy</code>{' '}
+            {t('with the value')} <code>RequireOne</code>{' '}
+            {t('makes it succeed when one child succeeds.')}
           </p>
         </div>
       )}
@@ -147,10 +151,10 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
       {isAction && (
         <>
           <div className={styles.field}>
-            <span className={styles.fieldLabel}>Mode</span>
+            <span className={styles.fieldLabel}>{t('Mode')}</span>
             <select
               className={styles.select}
-              aria-label="Simulation mode"
+              aria-label={t('Simulation mode')}
               value={mode ?? ''}
               onChange={(event) =>
                 edit('Set mode', (s) => {
@@ -158,7 +162,7 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
                 })
               }
             >
-              <option value="">Default (manual, or rule when anything below is set)</option>
+              <option value="">{t('Default (manual, or rule when anything below is set)')}</option>
               {MODES.map((m) => (
                 <option key={m} value={m}>
                   {m} — {MODE_HELP[m]}
@@ -167,18 +171,18 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
             </select>
           </div>
           {mode !== 'manual' &&
-            expressionField('duration', 'Duration (ticks)', 'e.g. 3 or {{Duration}}')}
-          {(mode === undefined || mode === 'rule') && conditionField('e.g. Ammo > 0')}
+            expressionField('duration', t('Duration (ticks)'), t('e.g. 3 or {{Duration}}'))}
+          {(mode === undefined || mode === 'rule') && conditionField(t('e.g. Ammo > 0'))}
         </>
       )}
 
       {kind === 'decorator' && (
         <>
           <div className={styles.field}>
-            <span className={styles.fieldLabel}>Built-in behaviour</span>
+            <span className={styles.fieldLabel}>{t('Built-in behaviour')}</span>
             <select
               className={styles.select}
-              aria-label="Decorator kind"
+              aria-label={t('Decorator kind')}
               value={sim.decorator ?? ''}
               onChange={(event) =>
                 edit('Set decorator kind', (s) => {
@@ -186,7 +190,7 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
                 })
               }
             >
-              <option value="">None (only the condition below)</option>
+              <option value="">{t('None (only the condition below)')}</option>
               {DECORATORS.map((d) => (
                 <option key={d} value={d}>
                   {d}
@@ -197,13 +201,13 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
           {sim.decorator === 'loop' &&
             expressionField(
               'count',
-              'Loop count (negative = forever)',
-              'default 1, e.g. {{Count}}',
+              t('Loop count (negative = forever)'),
+              t('default 1, e.g. {{Count}}'),
             )}
           {(sim.decorator === 'cooldown' || sim.decorator === 'timeLimit') &&
-            expressionField('ticks', 'Ticks', 'e.g. 5 or {{Seconds}}')}
+            expressionField('ticks', t('Ticks'), t('e.g. 5 or {{Seconds}}'))}
           {conditionField(
-            'checked when the node starts (and every tick if periodic), e.g. Enemy == true',
+            t('checked when the node starts (and every tick if periodic), e.g. Enemy == true'),
           )}
         </>
       )}
@@ -211,15 +215,15 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
       {kind !== 'decorator' && (
         <div className={styles.field}>
           <span className={styles.fieldLabel}>
-            {kind === 'service' ? 'Effects (every service tick)' : 'Effects (on success)'}
+            {kind === 'service' ? t('Effects (every service tick)') : t('Effects (on success)')}
           </span>
           <div className={styles.kvList}>
             {effects.map((effect, index) => (
               <div key={index} className={styles.effectRow}>
                 <TextInput
                   value={effect}
-                  ariaLabel={`Effect ${index + 1}`}
-                  placeholder="Key = expression, e.g. Ammo = Ammo - 1"
+                  ariaLabel={t('Effect {number}', { number: index + 1 })}
+                  placeholder={t('Key = expression, e.g. Ammo = Ammo - 1')}
                   className={`${styles.input} ${styles.mono} ${issueOf(`effects[${index}]`) ? styles.invalidInput : ''}`}
                   invalid={issueOf(`effects[${index}]`) !== undefined}
                   onCommit={(value) =>
@@ -231,8 +235,8 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
                 <button
                   type="button"
                   className={`${styles.iconButton} ${styles.danger}`}
-                  aria-label={`Remove effect ${index + 1}`}
-                  title="Remove effect"
+                  aria-label={t('Remove effect {number}', { number: index + 1 })}
+                  title={t('Remove effect')}
                   onClick={() =>
                     edit('Remove effect', (s) => {
                       s.effects = (s.effects ?? []).filter((_, i) => i !== index);
@@ -253,7 +257,7 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
                 })
               }
             >
-              + Effect
+              {t('+ Effect')}
             </button>
           </div>
         </div>

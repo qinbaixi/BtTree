@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RefRename } from '@owlbt/shared';
 import { updateReferences, type ChangedTree, type UpdateReferencesResult } from '../../lib/api';
 import { getDirtyTreePaths } from '../../lib/dirtyTrees';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
 import { tabsStore } from '../../store/tabsStore';
@@ -14,7 +15,7 @@ export function confirmLeaveProject(): boolean {
   if (!projectEditorStore.getState().dirty) {
     return true;
   }
-  return window.confirm('You have unsaved changes to the project types. Leave without saving?');
+  return window.confirm(t('You have unsaved changes to the project types. Leave without saving?'));
 }
 
 /** Paths compared the way the file system does: separators unified, case-insensitive on Windows. */
@@ -42,10 +43,22 @@ export function openDirtyTreePaths(): Set<string> {
 /** "Old → New" list of renames, e.g. `MoveTo → Walk, key Target → Goal`. */
 export function describeRenames(renames: readonly RefRename[]): string {
   return renames
-    .map(
-      (rename) => `${rename.kind === 'blackboardKey' ? 'key ' : ''}${rename.from} → ${rename.to}`,
+    .map((rename) =>
+      rename.kind === 'blackboardKey'
+        ? t('key {from} → {to}', { from: rename.from, to: rename.to })
+        : `${rename.from} → ${rename.to}`,
     )
-    .join(', ');
+    .join(t(', '));
+}
+
+/** "N tree file(s) use(s) the old name(s)." with the plural forms of both counts. */
+function usesOldNamesText(files: number, names: number): string {
+  if (files === 1) {
+    return names === 1 ? t('1 tree file uses the old name.') : t('1 tree file uses the old names.');
+  }
+  return names === 1
+    ? t('{count} tree files use the old name.', { count: files })
+    : t('{count} tree files use the old names.', { count: files });
 }
 
 interface Check {
@@ -103,9 +116,13 @@ export function ReferenceUpdateBanner() {
   if (check.error !== undefined || !check.result) {
     return (
       <div role="alert" className={styles.bannerError}>
-        <span>{`Could not check the tree files for renamed names: ${check.error ?? ''}`}</span>
+        <span>
+          {t('Could not check the tree files for renamed names: {error}', {
+            error: check.error ?? '',
+          })}
+        </span>
         <button type="button" className={styles.button} onClick={dismiss}>
-          Dismiss
+          {t('Dismiss')}
         </button>
       </div>
     );
@@ -124,16 +141,24 @@ export function ReferenceUpdateBanner() {
         skip: skipped.map((file) => file.path),
       });
       const written = result.changed.filter((file) => !file.skipped);
-      alerts.success(`Updated ${written.length} tree file${written.length === 1 ? '' : 's'}`);
+      alerts.success(
+        written.length === 1
+          ? t('Updated 1 tree file')
+          : t('Updated {count} tree files', { count: written.length }),
+      );
       const notWritten = result.changed.filter((file) => file.skipped);
       if (notWritten.length > 0) {
         alerts.warning(
-          `Not updated (unsaved edits in an open editor): ${notWritten.map((f) => f.relPath).join(', ')}`,
+          t('Not updated (unsaved edits in an open editor): {files}', {
+            files: notWritten.map((f) => f.relPath).join(', '),
+          }),
         );
       }
       if (result.errors.length > 0) {
         alerts.error(
-          `Could not update: ${result.errors.map((e) => `${e.relPath} (${e.error})`).join(', ')}`,
+          t('Could not update: {files}', {
+            files: result.errors.map((e) => `${e.relPath} (${e.error})`).join(', '),
+          }),
         );
       }
       dismiss();
@@ -145,10 +170,10 @@ export function ReferenceUpdateBanner() {
   };
 
   return (
-    <div role="status" className={refStyles.banner} aria-label="Update tree files">
+    <div role="status" className={refStyles.banner} aria-label={t('Update tree files')}>
       <div className={refStyles.bannerRow}>
         <span className={refStyles.bannerText}>
-          {`Renamed ${describeRenames(renames)}. ${files.length} tree file${files.length === 1 ? ' uses' : 's use'} the old name${renames.length === 1 ? '' : 's'}.`}
+          {`${t('Renamed {renames}.', { renames: describeRenames(renames) })} ${usesOldNamesText(files.length, renames.length)}`}
         </span>
         <button
           type="button"
@@ -156,17 +181,19 @@ export function ReferenceUpdateBanner() {
           disabled={busy || writable.length === 0}
           onClick={() => void update()}
         >
-          {`Also update ${writable.length} tree file${writable.length === 1 ? '' : 's'}`}
+          {writable.length === 1
+            ? t('Also update 1 tree file')
+            : t('Also update {count} tree files', { count: writable.length })}
         </button>
         <button type="button" className={styles.button} disabled={busy} onClick={dismiss}>
-          Dismiss
+          {t('Dismiss')}
         </button>
       </div>
       <ul className={refStyles.files}>
         {files.map((file) => (
           <li key={file.path} className={isOpenDirty(file) ? refStyles.skipped : undefined}>
             {`${file.relPath} (${file.count})`}
-            {isOpenDirty(file) && ' — open with unsaved changes, will be skipped'}
+            {isOpenDirty(file) && t(' — open with unsaved changes, will be skipped')}
           </li>
         ))}
       </ul>

@@ -12,6 +12,7 @@ import {
   type BlackboardIssue,
   type BlackboardKeyJson,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
 import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
@@ -67,26 +68,30 @@ export function BlackboardView({ selectedName }: { selectedName?: string }) {
   return (
     <div className={styles.form}>
       <div className={styles.propertyHead}>
-        <h2 className={styles.heading}>Blackboard</h2>
+        <h2 className={styles.heading}>{t('Blackboard')}</h2>
         <button type="button" className={styles.button} onClick={add}>
-          + Key
+          {t('+ Key')}
         </button>
       </div>
       <p className={styles.muted}>
-        Declare the blackboard keys your trees use. Properties of the custom type{' '}
-        <code>{BLACKBOARD_KEY_TYPE}</code> suggest these keys and warn about other names. Run mode
-        starts with the keys and their defaults when no scenario is picked. Renaming a key also
-        renames it in property defaults and scenarios; after saving you can update the tree files.
+        {t('Declare the blackboard keys your trees use. Properties of the custom type')}{' '}
+        <code>{BLACKBOARD_KEY_TYPE}</code>{' '}
+        {t(
+          'suggest these keys and warn about other names. Run mode starts with the keys and their defaults when no scenario is picked. Renaming a key also renames it in property defaults and scenarios; after saving you can update the tree files.',
+        )}
       </p>
       {!hasKeyType && (
         <p className={refStyles.keyWarning}>
-          {`The project has no custom type '${BLACKBOARD_KEY_TYPE}': add it under Custom types and use it for properties that hold key names.`}
+          {t(
+            "The project has no custom type '{type}': add it under Custom types and use it for properties that hold key names.",
+            { type: BLACKBOARD_KEY_TYPE },
+          )}
         </p>
       )}
       {issues.some((issue) => issue.path === 'blackboard') && (
-        <p className={refStyles.keyError}>blackboard must be an array of keys.</p>
+        <p className={refStyles.keyError}>{t('blackboard must be an array of keys.')}</p>
       )}
-      {keys.length === 0 && <p className={styles.muted}>No blackboard keys declared yet.</p>}
+      {keys.length === 0 && <p className={styles.muted}>{t('No blackboard keys declared yet.')}</p>}
       {keys.map((key, index) => (
         <KeyCard
           key={index}
@@ -146,19 +151,19 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
   return (
     <section
       className={`${styles.section} ${refStyles.keyCard} ${selected ? refStyles.keyCardSelected : ''}`}
-      aria-label={`Blackboard key ${name}`}
+      aria-label={t('Blackboard key {name}', { name })}
     >
       <div className={refStyles.keyRow}>
         <TextInput
           value={name}
-          ariaLabel={`Key name ${name}`}
+          ariaLabel={t('Key name {name}', { name })}
           className={`${styles.input} ${styles.mono}`}
           invalid={issues.some((issue) => issue.path.endsWith('.name'))}
           onCommit={rename}
         />
         <select
           className={styles.select}
-          aria-label={`Type of key ${name}`}
+          aria-label={t('Type of key {name}', { name })}
           value={type}
           onChange={(event) => setType(event.target.value)}
         >
@@ -175,19 +180,21 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
           <label className={styles.checkLabel}>
             <input
               type="checkbox"
-              aria-label={`Default of key ${name}`}
+              aria-label={t('Default of key {name}', { name })}
               checked={entry.default === true}
               onChange={(event) =>
                 patch('Set blackboard key default', { default: event.target.checked })
               }
             />
-            default
+            {t('default')}
           </label>
         ) : (
           <TextInput
             value={formatKeyDefault(type, entry.default)}
-            ariaLabel={`Default of key ${name}`}
-            placeholder={`default: ${JSON.stringify(defaultForBlackboardType(type))}`}
+            ariaLabel={t('Default of key {name}', { name })}
+            placeholder={t('default: {value}', {
+              value: JSON.stringify(defaultForBlackboardType(type)),
+            })}
             className={styles.input}
             invalid={issues.some((issue) => issue.path.endsWith('.default'))}
             onCommit={(text) => {
@@ -197,7 +204,7 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
               }
               const parsed = parseKeyDefault(type, text);
               if (parsed === undefined) {
-                alerts.error(`Default of '${name}' must be a number`);
+                alerts.error(t("Default of '{name}' must be a number", { name }));
                 return;
               }
               patch('Set blackboard key default', { default: parsed });
@@ -207,10 +214,10 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
         <button
           type="button"
           className={`${styles.iconButton} ${styles.danger}`}
-          aria-label={`Delete key ${name}`}
-          title="Delete key"
+          aria-label={t('Delete key {name}', { name })}
+          title={t('Delete key')}
           onClick={() => {
-            if (window.confirm(`Delete blackboard key '${name}'?`)) {
+            if (window.confirm(t("Delete blackboard key '{name}'?", { name }))) {
               runEdit('Delete blackboard key', (d) => {
                 removeBlackboardKey(d, name);
               });
@@ -223,8 +230,8 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
       <TextInput
         live
         value={entry.description ?? ''}
-        ariaLabel={`Description of key ${name}`}
-        placeholder="Description (optional)"
+        ariaLabel={t('Description of key {name}', { name })}
+        placeholder={t('Description (optional)')}
         className={styles.input}
         onCommit={(value) =>
           patch(
@@ -244,7 +251,9 @@ function KeyCard({ entry, selected, issues, projectPath }: KeyCardProps) {
         </p>
       ))}
       {unknown.length > 0 && (
-        <p className={styles.muted}>{`Other fields (kept as they are): ${unknown.join(', ')}`}</p>
+        <p className={styles.muted}>
+          {t('Other fields (kept as they are): {fields}', { fields: unknown.join(', ') })}
+        </p>
       )}
       {projectPath !== undefined && name !== '' && (
         <ProjectUsages

@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { getJson, setJson } from '../../lib/storage';
+import { t } from '../../i18n';
 import styles from './ProjectEditor.module.css';
 
 export const PREVIEW_WIDTH_STORAGE_KEY = 'owlbt.previewWidth';
@@ -54,8 +55,8 @@ export function PanelResizer({
   min = PREVIEW_MIN_WIDTH,
   max = PREVIEW_MAX_WIDTH,
   defaultValue = PREVIEW_DEFAULT_WIDTH,
-  label = 'Resize preview',
-  title = 'Drag to resize the preview',
+  label = t('Resize preview'),
+  title = t('Drag to resize the preview'),
 }: PanelResizerProps) {
   const [dragging, setDragging] = useState(false);
   const horizontal = orientation === 'horizontal';

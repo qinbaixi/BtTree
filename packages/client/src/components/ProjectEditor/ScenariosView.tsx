@@ -5,6 +5,7 @@ import {
   updateScenario,
   type ScenarioJson,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { useProjectEditorStore } from '../../store/projectEditorStore';
 import { BlackboardEditor } from './BlackboardEditor';
 import { runEdit } from './PropertyTable';
@@ -23,25 +24,26 @@ export function ScenariosView() {
 
   const add = () =>
     runEdit('Add scenario', (d) => {
-      addScenario(d, { name: uniqueScenarioName(d, 'New scenario'), blackboard: {} });
+      addScenario(d, { name: uniqueScenarioName(d, t('New scenario')), blackboard: {} });
     });
 
   return (
     <div className={styles.form}>
       <div className={styles.propertyHead}>
-        <h2 className={styles.heading}>Scenarios</h2>
+        <h2 className={styles.heading}>{t('Scenarios')}</h2>
         <button type="button" className={styles.button} onClick={add}>
-          + Scenario
+          {t('+ Scenario')}
         </button>
       </div>
       <p className={styles.muted}>
-        A scenario is a named set of start values for the blackboard. Pick one in run mode to
-        simulate a tree in a specific situation, for example an enemy in sight or no ammo left.
+        {t(
+          'A scenario is a named set of start values for the blackboard. Pick one in run mode to simulate a tree in a specific situation, for example an enemy in sight or no ammo left.',
+        )}
       </p>
       {scenarios.length > 0 && projectPath !== undefined && (
         <ScenarioTestRunner projectPath={projectPath} draft={draft} />
       )}
-      {scenarios.length === 0 && <p className={styles.muted}>No scenarios yet.</p>}
+      {scenarios.length === 0 && <p className={styles.muted}>{t('No scenarios yet.')}</p>}
       {scenarios.map((scenario, index) => (
         <ScenarioCard key={index} scenario={scenario} />
       ))}
@@ -59,21 +61,21 @@ function ScenarioCard({ scenario }: { scenario: ScenarioJson }) {
     edit(label, { blackboard: Object.fromEntries(next) }, key);
 
   return (
-    <section className={styles.section} aria-label={`Scenario ${name}`}>
+    <section className={styles.section} aria-label={t('Scenario {name}', { name })}>
       <div className={styles.inline}>
         <TextInput
           value={name}
-          ariaLabel={`Scenario name ${name}`}
+          ariaLabel={t('Scenario name {name}', { name })}
           className={`${styles.input} ${styles.grow}`}
           onCommit={(value) => edit('Rename scenario', { name: value })}
         />
         <button
           type="button"
           className={`${styles.iconButton} ${styles.danger}`}
-          aria-label={`Delete scenario ${name}`}
-          title="Delete scenario"
+          aria-label={t('Delete scenario {name}', { name })}
+          title={t('Delete scenario')}
           onClick={() => {
-            if (window.confirm(`Delete scenario '${name}'?`)) {
+            if (window.confirm(t("Delete scenario '{name}'?", { name }))) {
               runEdit('Delete scenario', (d) => {
                 removeScenario(d, name);
               });
@@ -86,8 +88,8 @@ function ScenarioCard({ scenario }: { scenario: ScenarioJson }) {
       <TextInput
         live
         value={scenario.description ?? ''}
-        ariaLabel={`Scenario description ${name}`}
-        placeholder="Description (optional)"
+        ariaLabel={t('Scenario description {name}', { name })}
+        placeholder={t('Description (optional)')}
         className={styles.input}
         onCommit={(value) =>
           edit(
@@ -100,7 +102,7 @@ function ScenarioCard({ scenario }: { scenario: ScenarioJson }) {
       <BlackboardEditor
         values={scenario.blackboard}
         scope={name}
-        addLabel="+ Key"
+        addLabel={t('+ Key')}
         onChange={setEntries}
       />
       <ScenarioTestFields scenario={scenario} edit={edit} />

@@ -13,6 +13,7 @@ import {
   type PropertyDescJson,
   type PropertyExportTarget,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { projectEditorStore } from '../../store/projectEditorStore';
 import { TextInput } from './TextInput';
@@ -79,7 +80,7 @@ export function ValueInput({
           onChange(event.target.value === '' ? undefined : event.target.value === 'true')
         }
       >
-        <option value="">{placeholder ?? '(none)'}</option>
+        <option value="">{placeholder ?? t('(none)')}</option>
         <option value="true">true</option>
         <option value="false">false</option>
       </select>
@@ -95,14 +96,14 @@ export function ValueInput({
         value={current}
         onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.value)}
       >
-        <option value="">{placeholder ?? '(none)'}</option>
+        <option value="">{placeholder ?? t('(none)')}</option>
         {options.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
         ))}
         {current !== '' && !options.includes(current) && (
-          <option value={current}>{current} (not in values)</option>
+          <option value={current}>{t('{value} (not in values)', { value: current })}</option>
         )}
       </select>
     );
@@ -177,8 +178,8 @@ export function ValuesEditor({
             <button
               type="button"
               className={styles.chipButton}
-              title="Move left"
-              aria-label={`Move ${value} left`}
+              title={t('Move left')}
+              aria-label={t('Move {name} left', { name: value })}
               onClick={() => move(index, -1)}
             >
               <i className="fa-solid fa-chevron-left" aria-hidden="true" />
@@ -186,8 +187,8 @@ export function ValuesEditor({
             <button
               type="button"
               className={styles.chipButton}
-              title="Move right"
-              aria-label={`Move ${value} right`}
+              title={t('Move right')}
+              aria-label={t('Move {name} right', { name: value })}
               onClick={() => move(index, 1)}
             >
               <i className="fa-solid fa-chevron-right" aria-hidden="true" />
@@ -195,8 +196,8 @@ export function ValuesEditor({
             <button
               type="button"
               className={styles.chipButton}
-              title="Remove value"
-              aria-label={`Remove ${value}`}
+              title={t('Remove value')}
+              aria-label={t('Remove {name}', { name: value })}
               onClick={() => onChange(values.filter((item) => item !== value))}
             >
               <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -208,14 +209,14 @@ export function ValuesEditor({
         <input
           type="text"
           className={styles.input}
-          placeholder="New value"
-          aria-label="New enum value"
+          placeholder={t('New value')}
+          aria-label={t('New enum value')}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <button type="button" className={styles.button} onClick={add}>
-          Add value
+          {t('Add value')}
         </button>
       </div>
     </div>
@@ -250,13 +251,13 @@ export function PropertyTable({ kind, name, desc, effective, customTypes }: Prop
   return (
     <div className={styles.propertySection}>
       <div className={styles.propertyHead}>
-        <span className={styles.sectionTitle}>Properties</span>
+        <span className={styles.sectionTitle}>{t('Properties')}</span>
         <button type="button" className={styles.button} onClick={addNew}>
-          + Property
+          {t('+ Property')}
         </button>
       </div>
       {own.length === 0 && inherited.length === 0 && (
-        <p className={styles.muted}>No properties. Add one with “+ Property”.</p>
+        <p className={styles.muted}>{t('No properties. Add one with “+ Property”.')}</p>
       )}
       {(own.length > 0 || inherited.length > 0) && (
         <div className={styles.propList}>
@@ -292,14 +293,14 @@ export function constraintsText(
 ): string {
   const parts: string[] = [];
   if (prop.type === 'enum') {
-    parts.push(`values: ${(prop.values ?? []).join(', ') || '—'}`);
+    parts.push(t('values: {values}', { values: (prop.values ?? []).join(', ') || '—' }));
   }
   if (typeof prop.min === 'number' || typeof prop.max === 'number') {
-    parts.push(`min ${prop.min ?? '…'} / max ${prop.max ?? '…'}`);
+    parts.push(t('min {min} / max {max}', { min: prop.min ?? '…', max: prop.max ?? '…' }));
   }
   const custom = customTypes[prop.type];
   if (custom?.pattern !== undefined) {
-    parts.push(`pattern ${custom.pattern}`);
+    parts.push(t('pattern {pattern}', { pattern: custom.pattern }));
   }
   return parts.join('; ') || '—';
 }
@@ -316,7 +317,7 @@ function InheritedRow({
     <div className={`${styles.propCard} ${styles.propCardInherited}`}>
       <div className={styles.propCardHead}>
         <span className={styles.mono}>{prop.name}</span>
-        <span className={styles.tag}>from {entry.from}</span>
+        <span className={styles.tag}>{t('from {name}', { name: entry.from ?? '' })}</span>
         <span className={styles.propCardMeta}>
           {prop.type}
           {prop.default === undefined ? '' : ` = ${String(prop.default)}`}
@@ -325,7 +326,7 @@ function InheritedRow({
       <div className={styles.propCardInfo}>
         <span>{constraintsText(prop, customTypes)}</span>
         {prop.description && <span>{prop.description}</span>}
-        {prop.exportName && <span>export: {prop.exportName}</span>}
+        {prop.exportName && <span>{t('export: {name}', { name: prop.exportName })}</span>}
       </div>
     </div>
   );
@@ -359,7 +360,7 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
   const rename = (value: string) => {
     const next = value.trim();
     if (next === '') {
-      alerts.error('Property name is required');
+      alerts.error(t('Property name is required'));
       return;
     }
     if (next !== prop.name) {
@@ -386,7 +387,7 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
       <div className={styles.propCardHead}>
         <TextInput
           value={prop.name}
-          ariaLabel="Property name"
+          ariaLabel={t('Property name')}
           className={`${styles.input} ${styles.propName}`}
           onCommit={rename}
         />
@@ -394,8 +395,8 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
           <button
             type="button"
             className={styles.iconButton}
-            title="Move up"
-            aria-label={`Move ${prop.name} up`}
+            title={t('Move up')}
+            aria-label={t('Move {name} up', { name: prop.name })}
             disabled={index === 0}
             onClick={() =>
               runEdit('Move property', (draft) => {
@@ -408,8 +409,8 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
           <button
             type="button"
             className={styles.iconButton}
-            title="Move down"
-            aria-label={`Move ${prop.name} down`}
+            title={t('Move down')}
+            aria-label={t('Move {name} down', { name: prop.name })}
             disabled={index === count - 1}
             onClick={() =>
               runEdit('Move property', (draft) => {
@@ -422,8 +423,8 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
           <button
             type="button"
             className={`${styles.iconButton} ${styles.danger}`}
-            title="Delete property"
-            aria-label={`Delete ${prop.name}`}
+            title={t('Delete property')}
+            aria-label={t('Delete {name}', { name: prop.name })}
             onClick={() =>
               runEdit('Delete property', (draft) => {
                 removeProperty(draft, kind, typeName, prop.name);
@@ -436,10 +437,10 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
       </div>
       <div className={styles.propGrid}>
         <label className={styles.propField}>
-          <span className={styles.propLabel}>Type</span>
+          <span className={styles.propLabel}>{t('Type')}</span>
           <select
             className={styles.select}
-            aria-label="Property type"
+            aria-label={t('Property type')}
             value={prop.type}
             onChange={(event) => changeType(event.target.value)}
           >
@@ -448,22 +449,26 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
                 {option}
               </option>
             ))}
-            {unknownType && <option value={prop.type}>{prop.type || '(none)'} (unknown)</option>}
+            {unknownType && (
+              <option value={prop.type}>
+                {t('{type} (unknown)', { type: prop.type || t('(none)') })}
+              </option>
+            )}
           </select>
         </label>
         <div className={styles.propField}>
-          <span className={styles.propLabel}>Default</span>
+          <span className={styles.propLabel}>{t('Default')}</span>
           <ValueInput
             type={valueType}
             values={prop.values}
             value={prop.default}
-            ariaLabel="Default value"
-            placeholder="(none)"
+            ariaLabel={t('Default value')}
+            placeholder={t('(none)')}
             onChange={(value) => setProp('Set default', { default: value }, `default:${field}`)}
           />
         </div>
         <div className={`${styles.propField} ${styles.propFieldWide}`}>
-          <span className={styles.propLabel}>Constraints</span>
+          <span className={styles.propLabel}>{t('Constraints')}</span>
           <Constraints
             prop={prop}
             valueType={valueType}
@@ -473,10 +478,10 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
           />
         </div>
         <div className={`${styles.propField} ${styles.propFieldWide}`}>
-          <span className={styles.propLabel}>Description</span>
+          <span className={styles.propLabel}>{t('Description')}</span>
           <TextInput
             value={prop.description ?? ''}
-            ariaLabel="Property description"
+            ariaLabel={t('Property description')}
             className={styles.input}
             onCommit={(value) =>
               setProp('Set property description', { description: value === '' ? undefined : value })
@@ -486,13 +491,13 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
         <div className={styles.propField}>
           <span
             className={styles.propLabel}
-            title="Key used for this property in exported Erlang / Lua / TS / C# / Go files"
+            title={t('Key used for this property in exported Erlang / Lua / TS / C# / Go files')}
           >
-            Export name
+            {t('Export name')}
           </span>
           <TextInput
             value={prop.exportName ?? ''}
-            ariaLabel="Export name"
+            ariaLabel={t('Export name')}
             placeholder={prop.name}
             className={styles.input}
             onCommit={(value) =>
@@ -503,13 +508,15 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
         <div className={styles.propField}>
           <span
             className={styles.propLabel}
-            title="properties: inside the node's properties map; node: as a top-level field of the node"
+            title={t(
+              "properties: inside the node's properties map; node: as a top-level field of the node",
+            )}
           >
-            Export to
+            {t('Export to')}
           </span>
           <select
             className={styles.select}
-            aria-label="Export target"
+            aria-label={t('Export target')}
             value={prop.exportTo ?? 'properties'}
             onChange={(event) =>
               setProp('Set export target', {
@@ -520,8 +527,8 @@ function OwnRow({ kind, typeName, prop, index, count, customTypes, customNames }
               })
             }
           >
-            <option value="properties">properties map</option>
-            <option value="node">node top level</option>
+            <option value="properties">{t('properties map')}</option>
+            <option value="node">{t('node top level')}</option>
           </select>
         </div>
       </div>
@@ -549,7 +556,7 @@ function Constraints({
         <input
           type="number"
           className={styles.input}
-          aria-label={key === 'min' ? 'Minimum' : 'Maximum'}
+          aria-label={key === 'min' ? t('Minimum') : t('Maximum')}
           value={typeof prop[key] === 'number' ? (prop[key] as number) : ''}
           onChange={(event) => {
             const text = event.target.value;
@@ -572,7 +579,7 @@ function Constraints({
   if (prop.type === 'enum') {
     return (
       <ValuesEditor
-        ariaLabel="Enum values"
+        ariaLabel={t('Enum values')}
         values={prop.values ?? []}
         onChange={(values) => setProp('Set enum values', { values })}
       />
