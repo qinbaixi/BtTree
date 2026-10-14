@@ -8,6 +8,7 @@ import { exportProject, exportTree, parseExportFormats, type ExportTreeResult } 
 import { run } from './run';
 import { findProjectFile, PROJECT_FILE_NAME } from './project';
 import { readTemplate } from './workspace';
+import { runTestCommand, type TestCommandOptions } from './testCommand';
 
 // The CLI runs in production mode unless NODE_ENV says otherwise (affects the default port).
 process.env.NODE_ENV ??= 'production';
@@ -172,6 +173,25 @@ program
     if (failed) {
       process.exitCode = 1;
     }
+  });
+
+/** Collects a repeatable option into a list. */
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
+program
+  .command('test [path]')
+  .alias('t')
+  .description(
+    'run the scenario tests of owl-bt.json (simulation, no server): a tree file, a folder or a project (default: current folder)',
+  )
+  .option('--json', 'print the report as JSON')
+  .option('--junit <file>', 'also write a JUnit XML report')
+  .option('--tree <tree>', 'only trees matching a path, name or glob (repeatable)', collect)
+  .option('--scenario <name>', 'only the named scenario (repeatable)', collect)
+  .action(async (pathArg: string | undefined, options: TestCommandOptions) => {
+    process.exitCode = await runTestCommand(pathArg, options);
   });
 
 program.parseAsync(process.argv).catch(fail);

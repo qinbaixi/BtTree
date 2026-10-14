@@ -249,6 +249,14 @@
         "Enemy": true,
         "Ammo": 1,
         "ScanCount": 0
+      },
+      "expect": {
+        "result": "success",
+        "ticks": 11,
+        "blackboard": {
+          "Ammo": 0,
+          "LastSaid": "Alert!"
+        }
       }
     },
     {
@@ -258,6 +266,16 @@
         "Enemy": false,
         "Ammo": 3,
         "ScanCount": 0
+      },
+      "maxTicks": 20,
+      "manual": "success",
+      "expect": {
+        "result": "success",
+        "blackboard": {
+          "Position": "Waypoint B",
+          "ScanCount": 8,
+          "LastSaid": null
+        }
       }
     },
     {
@@ -267,6 +285,13 @@
         "Enemy": true,
         "Ammo": 0,
         "ScanCount": 0
+      },
+      "trees": ["trees/*.json"],
+      "expect": {
+        "result": "success",
+        "blackboard": {
+          "Ammo": 0
+        }
       }
     }
   ]

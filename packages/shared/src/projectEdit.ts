@@ -1,6 +1,7 @@
 import { resolveProperty } from './compileProject';
 import { validatePropertyValue } from './validation';
 import { validateSimulate } from './runtime/simulateValidation';
+import { validateScenarioTestFields } from './runtime/scenarioTest';
 import type {
   CustomTypeJson,
   ItemKind,
@@ -565,6 +566,9 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
     const bb = scenario.blackboard;
     if (typeof bb !== 'object' || bb === null || Array.isArray(bb)) {
       push(`${path}.blackboard`, 'Scenario blackboard must be an object');
+    }
+    for (const issue of validateScenarioTestFields(scenario)) {
+      push(`${path}.${issue.field}`, issue.message, issue.severity);
     }
   });
 
