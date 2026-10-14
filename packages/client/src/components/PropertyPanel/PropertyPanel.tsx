@@ -2,6 +2,8 @@ import { useState, type CSSProperties, type InputHTMLAttributes, type ReactNode 
 import {
   getEffectiveValue,
   getItemType,
+  isBlackboardKeyProperty,
+  isUndeclaredBlackboardKey,
   setBaseProperty,
   setPropertyValue,
   validatePropertyValue,
@@ -166,6 +168,7 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
               itemId={itemId}
               prop={prop}
               properties={item.properties}
+              project={project}
             />
           ))}
         </fieldset>
@@ -292,13 +295,20 @@ interface PropertyFieldProps {
   itemId: string;
   prop: CompiledProperty;
   properties: Record<string, unknown>;
+  project?: CompiledProject;
 }
 
-function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
+function PropertyField({ itemId, prop, properties, project }: PropertyFieldProps) {
   const explicit = Object.hasOwn(properties, prop.name) && properties[prop.name] !== undefined;
   const effective = getEffectiveValue(prop, properties);
   const valid = validatePropertyValue(prop, effective);
   const id = `${itemId}-prop-${prop.name}`;
+  // Properties of type blackboardKey suggest the declared keys and warn about other names.
+  const declaredKeys =
+    project?.blackboard && isBlackboardKeyProperty(prop) ? project.blackboard : undefined;
+  const undeclared =
+    valid && project !== undefined && isUndeclaredBlackboardKey(project, prop, effective);
+  const listId = declaredKeys ? `${id}-keys` : undefined;
 
   const commit = (value: unknown, label: string) =>
     commitToSelection(label, (target) => setPropertyValue(target, prop.name, value));
@@ -306,6 +316,7 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
   const className = [
     styles.control,
     valid ? '' : styles.invalid,
+    undeclared ? styles.undeclared : '',
     explicit ? '' : styles.defaultValue,
   ]
     .filter(Boolean)
@@ -380,6 +391,7 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
         className={className}
         type={isNumber ? 'number' : 'text'}
         pattern={prop.pattern}
+        list={listId}
         value={effective === undefined || effective === null ? '' : String(effective)}
         onCommit={(raw) => {
           if (isNumber) {
@@ -409,6 +421,15 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
         </label>
       )}
       {prop.type !== 'bool' && control}
+      {declaredKeys && (
+        <datalist id={listId}>
+          {declaredKeys.map((key) => (
+            <option key={key.name} value={key.name}>
+              {key.description}
+            </option>
+          ))}
+        </datalist>
+      )}
       {explicit && (
         <button
           type="button"
@@ -419,6 +440,11 @@ function PropertyField({ itemId, prop, properties }: PropertyFieldProps) {
         >
           <i className="fa-solid fa-rotate-left" aria-hidden="true" />
         </button>
+      )}
+      {undeclared && (
+        <p className={styles.fieldWarning} role="status">
+          {`'${String(effective)}' is not a declared blackboard key`}
+        </p>
       )}
     </div>
   );

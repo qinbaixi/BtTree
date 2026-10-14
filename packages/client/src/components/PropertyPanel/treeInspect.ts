@@ -1,6 +1,8 @@
 import {
+  getEffectiveValue,
   getItemType,
   isItemValid,
+  isUndeclaredBlackboardKey,
   validateItem,
   type CompiledItemType,
   type CompiledProject,
@@ -107,6 +109,8 @@ export interface TreeProblem {
   /** Location of the item, e.g. 'Root › Missing'. */
   path: string;
   message: string;
+  /** Warnings (undeclared blackboard keys) do not make the tree invalid. Default: error. */
+  severity?: 'warning';
 }
 
 export interface UsedType {
@@ -162,6 +166,23 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
   ) => {
     const type = getItemType(project, kind, item.type);
     if (isItemValid(type, item.properties)) {
+      const undeclared = type.properties.filter((prop) =>
+        isUndeclaredBlackboardKey(project, prop, getEffectiveValue(prop, item.properties)),
+      );
+      if (undeclared.length > 0) {
+        const names = undeclared.map(
+          (prop) => `${prop.name} = '${String(getEffectiveValue(prop, item.properties))}'`,
+        );
+        summary.problems.push({
+          kind,
+          nodeId: node.id,
+          itemId,
+          type: item.type,
+          path: formatPath([...ancestors, itemName(node)]),
+          message: `Undeclared blackboard key: ${names.join(', ')}`,
+          severity: 'warning',
+        });
+      }
       return;
     }
     const validation = validateItem(type, item.properties);

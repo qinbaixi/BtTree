@@ -27,10 +27,12 @@ import { projectStore, useProjectStore } from '../store/projectStore';
 import { runStore, useRunStore } from '../store/runStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
+import { useDirtyTreeBeacon, useSelectFromUrl } from './useTreeLinks';
 
 export default function Editor() {
   const [searchParams] = useSearchParams();
   const treePath = searchParams.get('path')?.trim() ?? '';
+  const select = searchParams.get('select') ?? undefined;
 
   if (!treePath) {
     return (
@@ -40,10 +42,10 @@ export default function Editor() {
     );
   }
   // Keyed by path so that switching trees starts from a clean canvas and fresh stores.
-  return <EditorPage key={treePath} treePath={treePath} />;
+  return <EditorPage key={treePath} treePath={treePath} select={select} />;
 }
 
-function EditorPage({ treePath }: { treePath: string }) {
+function EditorPage({ treePath, select }: { treePath: string; select?: string }) {
   const project = useProjectStore((state) => state.project);
   const dirty = useTreeStore((state) => state.dirty);
   const loadCount = useTreeStore((state) => state.loadCount);
@@ -79,6 +81,9 @@ function EditorPage({ treePath }: { treePath: string }) {
       runStore.getState().exit();
     };
   }, [treePath]);
+  // After the load effect: selects the item named in the URL (links from "Find usages").
+  useSelectFromUrl(select);
+  useDirtyTreeBeacon(treePath);
 
   // Warn about types used by the tree but missing from the project (after each load and reload).
   useEffect(() => {

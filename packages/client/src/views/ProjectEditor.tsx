@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { validateProjectFile, type ProjectIssue } from '@owlbt/shared';
 import { isEditableTarget, matchesHotkey } from '../commands/useHotkeys';
+import { BlackboardView } from '../components/ProjectEditor/BlackboardView';
 import { CustomTypesView } from '../components/ProjectEditor/CustomTypesView';
 import { ExportSettingsView } from '../components/ProjectEditor/ExportSettingsView';
 import { ScenariosView } from '../components/ProjectEditor/ScenariosView';
 import { ProblemsBar } from '../components/ProjectEditor/ProblemsBar';
+import { ReferenceUpdateBanner } from '../components/ProjectEditor/ReferenceUpdateBanner';
 import { TypeForm } from '../components/ProjectEditor/TypeForm';
 import { TypeList } from '../components/ProjectEditor/TypeList';
 import { TypePreview } from '../components/ProjectEditor/TypePreview';
@@ -268,6 +270,7 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
             The project file on disk cannot be read: {externalError}
           </div>
         )}
+        <ReferenceUpdateBanner />
       </div>
 
       {loadError !== undefined && !draft ? (
@@ -360,6 +363,9 @@ function CenterPanel({ selection }: { selection?: ProjectSelection }) {
   }
   if (selection?.view === 'scenarios') {
     return <ScenariosView />;
+  }
+  if (selection?.view === 'blackboard') {
+    return <BlackboardView selectedName={selection.name} />;
   }
   return (
     <p className={styles.muted}>Select a type on the left, or add a node, decorator or service.</p>

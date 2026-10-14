@@ -9,7 +9,8 @@ import {
 } from '@owlbt/shared';
 import { openProjectEditorFromTree } from '../../commands/coreCommands';
 import { inspectStore } from '../../store/inspectStore';
-import { treeStore } from '../../store/treeStore';
+import { treeStore, useTreeStore } from '../../store/treeStore';
+import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
 import { focusNode } from '../TreeCanvas/viewportStore';
 import { findTypeUsages, selectionFor, typesOfKind, type TypeUsage } from './treeInspect';
 import styles from './PropertyPanel.module.css';
@@ -36,6 +37,7 @@ export interface TypeDetailsProps {
 export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
   const type = getItemType(project, kind, name);
   const usages = useMemo(() => findTypeUsages(root, kind, name), [root, kind, name]);
+  const treePath = useTreeStore((state) => state.treePath);
 
   return (
     <div className={styles.details}>
@@ -69,6 +71,19 @@ export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
         )}
       </fieldset>
 
+      {treePath !== undefined && (
+        <fieldset className={styles.fieldset}>
+          <legend>Used in the project</legend>
+          <ProjectUsages
+            key={`${kind}:${name}`}
+            path={treePath}
+            kind={kind}
+            name={name}
+            beforeOpen={confirmLeaveTree}
+          />
+        </fieldset>
+      )}
+
       <div className={styles.footer}>
         <button
           type="button"
@@ -87,6 +102,18 @@ export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
       </div>
     </div>
   );
+}
+
+/**
+ * Asks before a project usage opens another tree while the open one has unsaved edits. Opening an
+ * item of the open tree only selects it.
+ */
+export function confirmLeaveTree(target: string): boolean {
+  const { treePath, dirty } = treeStore.getState();
+  if (!dirty || target === treePath) {
+    return true;
+  }
+  return window.confirm('The tree has unsaved changes. Open the other tree without saving?');
 }
 
 interface TypeBodyProps {

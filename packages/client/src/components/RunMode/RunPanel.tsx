@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  blackboardKeyStartValue,
   getEffectiveValue,
   getItemType,
   type CompiledProperty,
@@ -166,15 +167,20 @@ function ValueInput({ value, type, disabled, label, onCommit }: ValueInputProps)
   );
 }
 
+/** Datalist of the declared blackboard keys, suggested by the key inputs. */
+const DECLARED_KEYS_LIST_ID = 'run-declared-blackboard-keys';
+
 function BlackboardSection() {
   const entries = useRunStore((state) => state.blackboard);
   const viewed = useRunStore(selectViewed);
   const previous = useRunStore((state) => state.history[state.viewIndex - 1]);
   const live = useRunStore(selectIsLive);
+  const declared = useProjectStore((state) => state.project?.blackboard) ?? [];
   const store = runStore.getState();
 
   const values = viewed?.blackboard ?? {};
   const entryKeys = new Set(entries.map((entry) => entry.key));
+  const missingDeclared = declared.filter((key) => !entryKeys.has(key.name));
   // Keys created at runtime (by effects) that are not part of the start blackboard.
   const runtimeKeys = Object.keys(values).filter((key) => !entryKeys.has(key));
 
@@ -207,6 +213,7 @@ function BlackboardSection() {
                 type="text"
                 className={`${styles.bbKey} ${duplicate(entry.key) ? styles.invalid : ''}`}
                 aria-label={`Key ${entry.key}`}
+                list={declared.length > 0 ? DECLARED_KEYS_LIST_ID : undefined}
                 value={entry.key}
                 disabled={!live}
                 title={duplicate(entry.key) ? 'Duplicate key' : undefined}
@@ -269,7 +276,31 @@ function BlackboardSection() {
         <button type="button" disabled={!live} onClick={() => store.addBlackboardEntry()}>
           <i className="fa-solid fa-plus" aria-hidden="true" /> Add key
         </button>
+        {missingDeclared.length > 0 && (
+          <button
+            type="button"
+            disabled={!live}
+            title={`Add ${missingDeclared.map((key) => key.name).join(', ')} with their defaults`}
+            onClick={() => {
+              for (const key of missingDeclared) {
+                store.setBlackboardValue(key.name, blackboardKeyStartValue(key));
+              }
+            }}
+          >
+            <i className="fa-solid fa-table-list" aria-hidden="true" />{' '}
+            {`Add declared keys (${missingDeclared.length})`}
+          </button>
+        )}
       </div>
+      {declared.length > 0 && (
+        <datalist id={DECLARED_KEYS_LIST_ID}>
+          {declared.map((key) => (
+            <option key={key.name} value={key.name}>
+              {key.description}
+            </option>
+          ))}
+        </datalist>
+      )}
     </section>
   );
 }

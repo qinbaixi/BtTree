@@ -269,5 +269,12 @@
         "ScanCount": 0
       }
     }
+  ],
+  "blackboard": [
+    { "name": "Enemy", "type": "bool", "default": false, "description": "视野内有敌人" },
+    { "name": "Ammo", "type": "number", "default": 3, "description": "剩余弹药" },
+    { "name": "ScanCount", "type": "number", "default": 0, "description": "扫描次数" },
+    { "name": "Position", "type": "string", "default": "", "description": "当前位置（MoveTo 写入）" },
+    { "name": "LastSaid", "type": "string", "default": "", "description": "最近一次喊话（Say 写入）" }
   ]
 }
