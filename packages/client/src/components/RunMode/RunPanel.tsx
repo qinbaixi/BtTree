@@ -23,6 +23,7 @@ import {
   type ValueType,
 } from './runHelpers';
 import styles from './RunMode.module.css';
+import { t } from '../../i18n';
 
 /** Left panel of run mode: scenario, blackboard and the parameters of the selected item. */
 export default function RunPanel() {
@@ -51,13 +52,13 @@ function ScenarioSection() {
 
   const save = async (): Promise<void> => {
     const suggested = selected ?? '';
-    const name = window.prompt('Scenario name', suggested)?.trim();
+    const name = window.prompt(t('Scenario name'), suggested)?.trim();
     if (!name) {
       return;
     }
     if (
       scenarios.some((s) => s.name === name) &&
-      !window.confirm(`Overwrite the blackboard of scenario '${name}'?`)
+      !window.confirm(t("Overwrite the blackboard of scenario '{name}'?", { name }))
     ) {
       return;
     }
@@ -70,7 +71,10 @@ function ScenarioSection() {
   };
 
   const remove = async (): Promise<void> => {
-    if (!selected || !window.confirm(`Delete scenario '${selected}' from the project?`)) {
+    if (
+      !selected ||
+      !window.confirm(t("Delete scenario '{name}' from the project?", { name: selected }))
+    ) {
       return;
     }
     setBusy(true);
@@ -83,10 +87,10 @@ function ScenarioSection() {
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.heading}>Scenario</h3>
+      <h3 className={styles.heading}>{t('Scenario')}</h3>
       <div className={styles.row}>
         <select
-          aria-label="Scenario"
+          aria-label={t('Scenario')}
           className={styles.grow}
           value={scenario ? scenario.name : ''}
           onChange={(event) => {
@@ -95,7 +99,7 @@ function ScenarioSection() {
             }
           }}
         >
-          <option value="">(custom)</option>
+          <option value="">{t('(custom)')}</option>
           {scenarios.map((s) => (
             <option key={s.name} value={s.name}>
               {s.name}
@@ -104,13 +108,15 @@ function ScenarioSection() {
         </select>
       </div>
       {scenario?.description && <p className={styles.note}>{scenario.description}</p>}
-      {modified && <p className={styles.note}>The blackboard differs from the saved scenario.</p>}
+      {modified && (
+        <p className={styles.note}>{t('The blackboard differs from the saved scenario.')}</p>
+      )}
       <div className={styles.row}>
         <button type="button" disabled={busy} onClick={() => void save()}>
-          Save as scenario…
+          {t('Save as scenario…')}
         </button>
         <button type="button" disabled={busy || !scenario} onClick={() => void remove()}>
-          Delete
+          {t('Delete')}
         </button>
       </div>
     </section>
@@ -193,11 +199,11 @@ function BlackboardSection() {
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.heading}>Blackboard</h3>
+      <h3 className={styles.heading}>{t('Blackboard')}</h3>
       <p className={styles.note}>
         {live
-          ? 'Edits apply to the live run and to the start values.'
-          : 'Viewing a past tick: values are read-only.'}
+          ? t('Edits apply to the live run and to the start values.')
+          : t('Viewing a past tick: values are read-only.')}
       </p>
       <ul className={styles.bbList}>
         {entries.map((entry, index) => {
@@ -212,17 +218,17 @@ function BlackboardSection() {
               <input
                 type="text"
                 className={`${styles.bbKey} ${duplicate(entry.key) ? styles.invalid : ''}`}
-                aria-label={`Key ${entry.key}`}
+                aria-label={t('Key {key}', { key: entry.key })}
                 list={declared.length > 0 ? DECLARED_KEYS_LIST_ID : undefined}
                 value={entry.key}
                 disabled={!live}
-                title={duplicate(entry.key) ? 'Duplicate key' : undefined}
+                title={duplicate(entry.key) ? t('Duplicate key') : undefined}
                 onChange={(event) =>
                   store.updateBlackboardEntry(index, { key: event.target.value })
                 }
               />
               <select
-                aria-label={`Type of ${entry.key}`}
+                aria-label={t('Type of {key}', { key: entry.key })}
                 value={type}
                 disabled={!live}
                 onChange={(event) =>
@@ -232,24 +238,24 @@ function BlackboardSection() {
                   )
                 }
               >
-                {VALUE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {VALUE_TYPES.map((valueType) => (
+                  <option key={valueType} value={valueType}>
+                    {valueType}
                   </option>
                 ))}
               </select>
               <ValueInput
                 value={shown}
                 type={type}
-                label={`Value of ${entry.key}`}
+                label={t('Value of {key}', { key: entry.key })}
                 disabled={!live}
                 onCommit={(value) => store.setBlackboardValue(entry.key, value)}
               />
               <button
                 type="button"
                 className={styles.iconButton}
-                aria-label={`Remove ${entry.key}`}
-                title="Remove"
+                aria-label={t('Remove {key}', { key: entry.key })}
+                title={t('Remove')}
                 disabled={!live}
                 onClick={() => store.removeBlackboardEntry(index)}
               >
@@ -264,23 +270,25 @@ function BlackboardSection() {
             className={`${styles.bbRow} ${styles.runtime} ${changed(key) ? styles.changed : ''}`}
             data-changed={changed(key) ? 'true' : undefined}
           >
-            <span className={styles.bbKeyStatic} title="Created during the run">
+            <span className={styles.bbKeyStatic} title={t('Created during the run')}>
               {key}
             </span>
-            <span className={styles.runtimeTag}>runtime</span>
+            <span className={styles.runtimeTag}>{t('runtime')}</span>
             <span className={styles.bbValueStatic}>{JSON.stringify(values[key])}</span>
           </li>
         ))}
       </ul>
       <div className={styles.row}>
         <button type="button" disabled={!live} onClick={() => store.addBlackboardEntry()}>
-          <i className="fa-solid fa-plus" aria-hidden="true" /> Add key
+          <i className="fa-solid fa-plus" aria-hidden="true" /> {t('Add key')}
         </button>
         {missingDeclared.length > 0 && (
           <button
             type="button"
             disabled={!live}
-            title={`Add ${missingDeclared.map((key) => key.name).join(', ')} with their defaults`}
+            title={t('Add {keys} with their defaults', {
+              keys: missingDeclared.map((key) => key.name).join(', '),
+            })}
             onClick={() => {
               for (const key of missingDeclared) {
                 store.setBlackboardValue(key.name, blackboardKeyStartValue(key));
@@ -288,7 +296,7 @@ function BlackboardSection() {
             }}
           >
             <i className="fa-solid fa-table-list" aria-hidden="true" />{' '}
-            {`Add declared keys (${missingDeclared.length})`}
+            {t('Add declared keys ({count})', { count: missingDeclared.length })}
           </button>
         )}
       </div>
@@ -321,17 +329,17 @@ function ParametersSection() {
 
   return (
     <section className={styles.section}>
-      <h3 className={styles.heading}>Node parameters</h3>
+      <h3 className={styles.heading}>{t('Node parameters')}</h3>
       {!item || !type ? (
         <p className={styles.note}>
-          Select a node, decorator or service to override its properties.
+          {t('Select a node, decorator or service to override its properties.')}
         </p>
       ) : type.properties.length === 0 ? (
-        <p className={styles.note}>{item.type} has no properties.</p>
+        <p className={styles.note}>{t('{type} has no properties.', { type: item.type })}</p>
       ) : (
         <>
           <p className={styles.note}>
-            Overrides apply to this run only (the tree is not changed) and restart the run.
+            {t('Overrides apply to this run only (the tree is not changed) and restart the run.')}
           </p>
           <ul className={styles.paramList}>
             {type.properties.map((prop) => (
@@ -353,7 +361,7 @@ function ParametersSection() {
           disabled={total === 0}
           onClick={() => runStore.getState().clearOverrides()}
         >
-          Clear overrides{total > 0 ? ` (${total})` : ''}
+          {total > 0 ? t('Clear overrides ({count})', { count: total }) : t('Clear overrides')}
         </button>
       </div>
     </section>
@@ -379,7 +387,7 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
     input = (
       <input
         type="checkbox"
-        aria-label={`Override ${prop.name}`}
+        aria-label={t('Override {name}', { name: prop.name })}
         checked={shown === true}
         onChange={(event) => set(event.target.checked)}
       />
@@ -387,7 +395,7 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
   } else if (prop.type === 'enum') {
     input = (
       <select
-        aria-label={`Override ${prop.name}`}
+        aria-label={t('Override {name}', { name: prop.name })}
         value={typeof shown === 'string' ? shown : ''}
         onChange={(event) => (event.target.value === '' ? clear() : set(event.target.value))}
       >
@@ -403,7 +411,7 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
     input = (
       <input
         type={prop.type === 'number' ? 'number' : 'text'}
-        aria-label={`Override ${prop.name}`}
+        aria-label={t('Override {name}', { name: prop.name })}
         value={shown === undefined || shown === null ? '' : String(shown)}
         placeholder={base === undefined ? '' : String(base)}
         onChange={(event) => {
@@ -433,8 +441,8 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
       <button
         type="button"
         className={styles.iconButton}
-        aria-label={`Clear override of ${prop.name}`}
-        title="Clear override"
+        aria-label={t('Clear override of {name}', { name: prop.name })}
+        title={t('Clear override')}
         disabled={!overridden}
         onClick={clear}
       >
