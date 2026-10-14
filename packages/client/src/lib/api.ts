@@ -1,4 +1,5 @@
 import type { RefKind, RefRename, SubtreeLibrary, TreeNodeJson, TreeUsage } from '@owlbt/shared';
+import { t } from '../i18n';
 
 /** A failed request. `message` is the server's text (or its JSON `message`) when it sent one. */
 export class ApiError extends Error {
@@ -24,7 +25,10 @@ async function responseError(response: Response): Promise<ApiError> {
       // Not JSON after all; keep the text.
     }
   }
-  return new ApiError(response.status, message || `Request failed with status ${response.status}`);
+  return new ApiError(
+    response.status,
+    message || t('Request failed with status {status}', { status: response.status }),
+  );
 }
 
 /** Reads the response; non-2xx responses throw an ApiError carrying the server's message. */

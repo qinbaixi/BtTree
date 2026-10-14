@@ -18,6 +18,7 @@ import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { fetchTree, saveTree } from '../lib/api';
 import { alerts } from './alertStore';
+import { t } from '../i18n';
 
 enablePatches();
 
@@ -156,7 +157,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
           }
           const message = errorText(err);
           set({ loading: false, error: message });
-          alerts.error(`Failed to load tree. Error = '${message}'`);
+          alerts.error(t("Failed to load tree. Error = '{message}'", { message }));
         }
       },
 
@@ -245,7 +246,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
       async save() {
         const { treePath, root } = get();
         if (!treePath || !root) {
-          alerts.error('Unable to save before the tree is loaded');
+          alerts.error(t('Unable to save before the tree is loaded'));
           return false;
         }
         const savedAt = topOf(get().undoStack);
@@ -258,7 +259,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         savedTop = savedAt;
         // Edits made while the request ran stay unsaved.
         set({ dirty: topOf(get().undoStack) !== savedTop });
-        alerts.success('Done');
+        alerts.success(t('Done'));
         return true;
       },
 

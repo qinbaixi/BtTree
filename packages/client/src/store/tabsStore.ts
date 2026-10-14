@@ -12,6 +12,7 @@ import { alerts } from './alertStore';
 import { inspectStore } from './inspectStore';
 import { runStore } from './runStore';
 import { treeStore, type TreeSnapshot, type TreeStore } from './treeStore';
+import { t } from '../i18n';
 
 /** localStorage key of the open tabs (paths and the active one). */
 export const TABS_STORAGE_KEY = 'owlbt.editorTabs';
@@ -330,7 +331,11 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
           }
         }
         if (others > 0) {
-          deps.notify.success(`Saved ${others} other tree${others === 1 ? '' : 's'}`);
+          deps.notify.success(
+            others === 1
+              ? t('Saved 1 other tree')
+              : t('Saved {count} other trees', { count: others }),
+          );
         }
         return ok;
       },

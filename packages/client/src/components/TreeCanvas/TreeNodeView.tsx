@@ -21,6 +21,7 @@ import { treeStore } from '../../store/treeStore';
 import { TreeCanvasContext } from './canvasController';
 import { SubtreeRef } from './SubtreeRef';
 import styles from './TreeNodeView.module.css';
+import { t } from '../../i18n';
 
 export interface TreeNodeViewProps {
   node: TreeNode;
@@ -76,9 +77,9 @@ interface ItemViewProps {
 }
 
 const SUB_STATUS_ICON: Record<SubStatus, { icon: string; label: string }> = {
-  pass: { icon: 'fa-check', label: 'Passed' },
-  fail: { icon: 'fa-xmark', label: 'Failed' },
-  ran: { icon: 'fa-bolt', label: 'Ran in this tick' },
+  pass: { icon: 'fa-check', label: t('Passed') },
+  fail: { icon: 'fa-xmark', label: t('Failed') },
+  ran: { icon: 'fa-bolt', label: t('Ran in this tick') },
 };
 
 const KIND_TAG: Record<ItemViewProps['kind'], string | undefined> = {
@@ -279,8 +280,8 @@ export const TreeNodeView = memo(function TreeNodeView({
         <button
           type="button"
           className={`${styles.breakpoint} ${breakpoint ? styles.breakpointOn : ''}`}
-          title={breakpoint ? 'Remove breakpoint' : 'Add breakpoint'}
-          aria-label="Toggle breakpoint"
+          title={breakpoint ? t('Remove breakpoint') : t('Add breakpoint')}
+          aria-label={t('Toggle breakpoint')}
           aria-pressed={breakpoint}
           data-breakpoint={breakpoint ? 'true' : undefined}
           onClick={(event) => {
@@ -291,7 +292,7 @@ export const TreeNodeView = memo(function TreeNodeView({
         />
       )}
       {nodeExportId !== undefined && (
-        <span className={styles.exportId} data-export-id={nodeExportId} title="Export node id">
+        <span className={styles.exportId} data-export-id={nodeExportId} title={t('Export node id')}>
           #{nodeExportId}
         </span>
       )}
@@ -353,8 +354,8 @@ export const TreeNodeView = memo(function TreeNodeView({
         <button
           type="button"
           className={`${styles.collapseToggle} ${collapsed ? styles.collapsedBadge : ''}`}
-          title={collapsed ? 'Expand subtree' : 'Collapse subtree'}
-          aria-label={collapsed ? 'Expand subtree' : 'Collapse subtree'}
+          title={collapsed ? t('Expand subtree') : t('Collapse subtree')}
+          aria-label={collapsed ? t('Expand subtree') : t('Collapse subtree')}
           aria-expanded={!collapsed}
           data-collapse-toggle={collapsed ? 'collapsed' : 'expanded'}
           onClick={(event) => {

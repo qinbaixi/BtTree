@@ -3,6 +3,7 @@ import { useStore } from 'zustand';
 import { handleTabHotkeyAlias, tabTitle } from '../../commands/tabCommands';
 import { tabsStore as appTabsStore, type CloseChoice, type TabsStore } from '../../store/tabsStore';
 import styles from './TabBar.module.css';
+import { t } from '../../i18n';
 
 export interface TabBarProps {
   /** Tabs to show (the application's tabs by default). */
@@ -40,7 +41,7 @@ export default function TabBar({ store = appTabsStore, onOpenTree }: TabBarProps
 
   return (
     <>
-      <div className={styles.bar} role="tablist" aria-label="Open trees">
+      <div className={styles.bar} role="tablist" aria-label={t('Open trees')}>
         {tabs.map((tab) => {
           const active = tab.id === activeId;
           const title = tabTitle(tab.path);
@@ -79,8 +80,8 @@ export default function TabBar({ store = appTabsStore, onOpenTree }: TabBarProps
               <button
                 type="button"
                 className={styles.close}
-                aria-label={`Close ${title}`}
-                title="Close (Ctrl+W)"
+                aria-label={t('Close {name}', { name: title })}
+                title={t('Close (Ctrl+W)')}
                 tabIndex={-1}
                 onClick={(event) => close(event, tab.id)}
               >
@@ -93,8 +94,8 @@ export default function TabBar({ store = appTabsStore, onOpenTree }: TabBarProps
           <button
             type="button"
             className={styles.add}
-            aria-label="Open tree…"
-            title="Open tree… (Ctrl+O)"
+            aria-label={t('Open tree…')}
+            title={t('Open tree… (Ctrl+O)')}
             onClick={onOpenTree}
           >
             +
@@ -144,7 +145,7 @@ function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseC
         onKeyDown={onKeyDown}
       >
         <p id="tab-close-title" className={styles.message}>
-          Save changes to {name} before closing?
+          {t('Save changes to {name} before closing?', { name })}
         </p>
         <div className={styles.buttons}>
           <button
@@ -153,13 +154,13 @@ function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseC
             className={styles.primary}
             onClick={() => onAnswer('save')}
           >
-            Save
+            {t('Save')}
           </button>
           <button type="button" onClick={() => onAnswer('discard')}>
-            Discard
+            {t('Discard')}
           </button>
           <button type="button" onClick={() => onAnswer('cancel')}>
-            Cancel
+            {t('Cancel')}
           </button>
         </div>
       </div>

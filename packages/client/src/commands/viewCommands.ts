@@ -2,6 +2,7 @@ import { findNode, isCollapsedNode } from '@owlbt/shared';
 import { collapseAllIds, collapseStore } from '../store/collapseStore';
 import { searchStore } from '../store/searchStore';
 import { registerCommand, type Command, type CommandContext } from './registry';
+import { t } from '../i18n';
 
 /**
  * Tree view commands: collapse / expand subtrees and find. They change view state only, so they
@@ -28,7 +29,7 @@ function selectedParent(ctx: CommandContext) {
 
 const toggleCollapse: Command = {
   id: VIEW_COMMAND_IDS.toggleCollapse,
-  name: 'Collapse / Expand Subtree',
+  name: t('Collapse / Expand Subtree'),
   hotkey: 'space',
   contextMenuOrder: 150,
   canExec(ctx) {
@@ -44,7 +45,7 @@ const toggleCollapse: Command = {
 
 const collapseAll: Command = {
   id: VIEW_COMMAND_IDS.collapseAll,
-  name: 'Collapse All',
+  name: t('Collapse All'),
   canExec(ctx) {
     const root = ctx.tree.getState().root;
     if (!root) {
@@ -63,7 +64,7 @@ const collapseAll: Command = {
 
 const expandAll: Command = {
   id: VIEW_COMMAND_IDS.expandAll,
-  name: 'Expand All',
+  name: t('Expand All'),
   canExec(ctx) {
     const root = ctx.tree.getState().root;
     if (!root) {
@@ -82,7 +83,7 @@ const expandAll: Command = {
 
 const find: Command = {
   id: VIEW_COMMAND_IDS.find,
-  name: 'Find in Tree',
+  name: t('Find in Tree'),
   hotkey: 'mod+f',
   allowInInput: true,
   canExec(ctx) {
@@ -95,7 +96,7 @@ const find: Command = {
 
 const closeFind: Command = {
   id: VIEW_COMMAND_IDS.closeFind,
-  name: 'Close Find',
+  name: t('Close Find'),
   hotkey: 'esc',
   canExec() {
     return searchStore.getState().open;

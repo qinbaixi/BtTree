@@ -25,6 +25,7 @@ import {
 } from '../lib/storage';
 import { alerts } from '../store/alertStore';
 import { setTheme, themeLabel, useTheme, type ThemeId } from '../lib/theme';
+import { getLanguage, isLanguage, LANGUAGES, switchLanguage, t } from '../i18n';
 import styles from './Home.module.css';
 
 /** Folder restored when the page opens. */
@@ -60,7 +61,7 @@ function readStoredFormats(): ExportFormat[] {
 function ThemeToggle() {
   const theme = useTheme();
   const next: ThemeId = theme === 'light' ? 'classic' : 'light';
-  const label = `Switch to ${themeLabel(next)} theme`;
+  const label = t('Switch to {theme} theme', { theme: themeLabel(next) });
   return (
     <button
       type="button"
@@ -71,6 +72,29 @@ function ThemeToggle() {
     >
       <i className={`fa-solid ${theme === 'light' ? 'fa-moon' : 'fa-sun'}`} aria-hidden="true" />
     </button>
+  );
+}
+
+/** Language selector; choosing another language reloads the page. */
+function LanguageSelect() {
+  return (
+    <select
+      className={styles.languageSelect}
+      aria-label={t('Language')}
+      title={t('Language')}
+      value={getLanguage()}
+      onChange={(event) => {
+        if (isLanguage(event.target.value)) {
+          switchLanguage(event.target.value);
+        }
+      }}
+    >
+      {LANGUAGES.map((language) => (
+        <option key={language.id} value={language.id}>
+          {language.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -101,15 +125,15 @@ function readStoredFolder(): string | null {
 /** Per-tree outcome of an export: written file names, warnings, or the error. */
 function ExportResults({ result }: { result: ExportProjectResult }) {
   if (result.results.length === 0) {
-    return <p className={styles.muted}>No tree files to export.</p>;
+    return <p className={styles.muted}>{t('No tree files to export.')}</p>;
   }
   const exported = result.results.filter((tree) => tree.error === undefined).length;
   return (
     <>
       <p className={styles.muted}>
-        Exported {exported} of {result.results.length} trees.
+        {t('Exported {exported} of {total} trees.', { exported, total: result.results.length })}
       </p>
-      <ul className={styles.exportList} aria-label="Export results">
+      <ul className={styles.exportList} aria-label={t('Export results')}>
         {result.results.map((tree) => (
           <li key={tree.treePath} className={styles.exportItem}>
             <div className={styles.exportName}>{tree.relPath}</div>
@@ -132,7 +156,7 @@ function ExportResults({ result }: { result: ExportProjectResult }) {
         ))}
       </ul>
       {result.truncated && (
-        <p className={styles.muted}>Only the first 500 tree files were exported.</p>
+        <p className={styles.muted}>{t('Only the first 500 tree files were exported.')}</p>
       )}
     </>
   );
@@ -221,7 +245,7 @@ function WorkspacePanel({
   };
 
   return (
-    <section className={styles.panel} aria-label="Workspace">
+    <section className={styles.panel} aria-label={t('Workspace')}>
       <header className={styles.panelHead}>
         <div className={styles.panelTitle}>
           <div className={styles.panelName}>{getPathLastSegment(dir) || dir}</div>
@@ -229,10 +253,10 @@ function WorkspacePanel({
         </div>
         <div className={styles.panelButtons}>
           <button type="button" className={styles.button} onClick={onRefresh} disabled={loading}>
-            Refresh
+            {t('Refresh')}
           </button>
           <button type="button" className={styles.button} onClick={onClose}>
-            Close folder
+            {t('Close folder')}
           </button>
         </div>
       </header>
@@ -248,26 +272,28 @@ function WorkspacePanel({
           <div className={styles.project}>
             {workspace.projectPath !== undefined ? (
               <>
-                <span className={styles.label}>Project</span>
+                <span className={styles.label}>{t('Project')}</span>
                 <span className={styles.projectPath}>{workspace.projectPath}</span>
                 <button
                   type="button"
                   className={styles.button}
                   onClick={() => navigate(projectEditorUrl({ path: workspace.projectPath ?? dir }))}
                 >
-                  Edit project types
+                  {t('Edit project types')}
                 </button>
               </>
             ) : (
               <div className={styles.notProject}>
-                <span className={styles.warning}>This folder is not inside an owl-bt project.</span>
+                <span className={styles.warning}>
+                  {t('This folder is not inside an owl-bt project.')}
+                </span>
                 <button
                   type="button"
                   className={styles.button}
                   onClick={onInit}
                   disabled={initializing}
                 >
-                  Initialize project here
+                  {t('Initialize project here')}
                 </button>
               </div>
             )}
@@ -278,11 +304,11 @@ function WorkspacePanel({
             </div>
           )}
 
-          <h3 className={styles.subheading}>Trees</h3>
+          <h3 className={styles.subheading}>{t('Trees')}</h3>
           {workspace.trees.length === 0 ? (
-            <p className={styles.muted}>No tree files found in this folder.</p>
+            <p className={styles.muted}>{t('No tree files found in this folder.')}</p>
           ) : (
-            <ul className={styles.trees} aria-label="Trees in this folder">
+            <ul className={styles.trees} aria-label={t('Trees in this folder')}>
               {workspace.trees.map((tree) => (
                 <li key={tree.path}>
                   <Link to={editorUrl(tree.path)} className={styles.treeLink}>
@@ -297,12 +323,12 @@ function WorkspacePanel({
             </ul>
           )}
           {workspace.truncated && (
-            <p className={styles.muted}>Only the first 500 tree files are listed.</p>
+            <p className={styles.muted}>{t('Only the first 500 tree files are listed.')}</p>
           )}
 
           <section className={styles.export} aria-labelledby="export-heading">
             <h3 id="export-heading" className={styles.subheading}>
-              Export
+              {t('Export')}
             </h3>
             <div className={styles.exportRow}>
               {EXPORT_FORMATS.map((format) => (
@@ -326,13 +352,13 @@ function WorkspacePanel({
                   workspace.trees.length === 0
                 }
               >
-                Export all
+                {t('Export all')}
               </button>
             </div>
             {workspace.projectPath === undefined && (
-              <p className={styles.muted}>Initialize a project to export its trees.</p>
+              <p className={styles.muted}>{t('Initialize a project to export its trees.')}</p>
             )}
-            {exporting && <p className={styles.muted}>Exporting…</p>}
+            {exporting && <p className={styles.muted}>{t('Exporting…')}</p>}
             {exportError !== null && (
               <div role="alert" className={styles.error}>
                 {exportError}
@@ -343,7 +369,7 @@ function WorkspacePanel({
 
           <form className={styles.newTree} onSubmit={onCreate}>
             <label className={styles.label} htmlFor="new-tree-name">
-              New tree
+              {t('New tree')}
             </label>
             <div className={styles.newTreeRow}>
               <input
@@ -360,11 +386,11 @@ function WorkspacePanel({
                 className={styles.button}
                 disabled={creating || workspace.projectPath === undefined || newName.trim() === ''}
               >
-                Create
+                {t('Create')}
               </button>
             </div>
             {workspace.projectPath === undefined && (
-              <p className={styles.muted}>Initialize a project to create trees here.</p>
+              <p className={styles.muted}>{t('Initialize a project to create trees here.')}</p>
             )}
             {createError !== null && (
               <div role="alert" className={styles.error}>
@@ -468,7 +494,7 @@ export default function Home() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 501) {
-        setNotice(`${err.message} Type the path in the box above instead.`);
+        setNotice(t('{message} Type the path in the box above instead.', { message: err.message }));
       } else if (err instanceof ApiError && err.status === 409) {
         setNotice(err.message);
       } else {
@@ -498,13 +524,14 @@ export default function Home() {
               className={styles.input}
               value={treePath}
               onChange={(event) => setTreePath(event.target.value)}
-              placeholder="Tree file or folder path…"
-              aria-label="Tree file or folder path"
+              placeholder={t('Tree file or folder path…')}
+              aria-label={t('Tree file or folder path')}
             />
             <button type="submit" className={styles.open}>
-              Open
+              {t('Open')}
             </button>
           </form>
+          <LanguageSelect />
           <ThemeToggle />
         </div>
         <div className={styles.actions}>
@@ -514,7 +541,7 @@ export default function Home() {
             onClick={() => void onPick('folder')}
             disabled={dialogsBusy}
           >
-            <i className="fa-solid fa-folder-open" aria-hidden="true" /> Open folder…
+            <i className="fa-solid fa-folder-open" aria-hidden="true" /> {t('Open folder…')}
           </button>
           <button
             type="button"
@@ -522,20 +549,22 @@ export default function Home() {
             onClick={() => void onPick('file')}
             disabled={dialogsBusy}
           >
-            <i className="fa-solid fa-file" aria-hidden="true" /> Open tree file…
+            <i className="fa-solid fa-file" aria-hidden="true" /> {t('Open tree file…')}
           </button>
           <button
             type="button"
             className={styles.action}
-            title="Edit the node, decorator and service types of a project (pick its owl-bt.json or any tree in it)"
+            title={t(
+              'Edit the node, decorator and service types of a project (pick its owl-bt.json or any tree in it)',
+            )}
             onClick={() => void onPick('file', 'project')}
             disabled={dialogsBusy}
           >
-            <i className="fa-solid fa-sliders" aria-hidden="true" /> Edit project types…
+            <i className="fa-solid fa-sliders" aria-hidden="true" /> {t('Edit project types…')}
           </button>
           {pending !== null && (
             <span role="status" className={styles.status}>
-              Waiting for the file dialog…
+              {t('Waiting for the file dialog…')}
             </span>
           )}
         </div>
@@ -563,9 +592,9 @@ export default function Home() {
         {items.length > 0 && (
           <section className={styles.section} aria-labelledby="recent-heading">
             <h2 id="recent-heading" className={styles.heading}>
-              Recent
+              {t('Recent')}
             </h2>
-            <ul className={styles.mru} aria-label="Recently used trees">
+            <ul className={styles.mru} aria-label={t('Recently used trees')}>
               {items.map((item) => (
                 <li key={item.path} className={styles.mruItem}>
                   <Link to={editorUrl(item.path)} className={styles.mruLink}>
@@ -578,17 +607,17 @@ export default function Home() {
                   <Link
                     to={projectEditorUrl({ path: item.path, from: item.path })}
                     className={styles.editProject}
-                    aria-label={`Edit project types of ${item.path}`}
-                    title="Edit project types"
+                    aria-label={t('Edit project types of {path}', { path: item.path })}
+                    title={t('Edit project types')}
                   >
                     <i className="fa-solid fa-sliders" aria-hidden="true" />
-                    <span>Edit types</span>
+                    <span>{t('Edit types')}</span>
                   </Link>
                   <button
                     type="button"
                     className={styles.remove}
-                    aria-label={`Remove ${item.path} from the list`}
-                    title="Remove from list"
+                    aria-label={t('Remove {path} from the list', { path: item.path })}
+                    title={t('Remove from list')}
                     onClick={(event) => onRemove(event, item.path)}
                   >
                     <i className="fa-solid fa-xmark" aria-hidden="true" />
@@ -602,7 +631,7 @@ export default function Home() {
         {showEmptyState && (
           <div className={styles.empty}>
             <i className={`fa-solid fa-diagram-project ${styles.emptyIcon}`} aria-hidden="true" />
-            <h2 className={styles.emptyTitle}>Open a behavior tree</h2>
+            <h2 className={styles.emptyTitle}>{t('Open a behavior tree')}</h2>
             <div className={styles.bigActions}>
               <button
                 type="button"
@@ -611,7 +640,7 @@ export default function Home() {
                 disabled={dialogsBusy}
               >
                 <i className="fa-solid fa-folder-open" aria-hidden="true" />
-                <span>Open folder…</span>
+                <span>{t('Open folder…')}</span>
               </button>
               <button
                 type="button"
@@ -620,7 +649,7 @@ export default function Home() {
                 disabled={dialogsBusy}
               >
                 <i className="fa-solid fa-file" aria-hidden="true" />
-                <span>Open tree file…</span>
+                <span>{t('Open tree file…')}</span>
               </button>
               <button
                 type="button"
@@ -629,12 +658,13 @@ export default function Home() {
                 disabled={dialogsBusy}
               >
                 <i className="fa-solid fa-sliders" aria-hidden="true" />
-                <span>Edit project types…</span>
+                <span>{t('Edit project types…')}</span>
               </button>
             </div>
             <p className={styles.hint}>
-              Pick a folder to browse its trees, a single tree file to edit it directly, or a
-              project's owl-bt.json to edit its types.
+              {t(
+                "Pick a folder to browse its trees, a single tree file to edit it directly, or a project's owl-bt.json to edit its types.",
+              )}
             </p>
           </div>
         )}

@@ -5,6 +5,7 @@ import { runStore } from '../store/runStore';
 import { subtreeStore, type SubtreeState } from '../store/subtreeStore';
 import type { TreeStore } from '../store/treeStore';
 import { registerCommand, type Command, type CommandContext } from './registry';
+import { t } from '../i18n';
 
 export const OPEN_SUBTREE_COMMAND_ID = 'core:OpenSubtree';
 
@@ -64,7 +65,9 @@ export function treeEditorUrl(treePath: string): string {
 export async function openSubtreeFile(_tree: TreeStore, target: SubtreeTarget): Promise<boolean> {
   if (!target.loaded || target.path === undefined) {
     alerts.error(
-      `Referenced tree '${target.ref}' cannot be opened: the file is missing or invalid`,
+      t("Referenced tree '{ref}' cannot be opened: the file is missing or invalid", {
+        ref: target.ref,
+      }),
     );
     return false;
   }
@@ -81,7 +84,7 @@ export function openSubtreeOfNode(ctx: CommandContext, nodeId: string): Promise<
 
 const openSubtree: Command = {
   id: OPEN_SUBTREE_COMMAND_ID,
-  name: 'Open referenced tree',
+  name: t('Open referenced tree'),
   hotkey: 'mod+enter',
   contextMenuOrder: 50,
   canExec(ctx) {

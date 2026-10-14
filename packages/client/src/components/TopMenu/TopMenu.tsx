@@ -8,6 +8,8 @@ import {
 } from '../../commands/coreCommands';
 import { TAB_COMMAND_IDS } from '../../commands/tabCommands';
 import { VIEW_COMMAND_IDS } from '../../commands/viewCommands';
+import { LANGUAGE_COMMAND_IDS, languageItemTitle } from '../../commands/languageCommands';
+import { getLanguage, t, type Language } from '../../i18n';
 import { useProjectStore } from '../../store/projectStore';
 import { useRunStore } from '../../store/runStore';
 import { useTreeStore } from '../../store/treeStore';
@@ -21,6 +23,8 @@ export interface TopMenuItem {
   hotkey?: string;
   /** Theme this item switches to; the item shows a check mark while that theme is active. */
   themeId?: ThemeId;
+  /** Language this item switches to; the item shows a check mark while that language is active. */
+  languageId?: Language;
 }
 
 export interface TopMenuSection {
@@ -31,53 +35,55 @@ export interface TopMenuSection {
 /** Menu layout. Items stay disabled until their commands can execute. */
 export const TOP_MENU_SECTIONS: TopMenuSection[] = [
   {
-    name: 'File',
+    name: t('File'),
     items: [
-      { title: 'Open tree…', commandId: TAB_COMMAND_IDS.open, hotkey: 'Ctrl+O' },
-      { title: 'Save', commandId: 'core:Save', hotkey: 'Ctrl+S' },
-      { title: 'Save all', commandId: TAB_COMMAND_IDS.saveAll, hotkey: 'Ctrl+Shift+S' },
-      { title: 'Close tab', commandId: TAB_COMMAND_IDS.close, hotkey: 'Ctrl+W' },
-      { title: 'Export: Erlang', commandId: EXPORT_COMMAND_IDS.erlang },
-      { title: 'Export: Lua', commandId: EXPORT_COMMAND_IDS.lua },
-      { title: 'Export: TypeScript', commandId: EXPORT_COMMAND_IDS.ts },
-      { title: 'Export: C#', commandId: EXPORT_COMMAND_IDS.cs },
-      { title: 'Export: Go', commandId: EXPORT_COMMAND_IDS.go },
-      { title: 'Export: All formats', commandId: EXPORT_COMMAND_IDS.all },
-      { title: 'Edit project types…', commandId: EDIT_PROJECT_COMMAND_ID },
+      { title: t('Open tree…'), commandId: TAB_COMMAND_IDS.open, hotkey: 'Ctrl+O' },
+      { title: t('Save'), commandId: 'core:Save', hotkey: 'Ctrl+S' },
+      { title: t('Save all'), commandId: TAB_COMMAND_IDS.saveAll, hotkey: 'Ctrl+Shift+S' },
+      { title: t('Close tab'), commandId: TAB_COMMAND_IDS.close, hotkey: 'Ctrl+W' },
+      { title: t('Export: Erlang'), commandId: EXPORT_COMMAND_IDS.erlang },
+      { title: t('Export: Lua'), commandId: EXPORT_COMMAND_IDS.lua },
+      { title: t('Export: TypeScript'), commandId: EXPORT_COMMAND_IDS.ts },
+      { title: t('Export: C#'), commandId: EXPORT_COMMAND_IDS.cs },
+      { title: t('Export: Go'), commandId: EXPORT_COMMAND_IDS.go },
+      { title: t('Export: All formats'), commandId: EXPORT_COMMAND_IDS.all },
+      { title: t('Edit project types…'), commandId: EDIT_PROJECT_COMMAND_ID },
     ],
   },
   {
-    name: 'Edit',
+    name: t('Edit'),
     items: [
-      { title: 'Undo', commandId: 'core:Undo', hotkey: 'Ctrl+Z' },
-      { title: 'Redo', commandId: 'core:Redo', hotkey: 'Ctrl+Y' },
-      { title: 'Find in tree', commandId: VIEW_COMMAND_IDS.find, hotkey: 'Ctrl+F' },
+      { title: t('Undo'), commandId: 'core:Undo', hotkey: 'Ctrl+Z' },
+      { title: t('Redo'), commandId: 'core:Redo', hotkey: 'Ctrl+Y' },
+      { title: t('Find in tree'), commandId: VIEW_COMMAND_IDS.find, hotkey: 'Ctrl+F' },
     ],
   },
   {
-    name: 'View',
+    name: t('View'),
     items: [
-      { title: 'Command Palette', commandId: 'core:CommandPalette', hotkey: 'Ctrl+Shift+P' },
+      { title: t('Command Palette'), commandId: 'core:CommandPalette', hotkey: 'Ctrl+Shift+P' },
       {
-        title: 'Collapse / Expand subtree',
+        title: t('Collapse / Expand subtree'),
         commandId: VIEW_COMMAND_IDS.toggleCollapse,
         hotkey: 'Space',
       },
-      { title: 'Collapse all', commandId: VIEW_COMMAND_IDS.collapseAll },
-      { title: 'Expand all', commandId: VIEW_COMMAND_IDS.expandAll },
-      { title: 'Theme: Light', commandId: THEME_COMMAND_IDS.light, themeId: 'light' },
-      { title: 'Theme: Classic dark', commandId: THEME_COMMAND_IDS.classic, themeId: 'classic' },
+      { title: t('Collapse all'), commandId: VIEW_COMMAND_IDS.collapseAll },
+      { title: t('Expand all'), commandId: VIEW_COMMAND_IDS.expandAll },
+      { title: t('Theme: Light'), commandId: THEME_COMMAND_IDS.light, themeId: 'light' },
+      { title: t('Theme: Classic dark'), commandId: THEME_COMMAND_IDS.classic, themeId: 'classic' },
+      { title: languageItemTitle('en'), commandId: LANGUAGE_COMMAND_IDS.en, languageId: 'en' },
+      { title: languageItemTitle('zh'), commandId: LANGUAGE_COMMAND_IDS.zh, languageId: 'zh' },
     ],
   },
   {
-    name: 'Run',
+    name: t('Run'),
     items: [
-      { title: 'Toggle run mode', commandId: RUN_COMMAND_IDS.toggle, hotkey: 'F5' },
-      { title: 'Step', commandId: RUN_COMMAND_IDS.step, hotkey: 'F10' },
-      { title: 'Step back', commandId: RUN_COMMAND_IDS.stepBack, hotkey: 'Shift+F10' },
-      { title: 'Play', commandId: RUN_COMMAND_IDS.play, hotkey: 'F8' },
-      { title: 'Pause', commandId: RUN_COMMAND_IDS.pause, hotkey: 'F8' },
-      { title: 'Reset', commandId: RUN_COMMAND_IDS.reset },
+      { title: t('Toggle run mode'), commandId: RUN_COMMAND_IDS.toggle, hotkey: 'F5' },
+      { title: t('Step'), commandId: RUN_COMMAND_IDS.step, hotkey: 'F10' },
+      { title: t('Step back'), commandId: RUN_COMMAND_IDS.stepBack, hotkey: 'Shift+F10' },
+      { title: t('Play'), commandId: RUN_COMMAND_IDS.play, hotkey: 'F8' },
+      { title: t('Pause'), commandId: RUN_COMMAND_IDS.pause, hotkey: 'F8' },
+      { title: t('Reset'), commandId: RUN_COMMAND_IDS.reset },
     ],
   },
 ];
@@ -144,7 +150,10 @@ export default function TopMenu() {
               <ul className={styles.dropdown} role="menu">
                 {section.items.map((item) => {
                   const enabled = isEnabled(item.commandId);
-                  const checked = item.themeId !== undefined && item.themeId === theme;
+                  const checkable = item.themeId !== undefined || item.languageId !== undefined;
+                  const checked =
+                    (item.themeId !== undefined && item.themeId === theme) ||
+                    (item.languageId !== undefined && item.languageId === getLanguage());
                   return (
                     <li key={item.commandId} role="none">
                       <button
@@ -157,7 +166,7 @@ export default function TopMenu() {
                           void execCommand(item.commandId);
                         }}
                       >
-                        {item.themeId !== undefined && (
+                        {checkable && (
                           <i
                             className={`fa-solid fa-check ${styles.check} ${checked ? '' : styles.checkHidden}`}
                             aria-hidden="true"
@@ -179,12 +188,12 @@ export default function TopMenu() {
           type="button"
           className={`${styles.runButton} ${runActive ? styles.runButtonActive : ''}`}
           aria-pressed={runActive}
-          title={runActive ? 'Exit run mode (F5)' : 'Simulate the tree (F5)'}
+          title={runActive ? t('Exit run mode (F5)') : t('Simulate the tree (F5)')}
           disabled={!isEnabled(RUN_COMMAND_IDS.toggle)}
           onClick={() => void execCommand(RUN_COMMAND_IDS.toggle)}
         >
           <i className={`fa-solid ${runActive ? 'fa-stop' : 'fa-play'}`} aria-hidden="true" />
-          {runActive ? 'Exit run' : 'Run'}
+          {runActive ? t('Exit run') : t('Run')}
         </button>
       </li>
     </ul>
