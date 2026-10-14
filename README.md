@@ -42,6 +42,8 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
 - **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
+- **项目范围引用**：查找某个类型或黑板键在项目所有树中的用法并一键跳转；重命名类型或黑板键后可批量更新所有树文件。
+- **黑板键声明**：在 `owl-bt.json` 中声明黑板键，属性面板提供键名补全，并对未声明的键给出警告。
 - **运行模式**：在编辑器里按 tick 模拟执行行为树，带黑板、场景、断点、回放和日志，无需游戏引擎。
 - **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# / Go 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
@@ -272,6 +274,8 @@ owlbt create ./my-project/trees/patrol.json --no-open
 - `decorators`：装饰器类型（可选）
 - `services`：服务类型（可选）
 - `export`：导出设置（可选），见下文「导出 Erlang / Lua / TypeScript / C# / Go」
+- `scenarios`：运行模式的场景（可选），见下文「运行模式」
+- `blackboard`：声明的黑板键（可选），见下文「黑板键（blackboard）」
 
 ### 类型（items）的字段
 
@@ -302,6 +306,24 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 - `type`（必填）：`"string"` 或 `"number"`
 - `pattern`：正则表达式，用于校验字符串值。校验时整体匹配（自动加上 `^(?:...)$`）
+
+### 黑板键（blackboard）
+
+可选的顶层数组，声明树会用到的黑板键。旧项目没有该字段时一切照旧；每一项的未知字段原样保留。
+
+```json
+"blackboard": [
+  { "name": "Enemy", "type": "bool", "default": false, "description": "视野内有敌人" },
+  { "name": "Ammo", "type": "number", "default": 3 }
+]
+```
+
+- `name`（必填）：键名，必须是标识符（字母或下划线开头，只含字母、数字和下划线），不能重复。
+- `type`：`"string"`、`"number"`、`"bool"` 或 `"any"`。其他取值会给出警告。
+- `default`：起始值，必须符合 `type`（`any` 不限）。未设置时为该类型的空值（`""`、`0`、`false`、`null`）。
+- `description`：说明，属性面板的补全列表中会显示。
+
+**哪些属性是黑板键**：类型为自定义类型 `blackboardKey` 的属性（默认模板已定义该类型）。只有这些属性会：在属性面板中提供已声明键的下拉补全；在值不是已声明的键时给出黄色警告（只是警告，不会让节点变为无效；项目没有声明任何键时不检查），树概览的「Problems」中也会列出；参与黑板键的「查找用法」和重命名。
 
 ### 示例
 
@@ -360,6 +382,7 @@ owlbt create ./my-project/trees/patrol.json --no-open
 <summary>查看模板包含的类型</summary>
 
 - **自定义类型**：`blackboardKey`（以字母或下划线开头的标识符，用于黑板键名）、`probability`（0 到 1 之间的小数）。
+- **黑板键**：`Target`、`Enemy`、`Waypoint`、`PatrolPoints`、`PatrolIndex`（示例树用到的全部键）。
 - **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`。
 - **装饰器**：`Failure`、`Invert`、`Success`、`IsBlackboardValueSet`、`Cooldown`、`Loop`、`TimeLimit`。
 - **服务**：`Sample service`、`UpdateTarget`、`LogTick`。
@@ -391,7 +414,14 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 - 右侧：实时预览。使用与树编辑器相同的节点卡片，同时显示明亮与深色两种主题；带装饰器与服务的示例节点（项目中没有组合节点时使用示例节点），可切换「With label」「Invalid」，并可在「Sample values」中填写属性值（只影响预览）。预览下方可展开查看编译后的类型 JSON。
 - 自定义类型：表格编辑名称、基础类型（string / number）、正则，并可在「Test」中实时测试是否匹配；重命名会同时更新属性的类型。
 - 导出设置：Erlang / Lua / TypeScript / C# / Go 的输出目录、文件名模板、C# 命名空间与 Go 包名，空白时使用默认值。
+- 黑板（Blackboard）：编辑 `blackboard` 中声明的键（名称、类型、默认值、说明），即时校验重复和不合法的键名、与类型不符的默认值。重命名键时会同步更新 `blackboardKey` 类型属性的默认值和场景中的同名键。每个键都可以「Find usages in project」。
 - 底部「Problems」栏列出校验问题（错误与警告），点击即可跳到对应的类型或自定义类型。
+
+**项目范围的引用**
+
+- **Find usages in project**：项目编辑器的类型表单（「Usages」区）、黑板视图的每个键，以及树编辑器属性面板中查看类型时（「Used in the project」）都有此按钮。它扫描项目中的所有树文件（与首页工作区列表相同的扫描规则），列出使用该类型的节点 / 装饰器 / 服务，或在 `blackboardKey` 属性中引用该键的位置（文件、节点路径、标签、属性名；仅来自属性默认值的标注为 default）。点击结果会打开那棵树并选中该项；当前树有未保存修改且要打开另一棵树时会先询问。
+- 打开树的地址支持 `select` 参数：`/tree?path=...&select=node:0.2` 选中根节点第 1 个子节点的第 3 个子节点（根节点为 `node:`），`select=decorator:0.2:1` 选中该节点的第 2 个装饰器，服务同理（`service:路径:序号`）。
+- **批量重命名**：在项目编辑器中重命名节点 / 装饰器 / 服务类型或黑板键并保存后，若仍有树文件使用旧名称，顶部会显示「Also update N tree files」。点击后服务端逐个文件（加文件锁、原子写入）改写：类型重命名改写对应种类的 `type`，黑板键重命名改写 `blackboardKey` 属性中的值（属性默认值不在树中，已随项目文件更新）。写入沿用树保存的格式规则，保留缩进、换行方式和 BOM，并保留未知字段；不会运行项目插件。在任一浏览器标签页中打开且有未保存修改的树会被跳过并单独提示。多次保存的重命名会合并（A→B→C 记为 A→C，撤销回原名则不再提示）；选择「Dismiss」则不修改树文件。
 
 **保存与冲突**
 
@@ -425,7 +455,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 左侧「Run」面板（替代物品面板）分三部分：
 
 - **Scenario**：场景是一组命名的起始黑板，保存在 `owl-bt.json` 的 `scenarios` 中。选择场景即载入并重置运行；「Save as scenario…」把当前起始黑板保存为场景（同名会询问是否覆盖，保存时若文件已被修改会提示冲突而不覆盖）；「Delete」删除所选场景。
-- **Blackboard**：键、类型（number / string / boolean / null）、值。显示的是当前查看的那一拍的值，相对上一拍发生变化的键会高亮；运行过程中由 effects 新建的键标为 runtime。在最新一拍修改会**立即作用于正在运行的黑板**，同时记为起始值（重置后依然有效）；查看过去的 tick 时只读。
+- **Blackboard**：键、类型（number / string / boolean / null）、值。项目声明了黑板键（`blackboard`）时，键名输入框会补全已声明的键，「Add declared keys」一次加入缺少的键及其默认值；进入运行模式时若项目没有场景，起始黑板直接使用声明的键和默认值。显示的是当前查看的那一拍的值，相对上一拍发生变化的键会高亮；运行过程中由 effects 新建的键标为 runtime。在最新一拍修改会**立即作用于正在运行的黑板**，同时记为起始值（重置后依然有效）；查看过去的 tick 时只读。
 - **Node parameters**：为所选节点 / 装饰器 / 服务的属性设置**仅限本次运行**的覆盖值（不会修改树）。覆盖过的属性高亮显示，可逐项清除或「Clear overrides」。修改覆盖值会重新开始运行。
 
 ### 断点、回放与日志
@@ -885,6 +915,8 @@ module.exports = {
 | `POST` | `/api/dialog/pick` | 打开本机的系统文件 / 文件夹选择框，见下文 |
 | `POST` | `/api/export` | 导出单个树为 Erlang / Lua / TypeScript / C# / Go，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
 | `POST` | `/api/export/batch` | 导出项目中的全部树，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
+| `GET` | `/api/usages?path=&kind=&name=` | 在 `path`（树文件、`owl-bt.json` 或项目内文件夹的绝对路径）所属项目的全部树中查找用法，见下文 |
+| `POST` | `/api/references/rename` | 批量改写树文件中被重命名的类型和黑板键，见下文 |
 
 **`GET /api/workspace?dir=...`**
 
@@ -892,6 +924,17 @@ module.exports = {
 - 若能从 `dir` 向上找到 `owl-bt.json`，返回 `projectPath` 与 `projectDir`，并以项目目录为扫描根目录；否则以 `dir` 为根。
 - 递归扫描至多 6 层子目录，跳过 `node_modules`、以 `.` 开头的目录，以及 `owl-bt.json`、`package.json`、`package-lock.json`、`tsconfig*.json`。只有顶层为对象且含字符串 `type` 字段的 JSON 才算树；超过 5 MB 或无法解析的文件忽略。
 - 响应：`{ "dir", "projectPath?", "projectDir?", "trees": [{ "path", "relPath" }], "truncated" }`。`trees` 按 `relPath` 排序，最多 500 项，超出时 `truncated` 为 `true`。
+
+**`GET /api/usages?path=...&kind=...&name=...`**
+
+- `kind` 为 `node`、`decorator`、`service` 或 `blackboardKey`。树文件的扫描规则与 `GET /api/workspace` 相同。不在项目中时 404；查找黑板键而项目无法编译时 400。
+- 响应：`{ "projectDir", "truncated", "files": [{ "path", "relPath", "usages": [{ "nodePath", "itemKind", "itemIndex?", "type", "label?", "location", "property?", "isDefault?" }] }], "errors": [{ "path", "relPath", "error" }] }`。`nodePath` 是从根节点开始的子节点下标数组。
+
+**`POST /api/references/rename`**，请求体 `{ "path", "renames": [{ "kind", "from", "to" }], "dryRun?": false, "skip?": ["<树文件绝对路径>"] }`
+
+- 所有重命名同时生效（可互换两个名字）。黑板键按磁盘上的 `owl-bt.json`（应已保存为新名称）识别 `blackboardKey` 属性；项目无法编译时 400。
+- `dryRun` 为 `true` 时只统计不写入；`skip` 中的文件不写入（结果中标记 `skipped`）。每个文件在文件锁内读取、改写并原子写入，保留缩进、换行方式和 BOM。
+- 响应：`{ "projectDir", "truncated", "dryRun", "changed": [{ "path", "relPath", "count", "skipped?" }], "errors": [...] }`。
 
 **`POST /api/project/init`**，请求体 `{ "dir": "<绝对目录>" }`
 

@@ -8,6 +8,10 @@
 
 - 桌面版左下角显示当前版本，并在启动时检查 GitHub Releases 是否有新版本。安装版点击即可下载新版本，下载完成后点击「Restart to update」立即重启安装，或在下次关闭应用时自动安装；便携版点击后打开下载页面。
 - 发布流程额外上传 `latest.yml`，供已安装的应用检查和下载更新。
+- 查找项目范围的用法：树编辑器属性面板查看类型时、项目编辑器的类型表单和黑板视图中新增「Find usages in project」，列出项目所有树中使用该类型（或在 `blackboardKey` 属性中引用该黑板键）的位置，点击即打开对应的树并选中该项；树编辑器地址新增 `select` 参数。
+- 批量重命名：在项目编辑器中重命名类型或黑板键并保存后，可一键「Also update N tree files」改写所有树文件（保留缩进、换行和 BOM），在浏览器中打开且有未保存修改的树会被跳过。新增接口 `GET /api/usages` 与 `POST /api/references/rename`。
+- 黑板键声明：`owl-bt.json` 新增可选的顶层 `blackboard`（`name`、`type`、`default`、`description`，未知字段原样保留，旧项目不受影响）；项目编辑器新增「Blackboard」视图并校验重复、不合法的键名；类型为 `blackboardKey` 的属性在属性面板中补全已声明的键，值不是已声明的键时给出警告；运行模式没有场景时用声明的键和默认值作为起始黑板，并可「Add declared keys」。默认模板和 `samples/simulation` 已声明示例键。
+- 工作区扫描现在也能识别带 UTF-8 BOM 的树文件。
 - 运行模式支持后退一步：工具条新增「Back」按钮（`Shift+F10`），撤销最近一个 tick，节点状态、黑板、手动节点、随机数和循环轮数都回到上一个 tick，之后再 Step / Play 会从该状态继续执行。
 
 ## [0.2.0] - 2026-10-13
