@@ -1,5 +1,6 @@
 import { alertStore, useAlerts } from '../../store/alertStore';
 import styles from './AlertPanel.module.css';
+import { t } from '../../i18n';
 
 export default function AlertPanel() {
   const alerts = useAlerts();
@@ -15,7 +16,7 @@ export default function AlertPanel() {
           <button
             type="button"
             className={styles.close}
-            aria-label="Close"
+            aria-label={t('Close')}
             onClick={() => alertStore.getState().dismiss(alert.id)}
           >
             <i className="fa-solid fa-xmark" aria-hidden="true" />

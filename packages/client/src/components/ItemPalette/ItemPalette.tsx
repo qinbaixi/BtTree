@@ -12,6 +12,7 @@ import { inspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
 import { treeStore, useSelectedItem } from '../../store/treeStore';
 import styles from './ItemPalette.module.css';
+import { t } from '../../i18n';
 
 export const PALETTE_GROUP_STORAGE_PREFIX = 'palette-group-';
 
@@ -46,7 +47,7 @@ export default function ItemPalette() {
   const groups = useMemo(() => (project ? buildPaletteGroups(project) : undefined), [project]);
 
   if (!project || !groups) {
-    return <p className={styles.hint}>Loading project...</p>;
+    return <p className={styles.hint}>{t('Loading project...')}</p>;
   }
 
   // With a selection, groups that cannot be added to the selected node are disabled.
@@ -57,18 +58,18 @@ export default function ItemPalette() {
     ? undefined
     : composite
       ? undefined
-      : 'Select a composite node to add child nodes';
+      : t('Select a composite node to add child nodes');
 
   return (
     <div className={styles.palette}>
       {!selected && (
         <p className={styles.hint}>
-          Click a type to see its definition, or select a node to add items
+          {t('Click a type to see its definition, or select a node to add items')}
         </p>
       )}
       <PaletteGroup
         id="composite"
-        title="Composite Nodes"
+        title={t('Composite Nodes')}
         choices={groups.compositeNodes}
         hasSelection={selected !== undefined}
         addTo={composite ? nodeId : undefined}
@@ -76,7 +77,7 @@ export default function ItemPalette() {
       />
       <PaletteGroup
         id="action"
-        title="Action Nodes"
+        title={t('Action Nodes')}
         choices={groups.actionNodes}
         hasSelection={selected !== undefined}
         addTo={composite ? nodeId : undefined}
@@ -84,14 +85,14 @@ export default function ItemPalette() {
       />
       <PaletteGroup
         id="services"
-        title="Services"
+        title={t('Services')}
         choices={groups.services}
         hasSelection={selected !== undefined}
         addTo={nodeId}
       />
       <PaletteGroup
         id="decorators"
-        title="Decorators"
+        title={t('Decorators')}
         choices={groups.decorators}
         hasSelection={selected !== undefined}
         addTo={nodeId}
@@ -189,8 +190,8 @@ function PaletteItem({ choice, hasSelection, addTo }: PaletteItemProps) {
         type="button"
         className={styles.info}
         style={{ '--item-color': color } as CSSProperties}
-        title={`Show details of ${name}`}
-        aria-label={`Show details of ${name}`}
+        title={t('Show details of {name}', { name })}
+        aria-label={t('Show details of {name}', { name })}
         onClick={() => inspectStore.getState().inspect(itemType, name)}
       >
         <i className="fa-solid fa-circle-info" aria-hidden="true" />

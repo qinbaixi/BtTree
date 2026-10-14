@@ -4,6 +4,7 @@ import { searchStore, useSearchStore } from '../../store/searchStore';
 import { treeStore } from '../../store/treeStore';
 import { focusNode } from './viewportStore';
 import styles from './TreeSearch.module.css';
+import { t } from '../../i18n';
 
 export interface TreeSearchProps {
   /** Results of the current query in visual order (see searchTree). */
@@ -73,8 +74,8 @@ export default function TreeSearch({ matches }: TreeSearchProps) {
         ref={inputRef}
         type="text"
         className={`${styles.input} ${noMatch ? styles.noMatch : ''}`}
-        placeholder="Find in tree"
-        aria-label="Find in tree"
+        placeholder={t('Find in tree')}
+        aria-label={t('Find in tree')}
         value={query}
         spellCheck={false}
         onChange={(event) => searchStore.getState().setQuery(event.target.value)}
@@ -86,8 +87,8 @@ export default function TreeSearch({ matches }: TreeSearchProps) {
       <button
         type="button"
         className={styles.button}
-        title="Previous match (Shift+Enter)"
-        aria-label="Previous match"
+        title={t('Previous match (Shift+Enter)')}
+        aria-label={t('Previous match')}
         disabled={matches.length === 0}
         onClick={() => next(-1)}
       >
@@ -96,8 +97,8 @@ export default function TreeSearch({ matches }: TreeSearchProps) {
       <button
         type="button"
         className={styles.button}
-        title="Next match (Enter)"
-        aria-label="Next match"
+        title={t('Next match (Enter)')}
+        aria-label={t('Next match')}
         disabled={matches.length === 0}
         onClick={() => next(1)}
       >
@@ -106,8 +107,8 @@ export default function TreeSearch({ matches }: TreeSearchProps) {
       <button
         type="button"
         className={styles.button}
-        title="Close (Escape)"
-        aria-label="Close search"
+        title={t('Close (Escape)')}
+        aria-label={t('Close search')}
         onClick={() => searchStore.getState().close()}
       >
         <i className="fa-solid fa-xmark" aria-hidden="true" />

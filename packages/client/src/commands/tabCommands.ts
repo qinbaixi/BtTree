@@ -4,6 +4,7 @@ import { alerts } from '../store/alertStore';
 import { tabsStore, type TabsStore } from '../store/tabsStore';
 import { matchesHotkey } from './useHotkeys';
 import { commandContext, execCommand, registerCommand, type Command } from './registry';
+import { t } from '../i18n';
 
 export const TAB_COMMAND_IDS = {
   open: 'tabs:OpenTree',
@@ -39,7 +40,7 @@ async function browse(tabs: TabsStore, dir: string | undefined): Promise<void> {
     }
   } catch (err) {
     if (err instanceof ApiError && err.status === 501) {
-      alerts.info('No native file dialog is available. Pick a tree from the list instead.');
+      alerts.info(t('No native file dialog is available. Pick a tree from the list instead.'));
     } else {
       alerts.error(err instanceof Error ? err.message : String(err));
     }
@@ -64,11 +65,11 @@ export async function openTreeDialog(tabs: TabsStore = tabsStore): Promise<void>
   const openPaths = tabs.getState().tabs.map((tab) => tab.path);
   commandContext.ui.getState().open(
     [
-      { id: BROWSE_ITEM_ID, name: 'Browse…', icon: 'folder-open' },
+      { id: BROWSE_ITEM_ID, name: t('Browse…'), icon: 'folder-open' },
       ...trees.map((tree) => ({
         id: tree.path,
         name: tree.relPath,
-        hint: openPaths.includes(tree.path) ? 'open' : undefined,
+        hint: openPaths.includes(tree.path) ? t('open') : undefined,
       })),
     ],
     (id) => {
@@ -88,7 +89,7 @@ function hasTabs(): boolean {
 export const tabCommands: Command[] = [
   {
     id: TAB_COMMAND_IDS.open,
-    name: 'Open tree…',
+    name: t('Open tree…'),
     hotkey: 'mod+o',
     allowInInput: true,
     canExec: () => tabsStore.getState().live,
@@ -96,7 +97,7 @@ export const tabCommands: Command[] = [
   },
   {
     id: TAB_COMMAND_IDS.next,
-    name: 'Next tab',
+    name: t('Next tab'),
     hotkey: 'ctrl+tab',
     allowInInput: true,
     canExec: () => tabsStore.getState().tabs.length > 1 && hasTabs(),
@@ -104,7 +105,7 @@ export const tabCommands: Command[] = [
   },
   {
     id: TAB_COMMAND_IDS.previous,
-    name: 'Previous tab',
+    name: t('Previous tab'),
     hotkey: 'ctrl+shift+tab',
     allowInInput: true,
     canExec: () => tabsStore.getState().tabs.length > 1 && hasTabs(),
@@ -112,7 +113,7 @@ export const tabCommands: Command[] = [
   },
   {
     id: TAB_COMMAND_IDS.close,
-    name: 'Close tab',
+    name: t('Close tab'),
     hotkey: 'mod+w',
     allowInInput: true,
     canExec: hasTabs,
@@ -125,7 +126,7 @@ export const tabCommands: Command[] = [
   },
   {
     id: TAB_COMMAND_IDS.saveAll,
-    name: 'Save all',
+    name: t('Save all'),
     hotkey: 'mod+shift+s',
     allowInInput: true,
     canExec: () => tabsStore.getState().tabs.some((tab) => tab.dirty),

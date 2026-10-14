@@ -25,6 +25,7 @@ import { focusNode } from '../components/TreeCanvas/viewportStore';
 import { exportTree, type ExportFormat, type ExportTreeResult } from '../lib/api';
 import { readClipboard, writeClipboard } from '../lib/clipboard';
 import { navigateTo, projectEditorUrl, type ProjectEditorLink } from '../lib/appNavigation';
+import { t } from '../i18n';
 import { setTheme, type ThemeId } from '../lib/theme';
 import type { FuzzyItem } from '../store/dialogStore';
 import { runStore, selectCanStepBack } from '../store/runStore';
@@ -115,7 +116,7 @@ function findChoice(choices: ItemChoice[], id: string): ItemChoice | undefined {
 
 const add: Command = {
   id: 'core:Add',
-  name: 'Add',
+  name: t('Add'),
   hotkey: 'ins',
   contextMenuOrder: 100,
   canExec(ctx) {
@@ -142,7 +143,7 @@ const add: Command = {
 
 const remove: Command = {
   id: 'core:Remove',
-  name: 'Remove',
+  name: t('Remove'),
   hotkey: 'del',
   contextMenuOrder: 300,
   canExec(ctx) {
@@ -184,7 +185,7 @@ const remove: Command = {
 
 const copy: Command = {
   id: 'core:Copy',
-  name: 'Copy',
+  name: t('Copy'),
   hotkey: 'mod+c',
   contextMenuOrder: 200,
   canExec(ctx) {
@@ -205,7 +206,7 @@ const copy: Command = {
 
 const paste: Command = {
   id: 'core:Paste',
-  name: 'Paste',
+  name: t('Paste'),
   hotkey: 'mod+v',
   contextMenuOrder: 201,
   canExec(ctx) {
@@ -266,7 +267,7 @@ const paste: Command = {
 
 const undo: Command = {
   id: 'core:Undo',
-  name: 'Undo',
+  name: t('Undo'),
   hotkey: 'mod+z',
   canExec(ctx) {
     return editable() && selectCanUndo(ctx.tree.getState());
@@ -278,7 +279,7 @@ const undo: Command = {
 
 const redo: Command = {
   id: 'core:Redo',
-  name: 'Redo',
+  name: t('Redo'),
   hotkey: 'mod+y',
   canExec(ctx) {
     return editable() && selectCanRedo(ctx.tree.getState());
@@ -290,7 +291,7 @@ const redo: Command = {
 
 const save: Command = {
   id: 'core:Save',
-  name: 'Save',
+  name: t('Save'),
   hotkey: 'mod+s',
   allowInInput: true,
   canExec(ctx) {
@@ -300,7 +301,7 @@ const save: Command = {
     const tree = ctx.tree.getState();
     const project = ctx.project.getState().project;
     if (project && !tree.isValid(project)) {
-      if (!window.confirm('Tree contains invalid items. Save anyway?')) {
+      if (!window.confirm(t('Tree contains invalid items. Save anyway?'))) {
         return;
       }
     }
@@ -395,7 +396,7 @@ function selectCommand(id: string, name: string, hotkey: string, dir: NavDirecti
 
 const focusSelected: Command = {
   id: 'core:FocusSelected',
-  name: 'Focus Selected Node',
+  name: t('Focus Selected Node'),
   canExec(ctx) {
     return currentTarget(ctx) !== undefined;
   },
@@ -409,7 +410,7 @@ const focusSelected: Command = {
 
 const setNodeTypeCommand: Command = {
   id: 'core:SetNodeType',
-  name: 'Set Node Type',
+  name: t('Set Node Type'),
   contextMenuOrder: 300,
   canExec(ctx) {
     const target = currentTarget(ctx);
@@ -449,7 +450,7 @@ const setNodeTypeCommand: Command = {
 
 const commandPalette: Command = {
   id: COMMAND_PALETTE_ID,
-  name: 'Command Palette',
+  name: t('Command Palette'),
   hotkey: 'mod+shift+p',
   allowInInput: true,
   canExec(ctx) {
@@ -506,7 +507,7 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
         return;
       }
       if (tree.dirty) {
-        if (!window.confirm('Save changes before exporting?')) {
+        if (!window.confirm(t('Save changes before exporting?'))) {
           return;
         }
         if (!(await tree.save())) {
@@ -519,7 +520,7 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
         result = await exportTree(treePath, formats);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        ctx.alerts.getState().push('error', `Export failed: ${message}`);
+        ctx.alerts.getState().push('error', t('Export failed: {message}', { message }));
         return;
       }
       const alertStore = ctx.alerts.getState();
@@ -527,11 +528,11 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
         alertStore.push('warning', result.warnings.join('\n'));
       }
       if (result.error !== undefined) {
-        alertStore.push('error', `Export failed: ${result.error}`);
+        alertStore.push('error', t('Export failed: {message}', { message: result.error }));
       }
       if (result.files.length > 0) {
         const paths = result.files.map((file) => file.path).join('\n');
-        alertStore.push('success', `Exported:\n${paths}`, {
+        alertStore.push('success', t('Exported:\n{paths}', { paths }), {
           autoHideMs: EXPORT_SUCCESS_ALERT_MS,
         });
       }
@@ -539,12 +540,12 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
   };
 }
 
-const exportErlang = exportCommand(EXPORT_COMMAND_IDS.erlang, 'Export: Erlang', ['erlang']);
-const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, 'Export: Lua', ['lua']);
-const exportTs = exportCommand(EXPORT_COMMAND_IDS.ts, 'Export: TypeScript', ['ts']);
-const exportCs = exportCommand(EXPORT_COMMAND_IDS.cs, 'Export: C#', ['cs']);
-const exportGo = exportCommand(EXPORT_COMMAND_IDS.go, 'Export: Go', ['go']);
-const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, 'Export: All formats', [
+const exportErlang = exportCommand(EXPORT_COMMAND_IDS.erlang, t('Export: Erlang'), ['erlang']);
+const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, t('Export: Lua'), ['lua']);
+const exportTs = exportCommand(EXPORT_COMMAND_IDS.ts, t('Export: TypeScript'), ['ts']);
+const exportCs = exportCommand(EXPORT_COMMAND_IDS.cs, t('Export: C#'), ['cs']);
+const exportGo = exportCommand(EXPORT_COMMAND_IDS.go, t('Export: Go'), ['go']);
+const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, t('Export: All formats'), [
   'erlang',
   'lua',
   'ts',
@@ -567,7 +568,7 @@ export async function openProjectEditorFromTree(
     return;
   }
   if (dirty) {
-    if (!window.confirm('Save changes before editing project types?')) {
+    if (!window.confirm(t('Save changes before editing project types?'))) {
       return;
     }
     if (!(await tree.getState().save())) {
@@ -579,7 +580,7 @@ export async function openProjectEditorFromTree(
 
 const editProjectTypes: Command = {
   id: EDIT_PROJECT_COMMAND_ID,
-  name: 'Edit project types…',
+  name: t('Edit project types…'),
   canExec(ctx) {
     return ctx.tree.getState().treePath !== undefined;
   },
@@ -601,7 +602,7 @@ export const RUN_COMMAND_IDS = {
 
 const toggleRunMode: Command = {
   id: RUN_COMMAND_IDS.toggle,
-  name: 'Run: Toggle run mode',
+  name: t('Run: Toggle run mode'),
   hotkey: 'f5',
   allowInInput: true,
   canExec(ctx) {
@@ -622,7 +623,7 @@ const toggleRunMode: Command = {
 
 const runStep: Command = {
   id: RUN_COMMAND_IDS.step,
-  name: 'Run: Step',
+  name: t('Run: Step'),
   hotkey: 'f10',
   allowInInput: true,
   canExec() {
@@ -637,7 +638,7 @@ const runStep: Command = {
 
 const runStepBack: Command = {
   id: RUN_COMMAND_IDS.stepBack,
-  name: 'Run: Step back',
+  name: t('Run: Step back'),
   hotkey: 'shift+f10',
   allowInInput: true,
   canExec() {
@@ -650,7 +651,7 @@ const runStepBack: Command = {
 
 const runPlayPause: Command = {
   id: RUN_COMMAND_IDS.playPause,
-  name: 'Run: Play / Pause',
+  name: t('Run: Play / Pause'),
   hotkey: 'f8',
   allowInInput: true,
   canExec() {
@@ -663,7 +664,7 @@ const runPlayPause: Command = {
 
 const runPlay: Command = {
   id: RUN_COMMAND_IDS.play,
-  name: 'Run: Play',
+  name: t('Run: Play'),
   allowInInput: true,
   canExec() {
     const state = runStore.getState();
@@ -678,7 +679,7 @@ const runPlay: Command = {
 
 const runPause: Command = {
   id: RUN_COMMAND_IDS.pause,
-  name: 'Run: Pause',
+  name: t('Run: Pause'),
   allowInInput: true,
   canExec() {
     const state = runStore.getState();
@@ -691,7 +692,7 @@ const runPause: Command = {
 
 const runReset: Command = {
   id: RUN_COMMAND_IDS.reset,
-  name: 'Run: Reset',
+  name: t('Run: Reset'),
   canExec() {
     return runStore.getState().active;
   },
@@ -702,7 +703,7 @@ const runReset: Command = {
 
 const toggleBreakpoint: Command = {
   id: RUN_COMMAND_IDS.breakpoint,
-  name: 'Toggle breakpoint',
+  name: t('Toggle breakpoint'),
   contextMenuOrder: 400,
   canExec(ctx) {
     return runStore.getState().active && ctx.tree.getState().selection !== undefined;
@@ -734,8 +735,8 @@ function themeCommand(theme: ThemeId, name: string): Command {
   };
 }
 
-const themeLight = themeCommand('light', 'Theme: Light');
-const themeClassic = themeCommand('classic', 'Theme: Classic dark');
+const themeLight = themeCommand('light', t('Theme: Light'));
+const themeClassic = themeCommand('classic', t('Theme: Classic dark'));
 
 /** All core commands. Registered in the command registry when this module is loaded. */
 export const coreCommands: Command[] = [
@@ -752,14 +753,14 @@ export const coreCommands: Command[] = [
   exportCs,
   exportGo,
   exportAll,
-  moveNodeCommand('Move Left', 'shift+left', -1, 100),
-  moveNodeCommand('Move Right', 'shift+right', 1, 101),
-  moveSubItemCommand('Move Up', 'shift+up', -1, 100),
-  moveSubItemCommand('Move Down', 'shift+down', 1, 101),
-  selectCommand('core:SelectAbove', 'Select Item Above', 'up', 'up'),
-  selectCommand('core:SelectBelow', 'Select Item Below', 'down', 'down'),
-  selectCommand('core:SelectLeft', 'Select Left Node', 'left', 'left'),
-  selectCommand('core:SelectRight', 'Select Right Node', 'right', 'right'),
+  moveNodeCommand(t('Move Left'), 'shift+left', -1, 100),
+  moveNodeCommand(t('Move Right'), 'shift+right', 1, 101),
+  moveSubItemCommand(t('Move Up'), 'shift+up', -1, 100),
+  moveSubItemCommand(t('Move Down'), 'shift+down', 1, 101),
+  selectCommand('core:SelectAbove', t('Select Item Above'), 'up', 'up'),
+  selectCommand('core:SelectBelow', t('Select Item Below'), 'down', 'down'),
+  selectCommand('core:SelectLeft', t('Select Left Node'), 'left', 'left'),
+  selectCommand('core:SelectRight', t('Select Right Node'), 'right', 'right'),
   focusSelected,
   setNodeTypeCommand,
   commandPalette,

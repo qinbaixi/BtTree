@@ -9,6 +9,7 @@ import {
 } from '@owlbt/shared';
 import { useSubtreeStore } from '../../store/subtreeStore';
 import styles from './SubtreeRef.module.css';
+import { t } from '../../i18n';
 
 export interface SubtreeRefProps {
   node: TreeNode;
@@ -28,9 +29,11 @@ export function SubtreeRef({ node, type, problem }: SubtreeRefProps) {
     title = problem.message;
   } else if (loaded) {
     const root = loaded.tree;
-    title = `${ref} (root: ${root.label ? `${root.label} (${root.type})` : root.type}, ${
-      root.childNodes?.length ?? 0
-    } child nodes)`;
+    title = t('{ref} (root: {root}, {count} child nodes)', {
+      ref: ref ?? '',
+      root: root.label ? `${root.label} (${root.type})` : root.type,
+      count: root.childNodes?.length ?? 0,
+    });
   }
 
   return (
@@ -44,7 +47,7 @@ export function SubtreeRef({ node, type, problem }: SubtreeRefProps) {
         className={`fa-solid ${problem ? 'fa-triangle-exclamation' : 'fa-diagram-project'} ${styles.icon}`}
         aria-hidden="true"
       />
-      <span className={styles.name}>{ref ? subtreeName(ref) : 'No tree referenced'}</span>
+      <span className={styles.name}>{ref ? subtreeName(ref) : t('No tree referenced')}</span>
       {problem && problem.kind !== 'empty' && (
         <span className={styles.message}>{problem.message}</span>
       )}

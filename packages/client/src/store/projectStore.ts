@@ -9,6 +9,7 @@ import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { fetchProject } from '../lib/api';
 import { alertStore, alerts } from './alertStore';
+import { t } from '../i18n';
 
 export const PROJECT_WATCH_NAMESPACE = '/prj-watch';
 export const PROJECT_RELOAD_EVENT = 'prj-reload';
@@ -102,7 +103,7 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
     const applyContent = (text: string): boolean => {
       const result = parseAndCompileProject(text);
       if (!result.project) {
-        fail(result.error ?? 'Failed to compile project');
+        fail(result.error ?? t('Failed to compile project'));
         return false;
       }
       dismissErrorAlert();

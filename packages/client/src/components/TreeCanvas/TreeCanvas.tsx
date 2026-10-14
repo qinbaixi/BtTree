@@ -41,6 +41,7 @@ import TreeSearch from './TreeSearch';
 import { dragSourceOf, useTreeDrag } from './useTreeDrag';
 import { reportViewTransform, takeViewTransform, viewportStore } from './viewportStore';
 import styles from './TreeCanvas.module.css';
+import { t } from '../../i18n';
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 2;
@@ -78,10 +79,14 @@ function statusMessage(
   projectError: string | undefined,
 ): string | undefined {
   if (!root) {
-    return treeError ? `Failed to load tree: ${treeError}` : 'Loading tree...';
+    return treeError
+      ? t('Failed to load tree: {error}', { error: treeError })
+      : t('Loading tree...');
   }
   if (!hasProject) {
-    return projectError ? `Project not loaded: ${projectError}` : 'Loading project...';
+    return projectError
+      ? t('Project not loaded: {error}', { error: projectError })
+      : t('Loading project...');
   }
   return undefined;
 }

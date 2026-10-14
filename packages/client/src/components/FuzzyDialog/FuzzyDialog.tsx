@@ -9,6 +9,7 @@ import {
 import { fuzzyFilter, highlightMatches } from '@owlbt/shared';
 import { dialogStore, useDialogStore, type FuzzyItem } from '../../store/dialogStore';
 import styles from './FuzzyDialog.module.css';
+import { t } from '../../i18n';
 
 /** Delay between the last keystroke and the filter update. */
 export const FILTER_DEBOUNCE_MS = 200;
@@ -23,7 +24,12 @@ export interface FuzzyDialogProps {
 }
 
 /** Modal list with a fuzzy filter. Up/Down wrap around, Enter accepts, Escape closes. */
-export function FuzzyDialog({ items, onAccept, onClose, label = 'Select item' }: FuzzyDialogProps) {
+export function FuzzyDialog({
+  items,
+  onAccept,
+  onClose,
+  label = t('Select item'),
+}: FuzzyDialogProps) {
   const [query, setQuery] = useState('');
   // The filter lags the input by FILTER_DEBOUNCE_MS; it is set together with the selection reset.
   const [filter, setFilter] = useState('');
@@ -143,7 +149,7 @@ export function FuzzyDialog({ items, onAccept, onClose, label = 'Select item' }:
             </li>
           ))}
         </ul>
-        {matches.length === 0 && <p className={styles.empty}>No matching items</p>}
+        {matches.length === 0 && <p className={styles.empty}>{t('No matching items')}</p>}
       </div>
     </div>
   );

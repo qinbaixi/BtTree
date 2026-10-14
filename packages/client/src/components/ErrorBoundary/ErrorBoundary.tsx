@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { alerts } from '../../store/alertStore';
 import styles from './ErrorBoundary.module.css';
+import { t } from '../../i18n';
 
 export interface ErrorBoundaryProps {
   children?: ReactNode;
@@ -32,9 +33,9 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
     return (
       <div className={styles.page}>
         <div className={styles.alert} role="alert">
-          <strong>Something went wrong.</strong>
+          <strong>{t('Something went wrong.')}</strong>
           <pre className={styles.details}>{error.message}</pre>
-          <a href="/">Back to home</a>
+          <a href="/">{t('Back to home')}</a>
         </div>
       </div>
     );

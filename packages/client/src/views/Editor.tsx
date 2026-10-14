@@ -17,6 +17,7 @@ import SidePanel from '../components/SidePanel/SidePanel';
 import TabBar from '../components/TabBar/TabBar';
 import TopMenu from '../components/TopMenu/TopMenu';
 import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
+import { t } from '../i18n';
 // Registers the core commands (side effect of the module).
 import '../commands/coreCommands';
 import { openTreeDialog } from '../commands/tabCommands';
@@ -86,7 +87,8 @@ export default function Editor() {
   if (!live || !activeTab) {
     return treePath ? null : (
       <div className={styles.missingPath}>
-        No tree path given. <Link to="/">Go to the home page</Link> and open a tree.
+        {t('No tree path given.')} <Link to="/">{t('Go to the home page')}</Link>{' '}
+        {t('and open a tree.')}
       </div>
     );
   }
@@ -185,14 +187,14 @@ function EditorPage({ treePath, select }: { treePath: string; select?: string })
         <TopMenu />
         <ol className={styles.breadcrumb}>
           <li>
-            <Link to="/">Home</Link>
+            <Link to="/">{t('Home')}</Link>
           </li>
           <li className={styles.active} title={treePath}>
             {fileName}
             {dirty && (
               <span className={styles.unsaved}>
                 <span className={styles.dot} aria-hidden="true" />
-                Unsaved
+                {t('Unsaved')}
               </span>
             )}
           </li>
@@ -204,7 +206,7 @@ function EditorPage({ treePath, select }: { treePath: string; select?: string })
       <div className={styles.main}>
         <SidePanel
           key={runActive ? 'run' : 'palette'}
-          title={runActive ? 'Run' : 'Item palette'}
+          title={runActive ? t('Run') : t('Item palette')}
           name={runActive ? 'run-panel' : 'item-palette'}
           position="left"
           width={runActive ? 300 : undefined}
@@ -218,7 +220,7 @@ function EditorPage({ treePath, select }: { treePath: string; select?: string })
           </div>
           {runActive && <RunLog />}
         </div>
-        <SidePanel title="Item Details" name="item-details" position="right">
+        <SidePanel title={t('Item Details')} name="item-details" position="right">
           <PropertyPanel />
         </SidePanel>
       </div>

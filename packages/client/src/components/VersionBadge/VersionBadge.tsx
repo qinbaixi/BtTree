@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { VERSION, type AppUpdateState, type DesktopBridge } from '@owlbt/shared';
 import styles from './VersionBadge.module.css';
+import { t } from '../../i18n';
 
 declare global {
   interface Window {
@@ -20,6 +21,33 @@ export interface BadgeView {
   action?: 'check' | 'download' | 'install';
 }
 
+/** Update errors reported by the desktop app (in English) with their translatable prefix. */
+const UPDATE_ERROR_PREFIXES: ReadonlyArray<
+  [prefix: string, translate: (message: string) => string]
+> = [
+  [
+    'Could not check for updates: ',
+    (message) => t('Could not check for updates: {message}', { message }),
+  ],
+  [
+    'Could not download the update: ',
+    (message) => t('Could not download the update: {message}', { message }),
+  ],
+];
+
+/** The update error in the UI language (the detail from the system stays as it is). */
+export function translateUpdateError(error: string | undefined): string {
+  if (error === undefined) {
+    return t('The update failed.');
+  }
+  for (const [prefix, translate] of UPDATE_ERROR_PREFIXES) {
+    if (error.startsWith(prefix)) {
+      return translate(error.slice(prefix.length));
+    }
+  }
+  return error;
+}
+
 /** Label, tooltip, icon and click action of the badge for an update state. */
 export function badgeView(state: AppUpdateState): BadgeView {
   const current = `v${state.currentVersion}`;
@@ -28,55 +56,64 @@ export function badgeView(state: AppUpdateState): BadgeView {
     case 'idle':
       return {
         label: current,
-        title: 'Click to check for updates.',
+        title: t('Click to check for updates.'),
         icon: 'fa-circle-info',
         tone: 'neutral',
         action: 'check',
       };
     case 'checking':
       return {
-        label: `${current} · Checking…`,
-        title: 'Checking for updates…',
+        label: t('{current} · Checking…', { current }),
+        title: t('Checking for updates…'),
         icon: 'fa-spinner fa-spin',
         tone: 'neutral',
       };
     case 'latest':
       return {
-        label: `${current} · Latest`,
-        title: 'You have the latest version. Click to check again.',
+        label: t('{current} · Latest', { current }),
+        title: t('You have the latest version. Click to check again.'),
         icon: 'fa-circle-check',
         tone: 'neutral',
         action: 'check',
       };
     case 'available':
       return {
-        label: `Update to ${latest}`,
+        label: t('Update to {latest}', { latest }),
         title: state.canInstall
-          ? `${latest} is available (you have ${current}). Click to download it; it installs when owl-bt restarts.`
-          : `${latest} is available (you have ${current}). Click to open the download page.`,
+          ? t(
+              '{latest} is available (you have {current}). Click to download it; it installs when owl-bt restarts.',
+              { latest, current },
+            )
+          : t('{latest} is available (you have {current}). Click to open the download page.', {
+              latest,
+              current,
+            }),
         icon: state.canInstall ? 'fa-circle-down' : 'fa-arrow-up-right-from-square',
         tone: 'accent',
         action: 'download',
       };
     case 'downloading':
       return {
-        label: `Downloading ${latest} · ${state.percent ?? 0}%`,
-        title: `Downloading ${latest}…`,
+        label: t('Downloading {latest} · {percent}%', { latest, percent: state.percent ?? 0 }),
+        title: t('Downloading {latest}…', { latest }),
         icon: 'fa-spinner fa-spin',
         tone: 'accent',
       };
     case 'downloaded':
       return {
-        label: `Restart to update to ${latest}`,
-        title: `${latest} is downloaded and installs the next time owl-bt starts. Click to restart now.`,
+        label: t('Restart to update to {latest}', { latest }),
+        title: t(
+          '{latest} is downloaded and installs the next time owl-bt starts. Click to restart now.',
+          { latest },
+        ),
         icon: 'fa-rotate-right',
         tone: 'success',
         action: 'install',
       };
     case 'error':
       return {
-        label: `${current} · Update failed`,
-        title: `${state.error ?? 'The update failed.'} Click to try again.`,
+        label: t('{current} · Update failed', { current }),
+        title: t('{error} Click to try again.', { error: translateUpdateError(state.error) }),
         icon: 'fa-triangle-exclamation',
         tone: 'warning',
         action: 'check',
