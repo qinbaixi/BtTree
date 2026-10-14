@@ -10,6 +10,7 @@ const KEY_ALIASES: Readonly<Record<string, string>> = {
   down: 'arrowdown',
   left: 'arrowleft',
   right: 'arrowright',
+  space: ' ',
 };
 
 const MODIFIER_TOKENS: ReadonlySet<string> = new Set(['mod', 'ctrl', 'shift', 'alt', 'meta']);
@@ -97,6 +98,10 @@ export function handleHotkey(
     return false;
   }
   const inEditable = isEditableTarget(event.target);
+  // Space activates the focused button / link natively.
+  if (event.key === ' ' && event.target instanceof Element && event.target.closest('button, a')) {
+    return false;
+  }
   for (const command of commands) {
     if (command.hotkey === undefined || !matchesHotkey(event, command.hotkey)) {
       continue;

@@ -20,6 +20,7 @@ import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
 // Registers the core commands (side effect of the module).
 import '../commands/coreCommands';
 import { openTreeDialog } from '../commands/tabCommands';
+import '../commands/viewCommands';
 import { commandContext } from '../commands/registry';
 import { useHotkeys } from '../commands/useHotkeys';
 import { setNavigator } from '../lib/appNavigation';

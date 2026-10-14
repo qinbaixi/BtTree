@@ -43,3 +43,36 @@
   color: var(--text-secondary);
   pointer-events: none;
 }
+
+/* ---------- Drag and drop ---------- */
+
+.dragging,
+.dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.dragInvalid,
+.dragInvalid * {
+  cursor: not-allowed;
+}
+
+/* Drop indicators, positioned in container coordinates by TreeCanvas.tsx. */
+.dropLine,
+.dropBox {
+  position: absolute;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.dropLine {
+  background: var(--accent);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.dropBox {
+  border: 2px dashed var(--accent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}

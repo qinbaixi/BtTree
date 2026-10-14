@@ -66,13 +66,21 @@ export function linkPath(link: Pick<LinkLayout, 'sx' | 'sy' | 'tx' | 'ty'>): str
  * Computes node positions. Sizes are measured DOM sizes keyed by node id; unknown sizes count as 0.
  * Horizontal positions come from d3-hierarchy's tree with a width-dependent separation;
  * vertical positions are per depth level (level height = tallest node of the level + separation).
+ * Nodes in `collapsed` are laid out as leaves: their descendants are missing from the result.
  */
-export function computeTreeLayout(root: TreeNode, sizes: SizeMap): TreeLayout {
+export function computeTreeLayout(
+  root: TreeNode,
+  sizes: SizeMap,
+  collapsed?: ReadonlySet<string>,
+): TreeLayout {
   // Separation runs for every pair of neighbours, so widths are looked up without allocating.
   const widthOf = (id: string): number => finiteOrZero(sizes.get(id)?.width);
   const heightOf = (id: string): number => finiteOrZero(sizes.get(id)?.height);
 
-  const hierarchyRoot = hierarchy<TreeNode>(root, (node) => node.childNodes);
+  // Descendants of collapsed nodes are left out of the layout (not positioned, no links).
+  const hierarchyRoot = hierarchy<TreeNode>(root, (node) =>
+    collapsed?.has(node.id) ? undefined : node.childNodes,
+  );
   const positioned = tree<TreeNode>()
     .nodeSize([BASE_WIDTH, BASE_HEIGHT])
     .separation(

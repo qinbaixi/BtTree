@@ -1,0 +1,63 @@
+/* Find box in the top-right corner of the tree canvas. */
+.search {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.icon {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.search .input {
+  width: 200px;
+  height: 28px;
+}
+
+.search .noMatch {
+  border-color: var(--danger);
+}
+
+.count {
+  min-width: 48px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+}
+
+.button:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

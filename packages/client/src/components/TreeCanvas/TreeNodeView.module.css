@@ -452,3 +452,91 @@
   opacity: 0.9;
   pointer-events: none;
 }
+
+/* ---------- Collapse / expand ---------- */
+
+/* Toggle on the bottom edge of cards with children. Absolutely positioned: no effect on the size. */
+.collapseToggle {
+  position: absolute;
+  bottom: -9px;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transform: translateX(-50%);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.node:hover .collapseToggle,
+.nodeSelected .collapseToggle,
+.collapseToggle:focus-visible {
+  opacity: 1;
+}
+
+.collapseToggle:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+/* Collapsed: always visible "+N" badge with the number of hidden descendants. */
+.collapsedBadge {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  opacity: 1;
+}
+
+:global([data-theme='classic']) .collapsedBadge {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+/* ---------- Search ---------- */
+
+/* Matching node: dashed warning frame around the card; the current result is solid. */
+.nodeSearchHit::after {
+  content: '';
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  bottom: -7px;
+  left: -7px;
+  border: 2px dashed var(--warning);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.nodeSearchCurrent::after {
+  border-style: solid;
+  box-shadow: 0 0 0 4px var(--warning-soft);
+}
+
+/* Matching decorator / service row. */
+.item.searchHit {
+  background: color-mix(in srgb, var(--warning) 22%, var(--node-bg));
+}
+
+.item.searchCurrent {
+  box-shadow: inset 0 0 0 2px var(--warning);
+}
+
+/* ---------- Drag and drop ---------- */
+
+.node[data-dragging='true'],
+.item[data-dragging='true'] {
+  opacity: 0.45;
+}

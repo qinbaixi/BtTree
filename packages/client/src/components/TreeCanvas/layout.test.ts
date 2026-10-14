@@ -67,3 +67,44 @@ describe('computeTreeLayout', () => {
     expect(linkPath({ sx: 10, sy: 20, tx: 30, ty: 60 })).toBe('M10,20C10,40 30,40 30,60');
   });
 });
+
+describe('computeTreeLayout with collapsed nodes', () => {
+  function deepTree(): TreeNode {
+    return nodeFromJson(
+      {
+        type: 'Root',
+        childNodes: [
+          { type: 'A', childNodes: [{ type: 'A1' }, { type: 'A2', childNodes: [{ type: 'X' }] }] },
+          { type: 'B' },
+        ],
+      },
+      createIdGen('c'),
+    );
+  }
+
+  it('leaves out the descendants of a collapsed node', () => {
+    const root = deepTree();
+    const a = root.childNodes[0];
+    const layout = computeTreeLayout(root, new Map(), new Set([a.id]));
+
+    expect([...layout.nodes.keys()]).toEqual([root.id, a.id, root.childNodes[1].id]);
+    expect(layout.links.map((link) => link.childId)).toEqual(root.childNodes.map((n) => n.id));
+    // Only the root still has visible children.
+    expect(layout.linkStarts).toHaveLength(1);
+  });
+
+  it('collapsing the root shows only the root', () => {
+    const root = deepTree();
+    const layout = computeTreeLayout(root, new Map(), new Set([root.id]));
+    expect([...layout.nodes.keys()]).toEqual([root.id]);
+    expect(layout.links).toHaveLength(0);
+    expect(layout.linkStarts).toHaveLength(0);
+  });
+
+  it('ignores collapsed ids that are not visible or unknown', () => {
+    const root = deepTree();
+    const full = computeTreeLayout(root, new Map());
+    const same = computeTreeLayout(root, new Map(), new Set(['unknown', root.childNodes[1].id]));
+    expect(same.nodes.size).toBe(full.nodes.size);
+  });
+});

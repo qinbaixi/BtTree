@@ -17,16 +17,28 @@ import {
   type ZoomBehavior,
   type ZoomTransform,
 } from 'd3-zoom';
-import { forEachNode, type CompiledProject, type Selection, type TreeNode } from '@owlbt/shared';
+import {
+  countDescendants,
+  forEachNode,
+  searchTree,
+  selectionKey,
+  type CompiledProject,
+  type Selection,
+  type TreeNode,
+} from '@owlbt/shared';
 import { buildExportIdMap } from '../RunMode/runHelpers';
+import { connectCollapse, useCollapsed } from '../../store/collapseStore';
 import { inspectStore } from '../../store/inspectStore';
 import { useProjectStore } from '../../store/projectStore';
 import { selectViewed, useRunStore } from '../../store/runStore';
+import { useSearchStore } from '../../store/searchStore';
 import { useRunViewStore } from '../../store/runViewStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import { CanvasController, TreeCanvasContext, type ContextMenuHandler } from './canvasController';
 import { computeTreeLayout, linkPath, MIN_CANVAS_SIZE, type Size, type TreeLayout } from './layout';
 import { TreeNodeView } from './TreeNodeView';
+import TreeSearch from './TreeSearch';
+import { dragSourceOf, useTreeDrag } from './useTreeDrag';
 import { reportViewTransform, takeViewTransform, viewportStore } from './viewportStore';
 import styles from './TreeCanvas.module.css';
 
@@ -84,6 +96,10 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const viewed = useRunStore(selectViewed);
   const breakpoints = useRunStore((state) => state.breakpoints);
   const showIds = useRunViewStore((state) => state.showIds);
+  const collapsed = useCollapsed();
+  const searchOpen = useSearchStore((state) => state.open);
+  const searchQuery = useSearchStore((state) => state.query);
+  const searchIndex = useSearchStore((state) => state.index);
 
   const [controller] = useState(() => new CanvasController());
   const [sizes, setSizes] = useState<Map<string, Size>>(() => new Map());
@@ -97,13 +113,55 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   const measuredRef = useRef<{ root?: TreeNode; project?: CompiledProject; layout?: TreeLayout }>(
     {},
   );
+  /** Node to center once it is laid out (e.g. a focus request that first had to expand it). */
+  const pendingFocusRef = useRef<string | undefined>(undefined);
+  const dragEnabledRef = useRef(!runActive);
+
+  const { drag, onPointerDown: onDragPointerDown } = useTreeDrag({
+    controller,
+    containerRef,
+    enabled: !runActive,
+  });
+
+  useEffect(() => {
+    dragEnabledRef.current = !runActive;
+  }, [runActive]);
+
+  // Collapse state: restored per tree, persisted, and expanded when the selection moves inside.
+  useEffect(() => connectCollapse(treeStore), []);
 
   const exportIds = useMemo(
     () => (runActive && showIds ? buildExportIdMap(root) : undefined),
     [runActive, showIds, root],
   );
 
-  const layout = useMemo(() => (root ? computeTreeLayout(root, sizes) : undefined), [root, sizes]);
+  const layout = useMemo(
+    () => (root ? computeTreeLayout(root, sizes, collapsed) : undefined),
+    [root, sizes, collapsed],
+  );
+
+  /** Number of hidden descendants of each collapsed node. */
+  const hiddenCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (root) {
+      forEachNode(root, (node) => {
+        if (collapsed.has(node.id) && node.childNodes.length > 0) {
+          counts.set(node.id, countDescendants(node));
+        }
+      });
+    }
+    return counts;
+  }, [root, collapsed]);
+
+  const searchMatches = useMemo(
+    () => (root && searchOpen ? searchTree(root, searchQuery) : []),
+    [root, searchOpen, searchQuery],
+  );
+  const searchHits = useMemo(
+    () => (searchMatches.length > 0 ? new Set(searchMatches.map(selectionKey)) : undefined),
+    [searchMatches],
+  );
+  const currentMatch = searchMatches[searchIndex] as Selection | undefined;
 
   const nodes = useMemo(() => {
     const list: TreeNode[] = [];
@@ -118,8 +176,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     const behavior = zoomRef.current;
     const position = layoutRef.current?.nodes.get(nodeId);
     if (!container || !behavior || !position) {
+      // Not laid out yet (e.g. inside a branch that is being expanded): center it later.
+      pendingFocusRef.current = nodeId;
       return;
     }
+    pendingFocusRef.current = undefined;
     const k = transformRef.current.k;
     const target = zoomIdentity
       .translate(
@@ -144,6 +205,15 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     }
     const behavior = zoom<HTMLDivElement, unknown>()
       .scaleExtent([MIN_ZOOM, MAX_ZOOM])
+      // d3's default filter, except that presses on draggable items start a drag, not a pan.
+      .filter(
+        (event: MouseEvent) =>
+          (!event.ctrlKey || event.type === 'wheel') &&
+          !event.button &&
+          (event.type === 'wheel' ||
+            !dragEnabledRef.current ||
+            dragSourceOf(event.target, treeStore.getState().root) === undefined),
+      )
       .on('zoom', (event: D3ZoomEvent<HTMLDivElement, unknown>) => {
         const t = event.transform;
         transformRef.current = t;
@@ -191,6 +261,10 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
           centerOn(root.id);
         }
       }
+      const pending = pendingFocusRef.current;
+      if (pending !== undefined && layout?.nodes.has(pending) && sizes.has(pending)) {
+        centerOn(pending, FOCUS_MOVE_DURATION);
+      }
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- DOM measurement sync
       setSizes(next);
@@ -223,6 +297,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
 
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     controller.beginPress(event.clientX, event.clientY);
+    onDragPointerDown(event);
   };
   const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.buttons === 0) {
@@ -261,6 +336,9 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
       : { selected: false, selectedSubId: sel.itemId };
   };
 
+  const searchCurrentFor = (nodeId: string): string | undefined =>
+    currentMatch && currentMatch.nodeId === nodeId ? selectionKey(currentMatch) : undefined;
+
   const message = statusMessage(root, treeError, project !== undefined, projectError);
   const showNodes = root !== undefined && project !== undefined && layout !== undefined;
 
@@ -268,7 +346,13 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     <TreeCanvasContext.Provider value={controller}>
       <div
         ref={containerRef}
-        className={styles.tree}
+        className={[
+          styles.tree,
+          drag ? styles.dragging : '',
+          drag?.invalid ? styles.dragInvalid : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -330,6 +414,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
                     subStatuses={viewed?.subStatuses}
                     breakpoint={breakpoints.has(node.id)}
                     exportIds={exportIds}
+                    childCount={node.childNodes.length}
+                    collapsed={hiddenCounts.has(node.id)}
+                    hiddenCount={hiddenCounts.get(node.id)}
+                    searchHits={searchHits}
+                    searchCurrent={searchCurrentFor(node.id)}
                   />
                 );
               })}
@@ -337,7 +426,20 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
           )}
         </div>
         {message && <div className={styles.status}>{message}</div>}
+        {drag?.indicator && (
+          <div
+            className={drag.indicator.kind === 'box' ? styles.dropBox : styles.dropLine}
+            data-drop-indicator={drag.indicator.kind}
+            style={{
+              left: drag.indicator.rect.left,
+              top: drag.indicator.rect.top,
+              width: drag.indicator.rect.width,
+              height: drag.indicator.rect.height,
+            }}
+          />
+        )}
       </div>
+      <TreeSearch matches={searchMatches} />
     </TreeCanvasContext.Provider>
   );
 }
