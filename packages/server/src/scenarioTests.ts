@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import {
+  collectSubtreeRefsJson,
   compileProject,
   createIdGen,
   globToRegExp,
@@ -16,9 +17,11 @@ import {
   type ProjectFile,
   type ScenarioJson,
   type ScenarioRunResult,
+  type SubtreeLibrary,
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { isPathInDir, PROJECT_FILE_NAME } from './project';
+import { loadSubtreeLibrary } from './subtrees';
 import { loadWorkspace } from './workspace';
 
 /*
@@ -226,6 +229,7 @@ export async function runScenarioTests(
     if (applicable.length === 0) continue;
     let json: TreeNodeJson | undefined;
     let loadError: string | undefined;
+    let subtrees: SubtreeLibrary | undefined;
     try {
       json = JSON.parse(stripBom(await readFile(tree.path, 'utf8'))) as TreeNodeJson;
       nodeFromJson(json, createIdGen());
@@ -247,7 +251,16 @@ export async function runScenarioTests(
       }
       const started = performance.now();
       try {
-        const outcome = runScenarioTest(nodeFromJson(json, createIdGen()), compiled, scenario);
+        // Referenced trees are loaded once per tree (without the project plugin).
+        subtrees ??= await loadSubtreeLibrary(
+          projectDir,
+          compiled,
+          collectSubtreeRefsJson(json, compiled),
+        );
+        const outcome = runScenarioTest(nodeFromJson(json, createIdGen()), compiled, scenario, {
+          subtrees,
+          treeRef: tree.relPath,
+        });
         cases.push({
           ...base,
           status: outcome.status,

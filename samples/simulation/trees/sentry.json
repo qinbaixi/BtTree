@@ -1,0 +1,27 @@
+{
+	"type": "Sequence",
+	"label": "Sentry",
+	"comment": "子树示例：先报到，再运行 trees/guard.json（共享黑板）。",
+	"childNodes": [
+		{
+			"type": "Say",
+			"label": "Report for duty",
+			"properties": [
+				{
+					"name": "Message",
+					"value": "On duty"
+				}
+			]
+		},
+		{
+			"type": "SubTree",
+			"label": "Guard",
+			"properties": [
+				{
+					"name": "Tree",
+					"value": "trees/guard.json"
+				}
+			]
+		}
+	]
+}

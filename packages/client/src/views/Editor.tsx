@@ -21,6 +21,7 @@ import TreeCanvas from '../components/TreeCanvas/TreeCanvas';
 import '../commands/coreCommands';
 import { openTreeDialog } from '../commands/tabCommands';
 import '../commands/viewCommands';
+import '../commands/subtreeCommands';
 import { commandContext } from '../commands/registry';
 import { useHotkeys } from '../commands/useHotkeys';
 import { setNavigator } from '../lib/appNavigation';
@@ -35,6 +36,7 @@ import {
   tabsStore,
   useTabsStore,
 } from '../store/tabsStore';
+import { startSubtreeSync } from '../store/subtreeStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
 import { useDirtyTabsBeacon, useSelectFromUrl } from './useTreeLinks';
@@ -138,6 +140,9 @@ function EditorPage({ treePath, select }: { treePath: string; select?: string })
   }, [treePath]);
   // After the load effect: selects the item named in the URL (links from "Find usages").
   useSelectFromUrl(select);
+
+  // Load the trees referenced by subtree nodes and keep their problems up to date.
+  useEffect(() => startSubtreeSync(treePath), [treePath]);
 
   // Warn about types used by the tree but missing from the project (after each load and reload).
   useEffect(() => {

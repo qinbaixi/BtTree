@@ -1,4 +1,9 @@
-import type { FormatExportJson, ProjectExportJson, ProjectFile } from '@owlbt/shared';
+import type {
+  FormatExportJson,
+  ProjectExportJson,
+  ProjectFile,
+  SubtreeExportMode,
+} from '@owlbt/shared';
 import { useProjectEditorStore } from '../../store/projectEditorStore';
 import { runEdit } from './PropertyTable';
 import { TextInput } from './TextInput';
@@ -66,6 +71,24 @@ export function setExportField(
   }
 }
 
+/** Sets `export.subtrees`; the default ('reference' or undefined) removes the field. */
+export function setSubtreeExportMode(
+  draft: ProjectFile,
+  mode: SubtreeExportMode | undefined,
+): void {
+  const all: ProjectExportJson = draft.export ?? {};
+  if (mode === undefined || mode === 'reference') {
+    delete all.subtrees;
+  } else {
+    all.subtrees = mode;
+  }
+  if (Object.keys(all).length === 0) {
+    delete draft.export;
+  } else {
+    draft.export = all;
+  }
+}
+
 /** Center column: output folder, file name template, C# namespace and Go package per export format. */
 export function ExportSettingsView() {
   const draft = useProjectEditorStore((state) => state.draft);
@@ -81,6 +104,25 @@ export function ExportSettingsView() {
         Output settings of the project. Paths are relative to the project folder. Empty fields use
         the defaults shown as placeholders.
       </p>
+      <section className={styles.section} aria-label="Subtree references">
+        <div className={styles.sectionTitle}>Subtree references</div>
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Export as</span>
+          <select
+            className={styles.input}
+            aria-label="Subtree export mode"
+            value={exports.subtrees === 'inline' ? 'inline' : 'reference'}
+            onChange={(event) =>
+              runEdit('Set subtree export mode', (d) =>
+                setSubtreeExportMode(d, event.target.value as SubtreeExportMode),
+              )
+            }
+          >
+            <option value="reference">Reference (node names the tree; the game loads it)</option>
+            <option value="inline">Inline (expand the referenced tree in place)</option>
+          </select>
+        </div>
+      </section>
       {FORMATS.map((info) => {
         const current = exports[info.format] ?? {};
         const edit = (field: Field, value: string) =>

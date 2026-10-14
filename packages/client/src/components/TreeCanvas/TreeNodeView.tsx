@@ -3,6 +3,7 @@ import {
   describeItem,
   getItemType,
   isItemValid,
+  isSubtreeType,
   type CompiledItemType,
   type CompiledProject,
   type RunStatus,
@@ -12,9 +13,13 @@ import {
   type TreeNode,
 } from '@owlbt/shared';
 import { collapseStore } from '../../store/collapseStore';
+import { commandContext } from '../../commands/registry';
+import { openSubtreeOfNode } from '../../commands/subtreeCommands';
 import { runStore } from '../../store/runStore';
+import { useSubtreeProblem } from '../../store/subtreeStore';
 import { treeStore } from '../../store/treeStore';
 import { TreeCanvasContext } from './canvasController';
+import { SubtreeRef } from './SubtreeRef';
 import styles from './TreeNodeView.module.css';
 
 export interface TreeNodeViewProps {
@@ -228,11 +233,14 @@ export const TreeNodeView = memo(function TreeNodeView({
   const nodeType = getItemType(project, 'node', node.type);
   const ids = runActive ? exportIds : undefined;
   const nodeExportId = ids?.get(node.id);
-  const nodeInvalid = !isItemValid(nodeType, node.properties);
+  const isSubtree = isSubtreeType(nodeType);
+  const subtreeProblem = useSubtreeProblem(isSubtree ? node.id : undefined);
+  const nodeInvalid = !isItemValid(nodeType, node.properties) || subtreeProblem !== undefined;
   const nodeHit = searchHits?.has(node.id) ?? false;
   const nodeCurrent = searchCurrent === node.id;
   const cardClass = [
     styles.node,
+    isSubtree ? styles.subtreeNode : '',
     selected ? styles.nodeSelected : '',
     nodeHit ? styles.nodeSearchHit : '',
     nodeCurrent ? styles.nodeSearchCurrent : '',
@@ -250,6 +258,15 @@ export const TreeNodeView = memo(function TreeNodeView({
       data-run-status={runActive ? (runStatus ?? 'idle') : undefined}
       data-collapsed={collapsed ? 'true' : undefined}
       data-search-hit={nodeHit ? (nodeCurrent ? 'current' : 'true') : undefined}
+      data-subtree={isSubtree ? 'true' : undefined}
+      onDoubleClick={
+        isSubtree && interactive && !runActive
+          ? (event) => {
+              event.stopPropagation();
+              void openSubtreeOfNode(commandContext, node.id);
+            }
+          : undefined
+      }
       style={
         {
           left: x,
@@ -293,6 +310,7 @@ export const TreeNodeView = memo(function TreeNodeView({
         selected={selected}
         interactive={interactive}
       />
+      {isSubtree && <SubtreeRef node={node} type={nodeType} problem={subtreeProblem} />}
       {node.decorators.map((decorator: SubItem) => (
         <ItemView
           key={decorator.id}

@@ -34,6 +34,11 @@ export interface ItemTypeDescJson {
   properties?: PropertyDescJson[];
   /** Nodes only. */
   isComposite?: boolean;
+  /**
+   * Nodes only: the node is a subtree reference that runs the tree file named by its `Tree`
+   * property (a path relative to the project folder). Inherited like other fields.
+   */
+  subtree?: boolean;
   /** Erlang/Lua export settings. */
   export?: ItemExportJson;
   /** Run mode (simulator) rules. Inherited field by field from the bases. */
@@ -119,7 +124,12 @@ export interface FormatExportJson {
   package?: string;
 }
 
+/** How subtree references are exported: as reference nodes (default) or expanded in place. */
+export type SubtreeExportMode = 'reference' | 'inline';
+
 export interface ProjectExportJson {
+  /** Subtree references: 'reference' (default) or 'inline'. */
+  subtrees?: SubtreeExportMode;
   erlang?: FormatExportJson;
   lua?: FormatExportJson;
   ts?: FormatExportJson;
@@ -193,6 +203,8 @@ export interface CompiledItemType {
   export?: ItemExportJson;
   /** Run mode rules (merged with the ones of the bases). */
   simulate?: SimulateJson;
+  /** Nodes only: subtree reference (runs the tree named by the `Tree` property). */
+  subtree?: boolean;
   /** True for fallback descriptors of types missing from the project file. */
   isInvalid?: boolean;
 }

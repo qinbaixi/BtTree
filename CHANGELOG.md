@@ -17,6 +17,11 @@
 - 批量重命名：在项目编辑器中重命名类型或黑板键并保存后，可一键「Also update N tree files」改写所有树文件（保留缩进、换行和 BOM），在浏览器中打开且有未保存修改的树会被跳过。新增接口 `GET /api/usages` 与 `POST /api/references/rename`。
 - 黑板键声明：`owl-bt.json` 新增可选的顶层 `blackboard`（`name`、`type`、`default`、`description`，未知字段原样保留，旧项目不受影响）；项目编辑器新增「Blackboard」视图并校验重复、不合法的键名；类型为 `blackboardKey` 的属性在属性面板中补全已声明的键，值不是已声明的键时给出警告；运行模式没有场景时用声明的键和默认值作为起始黑板，并可「Add declared keys」。默认模板和 `samples/simulation` 已声明示例键。
 - 工作区扫描现在也能识别带 UTF-8 BOM 的树文件。
+- 子树引用：节点类型可设置 `"subtree": true`（可继承），该类型的节点通过 `Tree` 属性（相对项目目录的路径）引用另一棵树，公共逻辑只写一次。默认模板新增 `SubTree` 节点，示例 `samples/simulation` 新增引用 `guard.json` 的 `sentry.json`；旧项目和旧树文件不受影响。
+- 编辑器：子树引用节点卡片有独特外观并显示被引用的树名；属性面板可从项目树文件中选择引用、预览被引用树的第一层；双击、右键菜单、命令面板或 `Ctrl+Enter` 在新标签页中打开被引用的树。缺失文件、项目外路径和循环引用会把节点标为无效并列入树概览的问题列表。项目编辑器的类型表单新增「Subtree reference」开关。
+- 运行模式：子树引用节点把被引用的树作为子节点运行，共享黑板，日志显示进入子树；带循环和深度保护，运行前会重新加载被引用的树。
+- 导出：`owl-bt.json` 新增 `export.subtrees`：`"reference"`（默认，引用节点导出 `subtree` 字段，值为被引用树的名字）或 `"inline"`（原地展开被引用的树，循环引用时报错），适用于五种格式的单个、批量和命令行导出，可在项目编辑器的「Export settings」中设置。
+- 本地 API 新增 `POST /api/subtrees`，递归加载子树引用。
 - 运行模式支持后退一步：工具条新增「Back」按钮（`Shift+F10`），撤销最近一个 tick，节点状态、黑板、手动节点、随机数和循环轮数都回到上一个 tick，之后再 Step / Play 会从该状态继续执行。
 - 场景测试：新增 `owlbt test [path]` 命令，不启动服务即可用模拟引擎批量运行「树 × 场景」并检查期望，支持 `--json`、`--junit <file>`、`--tree`、`--scenario`；退出码 0 通过、1 失败、2 配置错误，适合 CI。
 - 场景新增可选字段 `trees`、`maxTicks`、`seed`、`manual` 和 `expect`（`result`、`ticks`、`blackboard`），由 `validateProjectFile` 校验；旧项目不受影响，未知字段原样保留。`samples/simulation` 的场景已加上期望。

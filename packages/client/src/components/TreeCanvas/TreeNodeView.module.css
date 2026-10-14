@@ -540,3 +540,13 @@
 .item[data-dragging='true'] {
   opacity: 0.45;
 }
+
+/* Subtree reference node: a dashed edge and a second card behind it ("stack" of trees). */
+.subtreeNode {
+  border-style: dashed;
+  border-left-style: solid;
+  box-shadow:
+    4px 4px 0 -1px var(--node-bg),
+    4px 4px 0 0 var(--node-border),
+    var(--shadow-sm);
+}

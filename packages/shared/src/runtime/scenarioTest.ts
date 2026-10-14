@@ -1,5 +1,5 @@
 import type { CompiledProject, ScenarioJson, TreeNode } from '../types';
-import { createRun, formatValue, type ManualResult } from './engine';
+import { createRun, formatValue, type ManualResult, type RunOptions } from './engine';
 
 /*
  * Scenario tests (`owlbt test`): runs a tree with the start blackboard of a scenario until the root
@@ -99,6 +99,7 @@ export function runScenarioTest(
   root: TreeNode,
   project: CompiledProject,
   scenario: ScenarioJson,
+  options: Pick<RunOptions, 'subtrees' | 'treeRef'> = {},
 ): ScenarioTestOutcome {
   const maxTicks = scenarioMaxTicks(scenario);
   const manual: ManualResult = scenario.manual === 'failure' ? 'failure' : 'success';
@@ -108,7 +109,7 @@ export function runScenarioTest(
       : {};
   const seed =
     typeof scenario.seed === 'number' && Number.isFinite(scenario.seed) ? scenario.seed : 1;
-  const run = createRun(root, project, { blackboard, seed });
+  const run = createRun(root, project, { ...options, blackboard, seed });
 
   const errors: string[] = [];
   let manualResolved = 0;

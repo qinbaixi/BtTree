@@ -1,10 +1,19 @@
 import { getItemType } from '../compileProject';
+import {
+  checkSubtrees,
+  expandSubtrees,
+  subtreeName,
+  subtreeOwnerId,
+  subtreeRefOf,
+  type SubtreeLibrary,
+} from '../subtree';
 import type {
   CompiledItemType,
   CompiledProject,
   CompiledProperty,
   ItemKind,
   SubItem,
+  SubtreeExportMode,
   TreeNode,
 } from '../types';
 import { getEffectiveValue, validatePropertyValue } from '../validation';
@@ -81,6 +90,9 @@ function typeFieldsOf(kind: ItemKind, type: CompiledItemType): TypeFields {
   };
 }
 
+/** Field added to subtree reference nodes in 'reference' mode: the referenced tree's name. */
+export const SUBTREE_EXPORT_FIELD = 'subtree';
+
 function buildEntry(
   numbered: NumberedItem,
   project: CompiledProject,
@@ -143,6 +155,13 @@ function buildEntry(
   }
   fields.push(...nodeFields);
 
+  if (kind === 'node' && type.subtree === true) {
+    const ref = subtreeRefOf(item as TreeNode, project);
+    if (ref && 'ref' in ref) {
+      fields.push([SUBTREE_EXPORT_FIELD, subtreeName(ref.ref)]);
+    }
+  }
+
   if (kind === 'node') {
     const node = item as TreeNode;
     fields.push(['decorators', idList(node.decorators, idOf)]);
@@ -160,19 +179,75 @@ function buildEntry(
   return { id, kind, comment: commentOf(type, item), fields };
 }
 
+export interface ExportModelOptions {
+  /** How subtree references are exported (default 'reference'). */
+  subtrees?: SubtreeExportMode;
+  /**
+   * Referenced trees by project-relative path. Required to inline subtrees; in 'reference' mode it
+   * is only used to warn about missing files and cycles.
+   */
+  library?: SubtreeLibrary;
+  /** Project-relative path of the exported tree (closes cycles back to it). */
+  treeRef?: string;
+}
+
+/** Location of a node for messages: `root.childNodes[0]...`. */
+function nodePaths(root: TreeNode): Map<string, string> {
+  const paths = new Map<string, string>();
+  const visit = (node: TreeNode, path: string): void => {
+    paths.set(node.id, path);
+    node.childNodes.forEach((child, index) => visit(child, `${path}.childNodes[${index}]`));
+  };
+  visit(root, 'root');
+  return paths;
+}
+
 /**
  * Builds the export model of a tree: numbered entries with their ordered fields.
- * Throws ExportError when an item uses a type that is missing from the project.
- * Invalid property values are exported as they are and reported as warnings.
+ * Throws ExportError when an item uses a type that is missing from the project, and in 'inline'
+ * mode when a subtree cannot be inlined (missing file, outside the project, cycle).
+ * Invalid property values and (in 'reference' mode) unusable subtree references are exported as
+ * they are and reported as warnings.
  */
-export function buildExportModel(root: TreeNode, project: CompiledProject): ExportModel {
+export function buildExportModel(
+  tree: TreeNode,
+  project: CompiledProject,
+  options: ExportModelOptions = {},
+): ExportModel {
+  const warnings: string[] = [];
+  let root = tree;
+  if (options.subtrees === 'inline') {
+    const expanded = expandSubtrees(tree, project, options.library ?? {}, {
+      mode: 'inline',
+      selfRef: options.treeRef,
+    });
+    const first = expanded.errors.entries().next();
+    if (!first.done) {
+      const [nodeId, problem] = first.value;
+      const where = nodeId.includes('/')
+        ? `a nested subtree (${expanded.refs.get(subtreeOwnerId(nodeId)) ?? nodeId})`
+        : nodePaths(tree).get(nodeId);
+      throw new ExportError(`Cannot inline subtree at ${where ?? nodeId}: ${problem.message}`);
+    }
+    root = expanded.root;
+  } else if (options.library) {
+    const paths = nodePaths(tree);
+    for (const [nodeId, problem] of checkSubtrees(
+      tree,
+      project,
+      options.library,
+      options.treeRef,
+    )) {
+      warnings.push(`${paths.get(nodeId) ?? nodeId}: ${problem.message}`);
+    }
+  }
+
   const numbered = numberTree(root);
   const idOf = new Map<object, number>();
   for (const entry of numbered) {
     idOf.set(entry.item, entry.id);
   }
 
-  const warnings: string[] = [];
   const typeFields = new Map<CompiledItemType, TypeFields>();
   const entries = numbered.map((entry) => buildEntry(entry, project, idOf, typeFields, warnings));
   return { rootId: idOf.get(root) ?? 1, entries, warnings };

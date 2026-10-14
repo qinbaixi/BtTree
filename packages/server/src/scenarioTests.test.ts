@@ -71,11 +71,13 @@ describe('scenario tests', () => {
     it('passes for samples/simulation', async () => {
       const report = await runScenarioTests(sampleDir);
       expect(report.ok).toBe(true);
-      expect(report.summary).toEqual({ total: 3, passed: 3, failed: 0, ran: 0, errors: 0 });
+      expect(report.summary).toEqual({ total: 4, passed: 4, failed: 0, ran: 0, errors: 0 });
       expect(report.cases.map((c) => `${c.tree} ${c.scenario} ${c.status}`)).toEqual([
         'trees/guard.json Enemy in sight pass',
         'trees/guard.json No enemy pass',
         'trees/guard.json Out of ammo pass',
+        // sentry.json runs guard.json as a subtree reference.
+        'trees/sentry.json Out of ammo pass',
       ]);
     });
 
@@ -188,7 +190,7 @@ describe('scenario tests', () => {
     it('returns 0 when every test passes', async () => {
       const { out, io } = capture();
       expect(await runTestCommand(sampleDir, {}, io)).toBe(TEST_EXIT_OK);
-      expect(out.join('\n')).toContain('3 scenario tests: 3 passed, 0 failed');
+      expect(out.join('\n')).toContain('4 scenario tests: 4 passed, 0 failed');
     });
 
     it('returns 1 on failures and prints JSON', async () => {
@@ -274,7 +276,7 @@ describe('scenario tests', () => {
         runCli(['test', root, '--scenario', 'Nope']),
       ]);
       expect(ok.code).toBe(0);
-      expect(ok.stdout).toContain('3 passed');
+      expect(ok.stdout).toContain('4 passed');
       expect(failed.code).toBe(1);
       expect(JSON.parse(failed.stdout).summary.failed).toBe(2);
       expect(config.code).toBe(2);

@@ -26,6 +26,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - [树编辑器画布：拖放、折叠与搜索](#树编辑器画布拖放折叠与搜索)
 - [运行模式（模拟执行行为树）](#运行模式模拟执行行为树)
 - [树文件（tree）格式](#树文件tree格式)
+- [子树引用](#子树引用)
 - [导出 Erlang / Lua / TypeScript / C# / Go](#导出-erlang--lua--typescript--c--go)
 - [桌面版（Electron）](#桌面版electron)
 - [键盘快捷键](#键盘快捷键)
@@ -52,6 +53,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **黑板键声明**：在 `owl-bt.json` 中声明黑板键，属性面板提供键名补全，并对未声明的键给出警告。
 - **运行模式**：在编辑器里按 tick 模拟执行行为树，带黑板、场景、断点、回放和日志，无需游戏引擎。
 - **场景测试**：`owlbt test` 在命令行批量运行「树 × 场景」的模拟并检查期望结果，可输出 JSON 和 JUnit XML，适合放进 CI。
+- **子树引用**：节点可以引用项目中的另一棵树（`SubTree`），公共逻辑只写一次；编辑器显示引用的树并可一键打开，自动检查缺失文件和循环引用，运行模式会执行被引用的树，导出可选择保留引用或展开内联。
 - **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# / Go 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
 - **主题**：默认明亮主题，可切换为原版风格的深色主题。
@@ -311,6 +313,7 @@ owlbt create ./my-project/trees/patrol.json --no-open
 - `color`：颜色，CSS 写法（如 `"#bada55"`、`"green"`）。未设置时使用默认色：复合节点 `#d08038`、动作节点 `#955cc6`、服务 `#5cc690`、装饰器 `#5c90c6`
 - `description`：描述模板，可用 `{{PropertyName}}` 引用属性值
 - `isComposite`：仅节点，是否可以包含子节点
+- `subtree`：仅节点，为 `true` 时该节点是子树引用，运行 `Tree` 属性指定的树文件（见「子树引用」）。与其他字段一样可以继承；子树引用节点不能有子节点（`isComposite` 被忽略）
 - `properties`：属性列表
 - `export`：导出设置 `{ type?, subType?, fields? }`，继承规则与其他字段相同，见下文
 
@@ -406,7 +409,7 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 - **自定义类型**：`blackboardKey`（以字母或下划线开头的标识符，用于黑板键名）、`probability`（0 到 1 之间的小数）。
 - **黑板键**：`Target`、`Enemy`、`Waypoint`、`PatrolPoints`、`PatrolIndex`（示例树用到的全部键）。
-- **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`。
+- **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`；子树引用节点 `SubTree`（属性 `Tree`，见「子树引用」）。
 - **装饰器**：`Failure`、`Invert`、`Success`、`IsBlackboardValueSet`、`Cooldown`、`Loop`、`TimeLimit`。
 - **服务**：`Sample service`、`UpdateTarget`、`LogTick`。
 
@@ -553,7 +556,7 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 
 ### 场景测试（owlbt test）
 
-`owlbt test [path]` 不启动服务，直接用模拟引擎把每棵树在每个场景下运行一遍，检查场景里写的期望，适合在 CI 中检查行为树。`path` 可以是树文件（只测这棵树）、项目内的文件夹（只测其中的树）或项目目录（全部树），默认当前目录。
+`owlbt test [path]` 不启动服务，直接用模拟引擎把每棵树在每个场景下运行一遍，检查场景里写的期望，适合在 CI 中检查行为树。树中的子树引用会一并加载并运行（与运行模式相同，不执行 `owl-bt.js` 插件）。`path` 可以是树文件（只测这棵树）、项目内的文件夹（只测其中的树）或项目目录（全部树），默认当前目录。
 
 场景可以加上以下可选字段（都可省略，旧项目不受影响，未知字段原样保留）：
 
@@ -686,6 +689,67 @@ RAN  trees/patrol.json › Smoke → failure in 3 ticks
 
 </details>
 
+## 子树引用
+
+把公共逻辑（如巡逻、战斗）写成单独的树文件，再在其他树中用**子树引用节点**引用它，修改一处即可在所有引用处生效。
+
+<details>
+<summary>格式、编辑器用法、检查、运行模式与导出</summary>
+
+### 格式
+
+在 `owl-bt.json` 中给节点类型加上 `"subtree": true`，该类型的节点就是子树引用。被引用的树写在节点的 `Tree` 属性中，是**相对于项目目录**（`owl-bt.json` 所在目录）的路径，使用 `/` 分隔，省略 `.json` 时自动补上。类型没有声明 `Tree` 属性时编译会自动加上一个字符串属性。默认模板已包含可直接使用的 `SubTree` 类型：
+
+```json
+{
+  "name": "SubTree",
+  "icon": "diagram-project",
+  "subtree": true,
+  "description": "运行子树 {{Tree}}",
+  "properties": [{ "name": "Tree", "type": "string", "default": "" }]
+}
+```
+
+树文件中的引用节点就是普通节点，旧版本和不认识 `subtree` 的工具会把它当作普通动作节点：
+
+```json
+{ "type": "SubTree", "label": "巡逻", "properties": [{ "name": "Tree", "value": "trees/common/patrol.json" }] }
+```
+
+`subtree` 可以继承：例如 `{ "name": "PatrolRef", "base": "SubTree" }` 也是子树引用。项目编辑器的类型表单中有「Subtree reference」开关，打开时自动添加 `Tree` 属性。示例 `samples/simulation/trees/sentry.json` 引用了 `trees/guard.json`。
+
+### 编辑器
+
+- 引用节点的卡片带虚线边框和叠层阴影，底部显示被引用的树名（悬停显示路径、根节点和子节点数）。
+- 右侧属性面板的「Subtree」区可以输入引用路径，下拉提示项目中的所有树文件；下方显示被引用树的根节点和第一层子节点（只读预览），以及「Open referenced tree」按钮。
+- 双击引用节点、右键菜单「Open referenced tree」、命令面板或 `Ctrl+Enter` 在新标签页中打开被引用的树（已打开则切换过去），当前树的未保存修改保留在原标签页中。
+
+### 检查
+
+以下问题会把引用节点标为无效（红色），并列在树概览的「Problems」中：
+
+- 没有填写引用（`No tree referenced`）
+- 引用指向项目目录之外（绝对路径或 `..` 跳出项目）
+- 被引用的文件不存在，或不是合法的树文件
+- 循环引用，包括间接循环和引用自身，例如 `Subtree cycle: trees/a.json → trees/b.json → trees/a.json`
+
+引用在编辑时自动加载（输入停止约 0.3 秒后），`owl-bt.json` 修改后全部重新加载。
+
+### 运行模式
+
+进入运行模式前会重新加载所有被引用的树（包括嵌套引用）。引用节点把被引用的树作为它唯一的子节点运行，**共享同一个黑板**；引用节点上的装饰器和服务照常作用于子树的结果。日志中会出现 `entering subtree trees/xxx.json`，子树内节点的日志使用它们自己的名字；点击这些日志行、子树内的手动节点会选中画布上的引用节点。引用缺失、循环引用或嵌套超过 16 层时，该引用节点失败并在日志中记录错误，不会无限递归。
+
+### 导出
+
+`owl-bt.json` 的 `export.subtrees` 决定子树引用的导出方式：
+
+- `"reference"`（默认）：引用节点照常导出，并在顶层多一个字段 `subtree`，值为被引用树的名字（文件名，不含 `.json`），由游戏运行时按名字加载对应的导出文件。`Tree` 属性仍写在 `properties` 中。被引用文件缺失或存在循环引用时作为警告返回。
+- `"inline"`：把被引用的树原地展开：引用节点被替换为被引用树的根节点，引用节点的装饰器和服务排在根节点自己的装饰器和服务之前；根节点没有标签时沿用引用节点的标签。嵌套引用递归展开。被引用文件缺失、在项目之外或存在循环引用时导出失败并给出位置。
+
+单个导出、批量导出和命令行导出都遵循这一设置；项目编辑器的「Export settings」中可以切换。
+
+</details>
+
 ## 导出 Erlang / Lua / TypeScript / C# / Go
 
 树可以导出为 Erlang 模块（`get_node/1`、`get_root_node/0`）、Lua 模块（返回 `{ root, nodes, get_node }`）、TypeScript 模块（`nodes`、`getNode()`）、C# 静态类（`Nodes`、`GetNode()`）或 Go 源文件（`<前缀>Nodes`、`<前缀>GetNode()`）。Erlang 的输出格式与 `bt_mon_1000.erl` 这类手写配置保持一致。五种格式使用同一份导出模型：条目的编号、键的顺序和值完全相同，只有语法不同。
@@ -707,6 +771,7 @@ RAN  trees/patrol.json › Smoke → failure in 3 ticks
 }
 ```
 
+- `subtrees`：子树引用的导出方式，`"reference"`（默认）或 `"inline"`，见「子树引用」
 - `outDir`：相对于项目目录。默认 `export/erlang`、`export/lua`、`export/ts`、`export/cs`、`export/go`
 - `fileName`：文件名模板，`{name}` 为树文件名（不含 `.json`）。扩展名 `.erl` / `.lua` / `.ts` / `.cs` / `.go` 会自动补上，模板中已带扩展名时不重复
 - Erlang 模块名取文件名（不含扩展名）：转为小写，`[a-z0-9_]` 以外的字符替换为 `_`，不以字母开头时加 `m_` 前缀。例如 `bt-mon 1000.json` 生成模块 `bt_mon_1000`
@@ -875,6 +940,7 @@ func BtMon1000GetNode(id int) map[string]any {
 
 - 树中使用了项目中不存在的类型：导出失败，错误信息给出类型名和位置，例如 `Missing node type 'Nope' at root.childNodes[0]`，不写入任何文件
 - 属性值不符合类型定义（如数字类型给了字符串）：仍然导出，并作为警告返回
+- 子树引用的文件缺失或存在循环引用：`reference` 模式下作为警告返回，`inline` 模式下导出失败
 
 ### 命令行
 
@@ -1001,6 +1067,7 @@ module.exports = {
 | `F8` | 运行模式：播放 / 暂停 |
 | `F10` | 运行模式：单步（一个 tick） |
 | `Shift+F10` | 运行模式：后退一步（撤销最近一个 tick） |
+| `Ctrl+Enter` | 打开选中的子树引用节点所引用的树 |
 
 「聚焦选中节点」、「设置节点类型」、「Collapse all」和「Expand all」没有默认快捷键，可在命令面板（`Ctrl+Shift+P`）中执行。
 
@@ -1033,6 +1100,7 @@ module.exports = {
 | `POST` | `/api/scenario-tests` | 运行场景测试（同 `owlbt test`）。请求体 `{ path, project?, trees?, scenarios? }`：`path` 为树文件、文件夹或 `owl-bt.json` 的绝对路径；`project` 可代替磁盘上的 `owl-bt.json`（项目编辑器用它测试未保存的修改）；`trees` / `scenarios` 为过滤条件（字符串数组）。返回报告 `{ projectDir, projectPath, cases, warnings, summary, ok }`；配置错误时 400 |
 | `GET` | `/api/usages?path=&kind=&name=` | 在 `path`（树文件、`owl-bt.json` 或项目内文件夹的绝对路径）所属项目的全部树中查找用法，见下文 |
 | `POST` | `/api/references/rename` | 批量改写树文件中被重命名的类型和黑板键，见下文 |
+| `POST` | `/api/subtrees` | 加载子树引用，见下文 |
 
 **`GET /api/workspace?dir=...`**
 
@@ -1051,6 +1119,11 @@ module.exports = {
 - 所有重命名同时生效（可互换两个名字）。黑板键按磁盘上的 `owl-bt.json`（应已保存为新名称）识别 `blackboardKey` 属性；项目无法编译时 400。
 - `dryRun` 为 `true` 时只统计不写入；`skip` 中的文件不写入（结果中标记 `skipped`）。每个文件在文件锁内读取、改写并原子写入，保留缩进、换行方式和 BOM。
 - 响应：`{ "projectDir", "truncated", "dryRun", "changed": [{ "path", "relPath", "count", "skipped?" }], "errors": [...] }`。
+
+**`POST /api/subtrees`**，请求体 `{ "path": "<树文件绝对路径>", "refs"?: ["trees/a.json", ...] }`
+
+- 加载 `refs` 中的树（相对项目目录的路径），并递归加载它们引用的树；省略 `refs` 时使用磁盘上该树文件中的引用。树不在项目内时 403，`refs` 不是数组时 400。
+- 响应：`{ "projectDir", "self", "library" }`。`self` 是该树相对项目目录的路径（用于发现指回自身的循环）；`library` 以规范化的引用路径为键，值为 `{ "path", "tree" }`，或 `{ "error": "missing" | "invalid" | "outside", "message" }`。单次最多加载 200 个文件；项目插件的 `onTreeLoad` 同样作用于被加载的树。
 
 **`POST /api/project/init`**，请求体 `{ "dir": "<绝对目录>" }`
 

@@ -9,6 +9,7 @@ export * from './treeCollapse';
 export * from './treeSearch';
 export * from './navigation';
 export * from './validation';
+export * from './subtree';
 export * from './describe';
 export * from './projectEdit';
 export * from './blackboard';

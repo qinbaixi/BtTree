@@ -1,4 +1,5 @@
 import { getItemType } from '../compileProject';
+import { expandSubtrees, isSubtreeType, type SubtreeLibrary } from '../subtree';
 import { findNode, forEachNode } from '../treeOps';
 import { getEffectiveValue } from '../validation';
 import {
@@ -71,6 +72,14 @@ export interface RunOptions {
   overrides?: Record<string, Record<string, unknown>>;
   /** Number of times the tree runs (integer >= 0; default 1; 0 = endless). */
   loops?: number;
+  /**
+   * Trees referenced by subtree nodes (loaded before the run starts). Each subtree node runs its
+   * referenced tree as its only child, sharing the blackboard. Missing trees, cycles and too deep
+   * nesting make the subtree node fail with an error in the log.
+   */
+  subtrees?: SubtreeLibrary;
+  /** Project-relative path of the tree itself, so a subtree referencing it is seen as a cycle. */
+  treeRef?: string;
 }
 
 /** Normalizes a loops value: integer >= 0, anything else becomes 1. */
@@ -80,6 +89,11 @@ export function normalizeLoops(value: number | undefined): number {
 }
 
 export interface Run {
+  /**
+   * The tree that runs: the given tree with the referenced trees of subtree nodes attached as their
+   * children (ids `<subtree node id>/<n>`). The given tree itself when it has no subtree nodes.
+   */
+  readonly root: TreeNode;
   /** Executes one tick. Does nothing (returns the current state) while finished or waiting for a manual result. */
   tick(): TickResult;
   /** Resolves a pending manual action; the node finishes in the next tick. */
@@ -217,13 +231,20 @@ interface NodeState {
   order?: number[];
   body: BodyState;
   loopDone: number;
+  /** Subtree nodes: entering the referenced tree was logged. */
+  entered?: boolean;
   /** The body restarts at the start of the next tick (loop decorator). */
   restart?: boolean;
   loopTotal: number;
   timeLimit?: number;
 }
 
-export function createRun(root: TreeNode, project: CompiledProject, options: RunOptions): Run {
+export function createRun(tree: TreeNode, project: CompiledProject, options: RunOptions): Run {
+  const expansion = expandSubtrees(tree, project, options.subtrees ?? {}, {
+    mode: 'child',
+    selfRef: options.treeRef,
+  });
+  const root = expansion.root;
   const blackboard: Record<string, unknown> = deepClone(options.blackboard);
   const overrides = options.overrides ?? {};
   const random = createRandom(options.seed ?? 1);
@@ -568,8 +589,25 @@ export function createRun(root: TreeNode, project: CompiledProject, options: Run
     return ok ? finish('success') : 'failure';
   };
 
+  /** Subtree nodes run the referenced tree (their only child after the expansion). */
+  const execSubtree = (node: TreeNode, state: NodeState): Outcome => {
+    const problem = expansion.errors.get(node.id);
+    const child = node.childNodes[0];
+    if (problem || !child) {
+      throw new Error(problem?.message ?? 'No tree referenced');
+    }
+    if (!state.entered) {
+      state.entered = true;
+      add('enter', node.id, `entering subtree ${expansion.refs.get(node.id) ?? ''}`.trim());
+    }
+    return execNode(child);
+  };
+
   function execBody(node: TreeNode, state: NodeState): Outcome {
     const type = nodeType(node);
+    if (isSubtreeType(type)) {
+      return execSubtree(node, state);
+    }
     const isComposite = type.isComposite || (type.isInvalid === true && node.childNodes.length > 0);
     return isComposite ? execComposite(node, state, type) : execAction(node, state, type);
   }
@@ -663,6 +701,7 @@ export function createRun(root: TreeNode, project: CompiledProject, options: Run
     if (state.restart) {
       // next loop iteration: the finished iteration stays visible until now
       state.restart = false;
+      state.entered = false;
       state.index = 0;
       state.order = undefined;
       state.body = { elapsed: 0 };
@@ -752,6 +791,7 @@ export function createRun(root: TreeNode, project: CompiledProject, options: Run
   };
 
   return {
+    root,
     tick() {
       if (finished || pending.length > 0) {
         return snapshotResult([]);

@@ -11,6 +11,7 @@ import {
 import {
   findNode,
   getItemType,
+  subtreeOwnerId,
   type CompiledProject,
   type LogEntry,
   type LogKind,
@@ -335,10 +336,14 @@ function TraceLine({
         data-depth={depth}
         style={{ paddingLeft: 12 + depth * INDENT }}
         onClick={() => {
-          const selection = selectionForEntry(treeStore.getState().root, entry);
+          // Nodes of referenced trees select their subtree node in the open tree.
+          const ownerId = subtreeOwnerId(entry.nodeId);
+          const target =
+            ownerId === entry.nodeId ? entry : { ...entry, nodeId: ownerId, itemId: undefined };
+          const selection = selectionForEntry(treeStore.getState().root, target);
           if (selection) {
             treeStore.getState().select(selection);
-            focusNode(entry.nodeId);
+            focusNode(ownerId);
           }
         }}
       >
@@ -379,7 +384,10 @@ export default function RunLog() {
   const breakpoints = useRunStore((state) => state.breakpoints);
   const propOverrides = useRunStore((state) => state.overrides);
   const showIds = useRunViewStore((state) => state.showIds);
-  const root = useTreeStore((state) => state.root);
+  const treeRoot = useTreeStore((state) => state.root);
+  // Names and depths come from the tree that runs (it includes the nodes of referenced trees).
+  const runRoot = useRunStore((state) => state.runRoot);
+  const root = runRoot ?? treeRoot;
   const project = useProjectStore((state) => state.project);
   const [collapsed, setCollapsed] = useState(false);
   const [kinds, setKinds] = useState<ReadonlySet<LogKind>>(() => new Set(LOG_KINDS));
@@ -408,7 +416,7 @@ export default function RunLog() {
   const last = Math.max(0, history.length - 1);
   const live = viewIndex >= last;
   const depths = useMemo(() => buildDepthMap(root), [root]);
-  const ids = useMemo(() => buildExportIdMap(root), [root]);
+  const ids = useMemo(() => buildExportIdMap(treeRoot), [treeRoot]);
 
   useLayoutEffect(() => {
     const measure = (): void => {
