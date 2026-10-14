@@ -15,6 +15,7 @@ import { useRunStore } from '../../store/runStore';
 import { useSubtreeProblem, useSubtreeStore } from '../../store/subtreeStore';
 import styles from './PropertyPanel.module.css';
 import own from './SubtreeSection.module.css';
+import { t } from '../../i18n';
 
 /** Children of the referenced root listed in the preview; the rest is counted. */
 export const PREVIEW_LIMIT = 8;
@@ -102,10 +103,10 @@ export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
 
   return (
     <fieldset className={styles.fieldset}>
-      <legend>Subtree</legend>
+      <legend>{t('Subtree')}</legend>
       <div className={styles.row}>
-        <label htmlFor={id} title="Tree file to run, relative to the project folder">
-          Tree
+        <label htmlFor={id} title={t('Tree file to run, relative to the project folder')}>
+          {t('Tree')}
         </label>
         <input
           id={id}
@@ -140,10 +141,10 @@ export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
           {problem.message}
         </p>
       ) : ref && !entry && loading ? (
-        <p className={styles.muted}>Loading referenced tree...</p>
+        <p className={styles.muted}>{t('Loading referenced tree...')}</p>
       ) : null}
       {loaded && ref && (
-        <div className={own.preview} aria-label="Referenced tree preview">
+        <div className={own.preview} aria-label={t('Referenced tree preview')}>
           <div className={own.previewTitle}>
             <i className="fa-solid fa-diagram-project" aria-hidden="true" /> {subtreeName(ref)}
             <span className={own.root}>{nodeText(loaded)}</span>
@@ -154,7 +155,9 @@ export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
                 <li key={index}>{nodeText(child)}</li>
               ))}
               {children.length > PREVIEW_LIMIT && (
-                <li className={own.more}>+{children.length - PREVIEW_LIMIT} more</li>
+                <li className={own.more}>
+                  {t('+{count} more', { count: children.length - PREVIEW_LIMIT })}
+                </li>
               )}
             </ul>
           )}
@@ -166,8 +169,8 @@ export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
         disabled={!loaded || runActive}
         onClick={() => void openSubtreeOfNode(commandContext, node.id)}
       >
-        <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" /> Open referenced
-        tree
+        <i className="fa-solid fa-arrow-up-right-from-square" aria-hidden="true" />{' '}
+        {t('Open referenced tree')}
       </button>
     </fieldset>
   );

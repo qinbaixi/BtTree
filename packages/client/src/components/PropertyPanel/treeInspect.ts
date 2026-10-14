@@ -12,12 +12,13 @@ import {
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 
 /** Separator between names in a location path, e.g. 'Root › Pause'. */
 export const PATH_SEPARATOR = ' › ';
 
 /** Shown as the location of items that sit directly under the root. */
-export const TOP_LEVEL_LABEL = 'Top level';
+export const TOP_LEVEL_LABEL = t('Top level');
 
 /** Compiled types of one kind (nodes, decorators or services). */
 export function typesOfKind(
@@ -187,7 +188,7 @@ export function summarizeTree(
           itemId,
           type: item.type,
           path: formatPath([...ancestors, itemName(node)]),
-          message: `Undeclared blackboard key: ${names.join(', ')}`,
+          message: t('Undeclared blackboard key: {keys}', { keys: names.join(', ') }),
           severity: 'warning',
         });
       }
@@ -195,8 +196,8 @@ export function summarizeTree(
     }
     const validation = validateItem(type, item.properties);
     const message = validation.missingType
-      ? `Missing type '${item.type}'`
-      : `Invalid: ${validation.invalidProperties.join(', ')}`;
+      ? t("Missing type '{type}'", { type: item.type })
+      : t('Invalid: {properties}', { properties: validation.invalidProperties.join(', ') });
     summary.problems.push({
       kind,
       nodeId: node.id,

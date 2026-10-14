@@ -28,6 +28,7 @@ import { alerts } from './alertStore';
 import { projectStore } from './projectStore';
 import { subtreeStore } from './subtreeStore';
 import { treeStore } from './treeStore';
+import { t } from '../i18n';
 
 export const MIN_SPEED = 0.5;
 export const MAX_SPEED = 10;
@@ -334,7 +335,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
     ): Promise<boolean> => {
       const { treePath } = deps.getTree();
       if (!treePath) {
-        deps.notify.error('Open a tree before editing scenarios');
+        deps.notify.error(t('Open a tree before editing scenarios'));
         return false;
       }
       try {
@@ -353,10 +354,10 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
           deps.notify.error(
-            'The project file changed on disk. Run mode did not overwrite it; try again.',
+            t('The project file changed on disk. Run mode did not overwrite it; try again.'),
           );
         } else {
-          deps.notify.error(`Failed to save scenario: ${errorText(err)}`);
+          deps.notify.error(t('Failed to save scenario: {error}', { error: errorText(err) }));
         }
         return false;
       }
@@ -379,7 +380,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       enter() {
         const { root } = deps.getTree();
         if (!root || !deps.getProject()) {
-          deps.notify.error('Run mode needs a loaded tree and project');
+          deps.notify.error(t('Run mode needs a loaded tree and project'));
           return false;
         }
         const state = get();
@@ -622,7 +623,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       loadScenario(name) {
         const scenario = deps.getScenarios().find((entry) => entry.name === name);
         if (!scenario) {
-          deps.notify.error(`Unknown scenario '${name}'`);
+          deps.notify.error(t("Unknown scenario '{name}'", { name }));
           return;
         }
         set({ selectedScenario: name, blackboard: recordToEntries(scenario.blackboard) });
@@ -632,20 +633,23 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       async saveScenario(name) {
         const trimmed = name.trim();
         if (trimmed === '') {
-          deps.notify.error('Scenario name must not be empty');
+          deps.notify.error(t('Scenario name must not be empty'));
           return false;
         }
         const blackboard = entriesToRecord(get().blackboard);
-        const ok = await updateScenarios((scenarios) => {
-          const entry: ScenarioJson = { name: trimmed, blackboard };
-          const index = scenarios.findIndex((s) => s.name === trimmed);
-          if (index < 0) {
-            return [...scenarios, entry];
-          }
-          const copy = scenarios.slice();
-          copy[index] = { ...scenarios[index], blackboard };
-          return copy;
-        }, `Scenario '${trimmed}' saved`);
+        const ok = await updateScenarios(
+          (scenarios) => {
+            const entry: ScenarioJson = { name: trimmed, blackboard };
+            const index = scenarios.findIndex((s) => s.name === trimmed);
+            if (index < 0) {
+              return [...scenarios, entry];
+            }
+            const copy = scenarios.slice();
+            copy[index] = { ...scenarios[index], blackboard };
+            return copy;
+          },
+          t("Scenario '{name}' saved", { name: trimmed }),
+        );
         if (ok) {
           set({ selectedScenario: trimmed });
         }
@@ -655,7 +659,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       async deleteScenario(name) {
         const ok = await updateScenarios(
           (scenarios) => scenarios.filter((s) => s.name !== name),
-          `Scenario '${name}' deleted`,
+          t("Scenario '{name}' deleted", { name }),
         );
         if (ok && get().selectedScenario === name) {
           set({ selectedScenario: undefined });

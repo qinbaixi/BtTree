@@ -11,6 +11,7 @@ import {
   validatePropertyValue,
   type CompiledProject,
   type CompiledProperty,
+  type ItemKind,
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
@@ -28,6 +29,14 @@ import { SubtreeSection } from './SubtreeSection';
 import { TreeOverview } from './TreeOverview';
 import { TypeDetails } from './TypeDetails';
 import styles from './PropertyPanel.module.css';
+import { t } from '../../i18n';
+
+/** Kind of the selected item, shown in the header. */
+const KIND_NAME: Record<ItemKind, string> = {
+  node: t('node'),
+  decorator: t('decorator'),
+  service: t('service'),
+};
 
 /**
  * Applies a change to the selected item as one undoable step labelled `label`.
@@ -70,7 +79,7 @@ export default function PropertyPanel() {
 
   if (inspected) {
     if (!project) {
-      return <p className={styles.hint}>Loading project...</p>;
+      return <p className={styles.hint}>{t('Loading project...')}</p>;
     }
     return (
       <TypeDetails kind={inspected.kind} name={inspected.name} project={project} root={root} />
@@ -80,7 +89,7 @@ export default function PropertyPanel() {
     return <TreeOverview project={project} root={root} />;
   }
   if (!project) {
-    return <p className={styles.hint}>Loading project...</p>;
+    return <p className={styles.hint}>{t('Loading project...')}</p>;
   }
   return <RunLock>{<ItemDetails selected={selected} project={project} />}</RunLock>;
 }
@@ -93,7 +102,7 @@ function RunLock({ children }: { children: ReactNode }) {
   }
   return (
     <>
-      <p className={styles.hint}>Read-only in run mode. Leave run mode to edit.</p>
+      <p className={styles.hint}>{t('Read-only in run mode. Leave run mode to edit.')}</p>
       <fieldset disabled className={styles.runLock}>
         {children}
       </fieldset>
@@ -124,27 +133,29 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
           {type.icon && <i className={`fa-solid fa-${type.icon}`} aria-hidden="true" />}
         </span>
         <span className={styles.typeName}>{item.type}</span>
-        <span className={styles.kind}>{selected.kind}</span>
+        <span className={styles.kind}>{KIND_NAME[selected.kind]}</span>
       </div>
-      {type.isInvalid && <p className={styles.error}>Error: Missing descriptor in project file</p>}
+      {type.isInvalid && (
+        <p className={styles.error}>{t('Error: Missing descriptor in project file')}</p>
+      )}
 
       <fieldset className={styles.fieldset}>
-        <legend>Base properties</legend>
-        <TextRow itemId={itemId} field="label" label="Label" value={item.label} />
-        <TextRow itemId={itemId} field="comment" label="Comment" value={item.comment} />
+        <legend>{t('Base properties')}</legend>
+        <TextRow itemId={itemId} field="label" label={t('Label')} value={item.label} />
+        <TextRow itemId={itemId} field="comment" label={t('Comment')} value={item.comment} />
 
         {selected.kind === 'decorator' && sub && (
           <>
             <CheckRow
               itemId={itemId}
               field="inverseCheckCondition"
-              label="Inverse check condition"
+              label={t('Inverse check condition')}
               checked={sub.inverseCheckCondition === true}
             />
             <CheckRow
               itemId={itemId}
               field="periodic"
-              label="Periodic check"
+              label={t('Periodic check')}
               checked={sub.periodic === true}
             />
           </>
@@ -154,13 +165,13 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
             <NumberRow
               itemId={itemId}
               field="timeBetweenTicks"
-              label="Time Between Ticks"
+              label={t('Time Between Ticks')}
               value={sub.timeBetweenTicks}
             />
             <NumberRow
               itemId={itemId}
               field="firstTickTime"
-              label="First Tick Time"
+              label={t('First Tick Time')}
               value={sub.firstTickTime}
             />
           </>
@@ -181,7 +192,7 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
 
       {!type.isInvalid && (!subtree || customProperties.length > 0) && (
         <fieldset className={styles.fieldset}>
-          <legend>Custom properties</legend>
+          <legend>{t('Custom properties')}</legend>
           {customProperties.map((prop) => (
             <PropertyField
               key={prop.name}
@@ -454,8 +465,8 @@ function PropertyField({ itemId, prop, properties, project }: PropertyFieldProps
         <button
           type="button"
           className={styles.reset}
-          title="Reset to default"
-          aria-label={`Reset ${prop.name}`}
+          title={t('Reset to default')}
+          aria-label={t('Reset {name}', { name: prop.name })}
           onClick={() => commit(null, `Reset ${prop.name}`)}
         >
           <i className="fa-solid fa-rotate-left" aria-hidden="true" />
@@ -463,7 +474,7 @@ function PropertyField({ itemId, prop, properties, project }: PropertyFieldProps
       )}
       {undeclared && (
         <p className={styles.fieldWarning} role="status">
-          {`'${String(effective)}' is not a declared blackboard key`}
+          {t("'{key}' is not a declared blackboard key", { key: String(effective) })}
         </p>
       )}
     </div>
