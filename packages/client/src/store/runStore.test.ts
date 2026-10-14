@@ -406,6 +406,24 @@ describe('runStore', () => {
     expect(h.store.getState().overrides).toEqual({});
   });
 
+  it('starts from the declared blackboard keys when there is no scenario', () => {
+    const declaredProject = compileProject({
+      ...PROJECT_FILE,
+      blackboard: [
+        { name: 'Ammo', type: 'number', default: 3 },
+        { name: 'Enemy', type: 'bool' },
+      ],
+    });
+    const h = setup(SIMPLE, { getProject: () => declaredProject }, []);
+    h.store.getState().enter();
+    expect(entriesToRecord(h.store.getState().blackboard)).toEqual({ Ammo: 3, Enemy: false });
+
+    // A scenario still wins over the declarations.
+    const withScenario = setup(SIMPLE, { getProject: () => declaredProject });
+    withScenario.store.getState().enter();
+    expect(entriesToRecord(withScenario.store.getState().blackboard)).toEqual({ Ammo: 2 });
+  });
+
   it('loads scenarios', () => {
     const h = setup();
     h.store.getState().enter();

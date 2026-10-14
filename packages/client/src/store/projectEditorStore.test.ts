@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renameType } from '@owlbt/shared';
 import { ApiError, type ProjectMeta } from '../lib/api';
 import { alertStore } from './alertStore';
 import {
@@ -486,5 +487,57 @@ describe('stableJson', () => {
     expect(stableJson({ b: 1, a: { d: 2, c: [{ z: 1, y: 2 }] } })).toBe(
       '{"a":{"c":[{"y":2,"z":1}],"d":2},"b":1}',
     );
+  });
+});
+
+describe('projectEditorStore renames', () => {
+  const rename = (store: ReturnType<typeof setup>['store'], from: string, to: string) =>
+    store.getState().apply(
+      'Rename type',
+      (draft) => {
+        renameType(draft, 'node', from, to);
+      },
+      undefined,
+      { renames: [{ kind: 'node', from, to }] },
+    );
+
+  it('records the net renames of a save', async () => {
+    const { store } = setup();
+    await store.getState().load(PATH);
+    rename(store, 'Wait', 'Pause');
+    rename(store, 'Pause', 'Sleep');
+    expect(store.getState().savedRenames).toEqual([]);
+    await store.getState().save();
+    expect(store.getState().savedRenames).toEqual([{ kind: 'node', from: 'Wait', to: 'Sleep' }]);
+
+    // A later save adds to them until they are cleared.
+    rename(store, 'Selector', 'Choose');
+    await store.getState().save();
+    expect(store.getState().savedRenames).toEqual([
+      { kind: 'node', from: 'Wait', to: 'Sleep' },
+      { kind: 'node', from: 'Selector', to: 'Choose' },
+    ]);
+    store.getState().clearSavedRenames();
+    expect(store.getState().savedRenames).toEqual([]);
+  });
+
+  it('forgets renames that were undone, and records the undo of a saved rename', async () => {
+    const { store } = setup();
+    await store.getState().load(PATH);
+    rename(store, 'Wait', 'Pause');
+    store.getState().undo();
+    await store.getState().save();
+    expect(store.getState().savedRenames).toEqual([]);
+
+    rename(store, 'Wait', 'Pause');
+    await store.getState().save();
+    store.getState().clearSavedRenames();
+    store.getState().undo();
+    await store.getState().save();
+    expect(store.getState().savedRenames).toEqual([{ kind: 'node', from: 'Pause', to: 'Wait' }]);
+
+    store.getState().redo();
+    await store.getState().reload();
+    expect(store.getState().draft?.nodes?.[1].name).toBe('Wait');
   });
 });
