@@ -314,6 +314,16 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
             <i className="fa-solid fa-flask" aria-hidden="true" /> Scenarios
             <span className={styles.count}>{draft.scenarios?.length ?? 0}</span>
           </button>
+          <button
+            type="button"
+            className={`${styles.navRow} ${selection?.view === 'blackboard' ? styles.rowSelected : ''}`}
+            onClick={() => select({ view: 'blackboard' })}
+          >
+            <i className="fa-solid fa-table-list" aria-hidden="true" /> Blackboard
+            <span className={styles.count}>
+              {Array.isArray(draft.blackboard) ? draft.blackboard.length : 0}
+            </span>
+          </button>
         </div>
       </div>
     </aside>

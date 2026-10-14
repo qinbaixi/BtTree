@@ -1,4 +1,5 @@
 import {
+  blackboardKeyStartValue,
   createRun,
   normalizeLoops,
   type CompiledProject,
@@ -365,10 +366,19 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         const scenarios = deps.getScenarios();
         if (state.selectedScenario === undefined && state.blackboard.length === 0) {
           const first = scenarios[0];
+          const declared = deps.getProject()?.blackboard ?? [];
           if (first) {
             set({
               selectedScenario: first.name,
               blackboard: recordToEntries(first.blackboard),
+            });
+          } else if (declared.length > 0) {
+            // Without scenarios the run starts from the declared keys and their defaults.
+            set({
+              blackboard: declared.map((key) => ({
+                key: key.name,
+                value: blackboardKeyStartValue(key),
+              })),
             });
           }
         }

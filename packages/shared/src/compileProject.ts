@@ -1,3 +1,4 @@
+import { compileBlackboard } from './blackboard';
 import type {
   CompiledItemType,
   CompiledProject,
@@ -229,11 +230,16 @@ function compileKind(
  */
 export function compileProject(file: ProjectFile): CompiledProject {
   const customTypes = file.types ?? {};
-  return {
+  const compiled: CompiledProject = {
     nodes: compileKind('node', file.nodes, customTypes),
     decorators: compileKind('decorator', file.decorators, customTypes),
     services: compileKind('service', file.services, customTypes),
   };
+  const blackboard = compileBlackboard(file);
+  if (blackboard) {
+    compiled.blackboard = blackboard;
+  }
+  return compiled;
 }
 
 /**

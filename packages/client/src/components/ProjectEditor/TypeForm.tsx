@@ -16,11 +16,13 @@ import {
   type ProjectFile,
 } from '@owlbt/shared';
 import { alerts } from '../../store/alertStore';
+import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
 import { IconPicker } from './IconPicker';
 import { unknownPlaceholders } from './issues';
 import { PropertyTable, runEdit, type ProjectRecipe } from './PropertyTable';
 import { SimulationSection } from './SimulationSection';
+import { confirmLeaveProject } from './ReferenceUpdateBanner';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
@@ -114,6 +116,7 @@ export interface TypeFormProps {
 /** Editor of one node, decorator or service type: identity, appearance, description, properties and export. */
 export function TypeForm({ kind, name }: TypeFormProps) {
   const draft = useProjectEditorStore((state) => state.draft);
+  const projectPath = useProjectEditorStore((state) => state.projectPath);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [iconOpen, setIconOpen] = useState(false);
 
@@ -165,6 +168,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
         updated = renameType(d, kind, name, next);
       },
       { view: 'type', kind, name: next },
+      { renames: [{ kind, from: name, to: next }] },
     );
     if (changed && updated > 0) {
       alerts.success(`Renamed; updated ${updated} base reference${updated === 1 ? '' : 's'}`);
@@ -479,6 +483,19 @@ export function TypeForm({ kind, name }: TypeFormProps) {
       </details>
 
       <SimulationSection kind={kind} name={name} desc={desc} isComposite={isComposite} />
+
+      {projectPath !== undefined && desc.isAbstract !== true && (
+        <section className={styles.section} aria-label="Usages">
+          <div className={styles.fieldLabel}>Usages</div>
+          <ProjectUsages
+            key={`${kind}:${name}`}
+            path={projectPath}
+            kind={kind}
+            name={name}
+            beforeOpen={confirmLeaveProject}
+          />
+        </section>
+      )}
 
       {unknown.length > 0 && (
         <section className={styles.section} aria-label="Unknown fields">

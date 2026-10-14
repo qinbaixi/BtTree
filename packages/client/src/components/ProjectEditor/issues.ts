@@ -4,6 +4,7 @@ import type { ProjectSelection } from '../../store/projectEditorStore';
 
 const LIST_PATH = /^(nodes|decorators|services)\[(\d+)\]/;
 const SCENARIO_PATH = /^scenarios\[/;
+const BLACKBOARD_PATH = /^blackboard(?:\[(\d+)\])?/;
 const CUSTOM_PATH = /^types\.(.+)\.(type|pattern)$/;
 
 const KIND_OF_KEY: Record<'nodes' | 'decorators' | 'services', ItemKind> = {
@@ -38,6 +39,12 @@ export function selectionForPath(draft: ProjectFile, path: string): ProjectSelec
   }
   if (SCENARIO_PATH.test(path)) {
     return { view: 'scenarios' };
+  }
+  const blackboard = BLACKBOARD_PATH.exec(path);
+  if (blackboard) {
+    const index = blackboard[1];
+    const name = index === undefined ? undefined : draft.blackboard?.[Number(index)]?.name;
+    return typeof name === 'string' ? { view: 'blackboard', name } : { view: 'blackboard' };
   }
   return undefined;
 }

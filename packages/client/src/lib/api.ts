@@ -1,4 +1,4 @@
-import type { TreeNodeJson } from '@owlbt/shared';
+import type { RefKind, RefRename, TreeNodeJson, TreeUsage } from '@owlbt/shared';
 
 /** A failed request. `message` is the server's text (or its JSON `message`) when it sent one. */
 export class ApiError extends Error {
@@ -228,4 +228,59 @@ export async function runScenarioTests(
 export async function trustPlugin(treePath: string): Promise<PluginState> {
   const response = await request('/api/plugin/trust', postJson({ path: treePath }));
   return (await response.json()) as PluginState;
+}
+
+export interface FileUsages {
+  /** Absolute path of the tree file. */
+  path: string;
+  relPath: string;
+  usages: TreeUsage[];
+}
+
+export interface ProjectUsages {
+  projectDir: string;
+  truncated: boolean;
+  files: FileUsages[];
+  errors: Array<{ path: string; relPath: string; error: string }>;
+}
+
+/** Where a type or blackboard key is used in the tree files of the project that contains `path`. */
+export async function fetchUsages(
+  path: string,
+  kind: RefKind,
+  name: string,
+): Promise<ProjectUsages> {
+  const response = await request(`/api/usages?${new URLSearchParams({ path, kind, name })}`);
+  return (await response.json()) as ProjectUsages;
+}
+
+export interface ChangedTree {
+  path: string;
+  relPath: string;
+  count: number;
+  skipped?: boolean;
+}
+
+export interface UpdateReferencesResult {
+  projectDir: string;
+  truncated: boolean;
+  dryRun: boolean;
+  changed: ChangedTree[];
+  errors: Array<{ path: string; relPath: string; error: string }>;
+}
+
+/**
+ * Rewrites the tree files of the project for renamed types and blackboard keys. With `dryRun` the
+ * files are only counted; paths in `skip` are never written.
+ */
+export async function updateReferences(
+  path: string,
+  renames: readonly RefRename[],
+  options: { dryRun?: boolean; skip?: readonly string[] } = {},
+): Promise<UpdateReferencesResult> {
+  const response = await request(
+    '/api/references/rename',
+    postJson({ path, renames, dryRun: options.dryRun === true, skip: options.skip ?? [] }),
+  );
+  return (await response.json()) as UpdateReferencesResult;
 }

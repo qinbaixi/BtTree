@@ -28,9 +28,16 @@ import { getPathLastSegment, registerMru } from '../lib/mru';
 import { alertStore, alerts } from '../store/alertStore';
 import { projectStore, useProjectStore } from '../store/projectStore';
 import { runStore, useRunStore } from '../store/runStore';
-import { selectActiveTab, selectAnyDirty, tabsStore, useTabsStore } from '../store/tabsStore';
+import {
+  samePath,
+  selectActiveTab,
+  selectAnyDirty,
+  tabsStore,
+  useTabsStore,
+} from '../store/tabsStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
+import { useDirtyTabsBeacon, useSelectFromUrl } from './useTreeLinks';
 
 function editorUrl(treePath: string): string {
   return `/tree?${new URLSearchParams({ path: treePath }).toString()}`;
@@ -42,6 +49,9 @@ export default function Editor() {
   const navigate = useNavigate();
   const activeTab = useTabsStore(selectActiveTab);
   const live = useTabsStore((state) => state.live);
+  const select = searchParams.get('select') ?? undefined;
+
+  useDirtyTabsBeacon();
 
   // While the editor is shown the tree store holds the active tab (see tabsStore).
   useEffect(() => () => tabsStore.getState().detach(), []);
@@ -78,11 +88,17 @@ export default function Editor() {
       </div>
     );
   }
-  // Keyed by path so that switching tabs starts from a fresh canvas; the tab's state is restored.
-  return <EditorPage key={activeTab.id} treePath={activeTab.path} />;
+  // Keyed by tab so that switching tabs starts from a fresh canvas; the tab's state is restored.
+  return (
+    <EditorPage
+      key={activeTab.id}
+      treePath={activeTab.path}
+      select={samePath(activeTab.path, treePath) ? select : undefined}
+    />
+  );
 }
 
-function EditorPage({ treePath }: { treePath: string }) {
+function EditorPage({ treePath, select }: { treePath: string; select?: string }) {
   const project = useProjectStore((state) => state.project);
   const dirty = useTreeStore((state) => state.dirty);
   const anyDirty = useTabsStore(selectAnyDirty);
@@ -120,6 +136,8 @@ function EditorPage({ treePath }: { treePath: string }) {
       runStore.getState().exit();
     };
   }, [treePath]);
+  // After the load effect: selects the item named in the URL (links from "Find usages").
+  useSelectFromUrl(select);
 
   // Warn about types used by the tree but missing from the project (after each load and reload).
   useEffect(() => {

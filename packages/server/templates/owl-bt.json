@@ -324,5 +324,36 @@
                 }
             ]
         }
+    ],
+    "blackboard": [
+        {
+            "name": "Target",
+            "type": "string",
+            "default": "",
+            "description": "当前目标"
+        },
+        {
+            "name": "Enemy",
+            "type": "string",
+            "default": "",
+            "description": "视野内的敌人，没有时为空"
+        },
+        {
+            "name": "Waypoint",
+            "type": "string",
+            "default": "",
+            "description": "下一个巡逻点"
+        },
+        {
+            "name": "PatrolPoints",
+            "type": "any",
+            "description": "巡逻点列表"
+        },
+        {
+            "name": "PatrolIndex",
+            "type": "number",
+            "default": 0,
+            "description": "当前巡逻点序号"
+        }
     ]
 }

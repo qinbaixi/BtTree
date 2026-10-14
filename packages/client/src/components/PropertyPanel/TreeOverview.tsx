@@ -268,7 +268,7 @@ function ProblemButton({ problem }: { problem: TreeProblem }) {
   return (
     <button
       type="button"
-      className={styles.problem}
+      className={`${styles.problem} ${problem.severity === 'warning' ? styles.problemWarning : ''}`}
       title={problem.path}
       onClick={() => {
         const selection = selectionFor(problem.kind, problem.nodeId, problem.itemId);

@@ -13,6 +13,10 @@
 - 树编辑器支持拖放：拖动节点到其他节点的前面 / 后面或组合节点内部来移动子树，拖动装饰器 / 服务调整顺序或移到其他节点；画布显示放置位置提示，非法位置（根节点、自身或子孙节点、非组合节点）不可放置，一次拖放为一步撤销，运行模式下禁用。
 - 树编辑器支持折叠 / 展开子树：卡片底部的折叠按钮、`Space` 快捷键以及「Collapse all」/「Expand all」命令；折叠后显示隐藏的节点数「+N」，状态按树保存在浏览器本地，不写入树文件；选中、导航、搜索或运行进入折叠分支时自动展开。
 - 树内搜索（`Ctrl+F`）：按类型、标签、注释和属性值匹配节点、装饰器和服务，显示「当前 / 总数」并在画布上高亮，`Enter` / `Shift+Enter` 逐个跳转，`Esc` 关闭。
+- 查找项目范围的用法：树编辑器属性面板查看类型时、项目编辑器的类型表单和黑板视图中新增「Find usages in project」，列出项目所有树中使用该类型（或在 `blackboardKey` 属性中引用该黑板键）的位置，点击即打开对应的树并选中该项；树编辑器地址新增 `select` 参数。
+- 批量重命名：在项目编辑器中重命名类型或黑板键并保存后，可一键「Also update N tree files」改写所有树文件（保留缩进、换行和 BOM），在浏览器中打开且有未保存修改的树会被跳过。新增接口 `GET /api/usages` 与 `POST /api/references/rename`。
+- 黑板键声明：`owl-bt.json` 新增可选的顶层 `blackboard`（`name`、`type`、`default`、`description`，未知字段原样保留，旧项目不受影响）；项目编辑器新增「Blackboard」视图并校验重复、不合法的键名；类型为 `blackboardKey` 的属性在属性面板中补全已声明的键，值不是已声明的键时给出警告；运行模式没有场景时用声明的键和默认值作为起始黑板，并可「Add declared keys」。默认模板和 `samples/simulation` 已声明示例键。
+- 工作区扫描现在也能识别带 UTF-8 BOM 的树文件。
 - 运行模式支持后退一步：工具条新增「Back」按钮（`Shift+F10`），撤销最近一个 tick，节点状态、黑板、手动节点、随机数和循环轮数都回到上一个 tick，之后再 Step / Play 会从该状态继续执行。
 - 场景测试：新增 `owlbt test [path]` 命令，不启动服务即可用模拟引擎批量运行「树 × 场景」并检查期望，支持 `--json`、`--junit <file>`、`--tree`、`--scenario`；退出码 0 通过、1 失败、2 配置错误，适合 CI。
 - 场景新增可选字段 `trees`、`maxTicks`、`seed`、`manual` 和 `expect`（`result`、`ticks`、`blackboard`），由 `validateProjectFile` 校验；旧项目不受影响，未知字段原样保留。`samples/simulation` 的场景已加上期望。

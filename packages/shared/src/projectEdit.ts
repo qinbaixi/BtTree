@@ -1,3 +1,4 @@
+import { validateBlackboardDeclarations } from './blackboard';
 import { resolveProperty } from './compileProject';
 import { validatePropertyValue } from './validation';
 import { validateSimulate } from './runtime/simulateValidation';
@@ -572,6 +573,7 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
     }
   });
 
+  issues.push(...validateBlackboardDeclarations(file));
   return issues;
 }
 
