@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+## [0.3.0] - 2026-10-15
+
+新增多标签页、拖放编辑、折叠子树、树内搜索、子树引用、项目范围的查找用法与批量重命名、黑板键声明、`owlbt test` 场景测试和中文界面；桌面版可从 GitHub Releases 自动更新，运行模式支持后退一步。
+
 ### 新增
 
 - 界面中文化：编辑器、首页、项目编辑器、属性面板和运行模式支持中文与英文两种界面语言，默认跟随浏览器语言，可在「View」菜单、命令面板或首页切换并记住选择。项目校验、导出和模拟引擎产生的提示信息仍为英文。
@@ -81,6 +85,7 @@
 - 保存请求体上限提高到 50 MB；服务端异常不再导致进程退出。
 - 保存树文件时保留原文件的缩进、换行与 BOM；无效 JSON 返回清晰的错误信息。
 
-[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.2.0...HEAD
+[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/qinbaixi/BtTree/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/qinbaixi/BtTree/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/qinbaixi/BtTree/releases/tag/v0.1.0
