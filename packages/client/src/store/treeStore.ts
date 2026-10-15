@@ -18,6 +18,7 @@ import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { fetchTree, saveTree } from '../lib/api';
 import { alerts } from './alertStore';
+import { t } from '../i18n';
 
 enablePatches();
 
@@ -32,6 +33,23 @@ export interface HistoryEntry {
 }
 
 export type SelectionArg = Selection | ((draft: TreeNode) => Selection | undefined);
+
+/** The data fields of the tree state (everything but the actions). */
+export type TreeStateData = {
+  [
+    K in keyof TreeState as TreeState[K] extends (...args: never[]) => unknown ? never : K
+  ]: TreeState[K];
+};
+
+/**
+ * Copy of a tree store's state, including its saved marker. Editor tabs keep one per inactive tree
+ * and put it back with `restore`.
+ */
+export interface TreeSnapshot {
+  data: TreeStateData;
+  /** Undo-stack top when the tree was loaded or last saved (see `dirty`). */
+  savedTop?: HistoryEntry;
+}
 
 export interface TreeState {
   treePath?: string;
@@ -62,6 +80,10 @@ export interface TreeState {
   /** True when no item of the tree is invalid for the project (always true without a tree). */
   isValid(project: CompiledProject): boolean;
   getIdGen(): IdGen;
+  /** Copies the current state (for editor tabs). */
+  snapshot(): TreeSnapshot;
+  /** Replaces the state by a snapshot. A pending load is cancelled. */
+  restore(snapshot: TreeSnapshot): void;
 }
 
 export interface TreeStoreDeps {
@@ -135,7 +157,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
           }
           const message = errorText(err);
           set({ loading: false, error: message });
-          alerts.error(`Failed to load tree. Error = '${message}'`);
+          alerts.error(t("Failed to load tree. Error = '{message}'", { message }));
         }
       },
 
@@ -224,7 +246,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
       async save() {
         const { treePath, root } = get();
         if (!treePath || !root) {
-          alerts.error('Unable to save before the tree is loaded');
+          alerts.error(t('Unable to save before the tree is loaded'));
           return false;
         }
         const savedAt = topOf(get().undoStack);
@@ -237,7 +259,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         savedTop = savedAt;
         // Edits made while the request ran stay unsaved.
         set({ dirty: topOf(get().undoStack) !== savedTop });
-        alerts.success('Done');
+        alerts.success(t('Done'));
         return true;
       },
 
@@ -248,6 +270,27 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
       getIdGen() {
         return deps.idGen;
+      },
+
+      snapshot() {
+        const data: Record<string, unknown> = {};
+        for (const [key, value] of Object.entries(get())) {
+          if (typeof value !== 'function') {
+            data[key] = value;
+          }
+        }
+        return { data: data as TreeStateData, savedTop };
+      },
+
+      restore(snapshot) {
+        loadToken++;
+        savedTop = snapshot.savedTop;
+        // version keeps increasing so that views see a change; loadCount is not a new load.
+        set((state) => ({
+          ...snapshot.data,
+          version: Math.max(state.version, snapshot.data.version) + 1,
+          loadCount: state.loadCount,
+        }));
       },
     };
   });

@@ -12,6 +12,7 @@ import {
 } from '../../store/runStore';
 import { finishedLabel, nodeDisplayName, passLabel, statusLabel } from './runHelpers';
 import styles from './RunMode.module.css';
+import { t } from '../../i18n';
 
 const STATUS_CLASS: Record<ReturnType<typeof statusLabel>, string> = {
   Ready: styles.statusReady,
@@ -31,7 +32,10 @@ export default function RunToolbar() {
   const canStepBack = useRunStore(selectCanStepBack);
   const tickNumber = useRunStore((state) => state.history[state.viewIndex]?.tick ?? 0);
   const lastTick = useRunStore((state) => state.history[state.history.length - 1]?.tick ?? 0);
-  const root = useTreeStore((state) => state.root);
+  const treeRoot = useTreeStore((state) => state.root);
+  const runRoot = useRunStore((state) => state.runRoot);
+  // The pending node may be in a referenced tree: names come from the tree that runs.
+  const root = runRoot ?? treeRoot;
 
   const run = runStore.getState();
   const latest = useRunStore((state) => state.history[state.history.length - 1]);
@@ -44,52 +48,52 @@ export default function RunToolbar() {
 
   return (
     <div className={styles.toolbarWrap}>
-      <div className={styles.toolbar} role="toolbar" aria-label="Run controls">
+      <div className={styles.toolbar} role="toolbar" aria-label={t('Run controls')}>
         <button
           type="button"
           className={styles.primary}
           onClick={() => run.play()}
           disabled={playing || pending !== undefined}
-          title={finished ? 'Replay (F8)' : 'Play (F8)'}
+          title={finished ? t('Replay (F8)') : t('Play (F8)')}
         >
           <i className="fa-solid fa-play" aria-hidden="true" />
-          {finished ? 'Replay' : 'Play'}
+          {finished ? t('Replay') : t('Play')}
         </button>
         <button
           type="button"
           className={`${styles.pause} ${playing ? styles.pauseActive : ''}`}
           onClick={() => run.pause()}
           disabled={!playing}
-          title="Pause (F8)"
+          title={t('Pause (F8)')}
         >
           <i className="fa-solid fa-pause" aria-hidden="true" />
-          Pause
+          {t('Pause')}
         </button>
         <button
           type="button"
           onClick={() => run.stepBack()}
           disabled={!canStepBack}
-          title="Step back (Shift+F10)"
+          title={t('Step back (Shift+F10)')}
         >
           <i className="fa-solid fa-backward-step" aria-hidden="true" />
-          Back
+          {t('Back')}
         </button>
         <button
           type="button"
           onClick={() => run.step()}
           disabled={finished || pending !== undefined}
-          title="Step (F10)"
+          title={t('Step (F10)')}
         >
           <i className="fa-solid fa-forward-step" aria-hidden="true" />
-          Step
+          {t('Step')}
         </button>
-        <button type="button" onClick={() => run.reset()} title="Reset">
+        <button type="button" onClick={() => run.reset()} title={t('Reset')}>
           <i className="fa-solid fa-rotate-left" aria-hidden="true" />
-          Reset
+          {t('Reset')}
         </button>
 
         <label className={styles.speed}>
-          Speed
+          {t('Speed')}
           <input
             type="range"
             min={MIN_SPEED}
@@ -97,13 +101,16 @@ export default function RunToolbar() {
             step={0.5}
             value={speed}
             onChange={(event) => run.setSpeed(Number(event.target.value))}
-            aria-label="Speed in ticks per second"
+            aria-label={t('Speed in ticks per second')}
           />
-          <span className={styles.speedValue}>{speed} t/s</span>
+          <span className={styles.speedValue}>{t('{speed} t/s', { speed })}</span>
         </label>
 
-        <label className={styles.loops} title="Number of times the tree runs. 0 = loop forever.">
-          Loops
+        <label
+          className={styles.loops}
+          title={t('Number of times the tree runs. 0 = loop forever.')}
+        >
+          {t('Loops')}
           <input
             type="number"
             className={styles.loopsInput}
@@ -126,12 +133,12 @@ export default function RunToolbar() {
                 setLoopsText(undefined);
               }
             }}
-            aria-label="Loops"
+            aria-label={t('Loops')}
           />
         </label>
 
         <span className={styles.tick} data-testid="run-tick">
-          Tick {viewed?.tick ?? 0}
+          {t('Tick {tick}', { tick: viewed?.tick ?? 0 })}
         </span>
         {pass && (
           <span className={styles.passInfo} data-testid="run-pass">
@@ -139,7 +146,7 @@ export default function RunToolbar() {
           </span>
         )}
         <span className={`${styles.status} ${STATUS_CLASS[status]}`} data-testid="run-status">
-          {status}
+          {t(status)}
         </span>
         {done && (
           <span className={styles.passInfo} data-testid="run-finished">
@@ -156,7 +163,7 @@ export default function RunToolbar() {
               onClick={() => run.resolveManual('success')}
             >
               <i className="fa-solid fa-check" aria-hidden="true" />
-              Succeed
+              {t('Succeed')}
             </button>
             <button
               type="button"
@@ -164,16 +171,16 @@ export default function RunToolbar() {
               onClick={() => run.resolveManual('failure')}
             >
               <i className="fa-solid fa-xmark" aria-hidden="true" />
-              Fail
+              {t('Fail')}
             </button>
           </span>
         )}
       </div>
       {!live && (
         <div className={styles.banner} role="status">
-          Viewing tick {tickNumber} of {lastTick}
+          {t('Viewing tick {tick} of {last}', { tick: tickNumber, last: lastTick })}
           <button type="button" className={styles.link} onClick={() => run.backToLive()}>
-            back to live
+            {t('back to live')}
           </button>
         </div>
       )}

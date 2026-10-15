@@ -3,18 +3,20 @@ import type { CompiledProject, ItemKind, TreeNode } from '@owlbt/shared';
 import { fetchWorkspace } from '../../lib/api';
 import { getPathLastSegment } from '../../lib/mru';
 import { inspectStore } from '../../store/inspectStore';
+import { useSubtreeStore } from '../../store/subtreeStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import { focusNode } from '../TreeCanvas/viewportStore';
 import { selectionFor, summarizeTree, type TreeProblem, type UsedType } from './treeInspect';
 import styles from './PropertyPanel.module.css';
+import { t } from '../../i18n';
 
 /** Most problems listed in the panel; the rest is counted. */
 export const PROBLEM_LIMIT = 50;
 
 const USED_GROUPS: { kind: ItemKind; title: string }[] = [
-  { kind: 'node', title: 'Nodes' },
-  { kind: 'decorator', title: 'Decorators' },
-  { kind: 'service', title: 'Services' },
+  { kind: 'node', title: t('Nodes') },
+  { kind: 'decorator', title: t('Decorators') },
+  { kind: 'service', title: t('Services') },
 ];
 
 /** Directory that holds a tree file, for either separator style. */
@@ -66,7 +68,7 @@ export function TreeOverview({ project, root }: TreeOverviewProps) {
   const loading = useTreeStore((state) => state.loading);
   const error = useTreeStore((state) => state.error);
 
-  const fileName = treePath ? getPathLastSegment(treePath) : 'Tree';
+  const fileName = treePath ? getPathLastSegment(treePath) : t('Tree');
   const header = (
     <div className={styles.header} style={{ '--item-color': 'var(--accent)' } as CSSProperties}>
       <span className={styles.badge}>
@@ -75,7 +77,7 @@ export function TreeOverview({ project, root }: TreeOverviewProps) {
       <span className={styles.typeName} title={treePath}>
         {fileName}
       </span>
-      <span className={styles.kind}>TREE</span>
+      <span className={styles.kind}>{t('TREE')}</span>
     </div>
   );
 
@@ -84,7 +86,11 @@ export function TreeOverview({ project, root }: TreeOverviewProps) {
       <div className={styles.details}>
         {header}
         <p className={styles.hint}>
-          {error ? `Failed to load tree: ${error}` : loading ? 'Loading tree...' : 'No tree loaded'}
+          {error
+            ? t('Failed to load tree: {error}', { error })
+            : loading
+              ? t('Loading tree...')
+              : t('No tree loaded')}
         </p>
       </div>
     );
@@ -97,9 +103,9 @@ export function TreeOverview({ project, root }: TreeOverviewProps) {
       {project ? (
         <OverviewBody root={root} project={project} />
       ) : (
-        <p className={styles.muted}>Loading project...</p>
+        <p className={styles.muted}>{t('Loading project...')}</p>
       )}
-      <p className={styles.muted}>Select a node to edit its properties</p>
+      <p className={styles.muted}>{t('Select a node to edit its properties')}</p>
     </div>
   );
 }
@@ -153,15 +159,15 @@ function FileSection({ treePath, dirty }: FileSectionProps) {
 
   return (
     <fieldset className={styles.fieldset}>
-      <legend>File</legend>
+      <legend>{t('File')}</legend>
       <div className={styles.pathRow}>
         <p className={styles.path}>{treePath}</p>
         {navigator.clipboard && (
           <button
             type="button"
             className={styles.iconButton}
-            title={copied ? 'Copied' : 'Copy path'}
-            aria-label="Copy path"
+            title={copied ? t('Copied') : t('Copy path')}
+            aria-label={t('Copy path')}
             onClick={() => void copyPath()}
           >
             <i className={`fa-solid ${copied ? 'fa-check' : 'fa-copy'}`} aria-hidden="true" />
@@ -172,21 +178,21 @@ function FileSection({ treePath, dirty }: FileSectionProps) {
         {dirty ? (
           <>
             <span className={styles.dirtyDot} aria-hidden="true" />
-            Unsaved changes
+            {t('Unsaved changes')}
           </>
         ) : (
-          'All changes saved'
+          t('All changes saved')
         )}
       </p>
       {projectLoading && (
         <div className={styles.metaRow}>
-          <span className={styles.metaLabel}>Project</span>
-          <span className={styles.metaValue}>Loading…</span>
+          <span className={styles.metaLabel}>{t('Project')}</span>
+          <span className={styles.metaValue}>{t('Loading…')}</span>
         </div>
       )}
       {projectPath && (
         <div className={styles.metaRow}>
-          <span className={styles.metaLabel}>Project</span>
+          <span className={styles.metaLabel}>{t('Project')}</span>
           <span className={styles.metaValue} title={projectPath}>
             {projectPath}
           </span>
@@ -202,14 +208,18 @@ interface OverviewBodyProps {
 }
 
 function OverviewBody({ root, project }: OverviewBodyProps) {
-  const summary = useMemo(() => summarizeTree(root, project), [root, project]);
+  const subtreeProblems = useSubtreeStore((state) => state.problems);
+  const summary = useMemo(
+    () => summarizeTree(root, project, subtreeProblems),
+    [root, project, subtreeProblems],
+  );
   const stats: { label: string; value: number }[] = [
-    { label: 'Nodes', value: summary.nodes },
-    { label: 'Composite', value: summary.composite },
-    { label: 'Actions', value: summary.actions },
-    { label: 'Decorators', value: summary.decorators },
-    { label: 'Services', value: summary.services },
-    { label: 'Max depth', value: summary.maxDepth },
+    { label: t('Nodes'), value: summary.nodes },
+    { label: t('Composite'), value: summary.composite },
+    { label: t('Actions'), value: summary.actions },
+    { label: t('Decorators'), value: summary.decorators },
+    { label: t('Services'), value: summary.services },
+    { label: t('Max depth'), value: summary.maxDepth },
   ];
   const shownProblems = summary.problems.slice(0, PROBLEM_LIMIT);
   const hiddenProblems = summary.problems.length - shownProblems.length;
@@ -229,9 +239,9 @@ function OverviewBody({ root, project }: OverviewBodyProps) {
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend>{`Problems: ${summary.problems.length}`}</legend>
+        <legend>{t('Problems: {count}', { count: summary.problems.length })}</legend>
         {summary.problems.length === 0 ? (
-          <p className={styles.success}>No problems found</p>
+          <p className={styles.success}>{t('No problems found')}</p>
         ) : (
           <>
             <ul className={styles.problemList}>
@@ -241,15 +251,17 @@ function OverviewBody({ root, project }: OverviewBodyProps) {
                 </li>
               ))}
             </ul>
-            {hiddenProblems > 0 && <p className={styles.more}>{`+${hiddenProblems} more`}</p>}
+            {hiddenProblems > 0 && (
+              <p className={styles.more}>{t('+{count} more', { count: hiddenProblems })}</p>
+            )}
           </>
         )}
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend>Types used</legend>
+        <legend>{t('Types used')}</legend>
         {USED_GROUPS.every((group) => summary.usedTypes[group.kind].length === 0) && (
-          <p className={styles.muted}>No types used</p>
+          <p className={styles.muted}>{t('No types used')}</p>
         )}
         {USED_GROUPS.map((group) => (
           <UsedTypesGroup
@@ -268,7 +280,7 @@ function ProblemButton({ problem }: { problem: TreeProblem }) {
   return (
     <button
       type="button"
-      className={styles.problem}
+      className={`${styles.problem} ${problem.severity === 'warning' ? styles.problemWarning : ''}`}
       title={problem.path}
       onClick={() => {
         const selection = selectionFor(problem.kind, problem.nodeId, problem.itemId);
@@ -306,7 +318,11 @@ function UsedTypesGroup({ title, kind, types }: UsedTypesGroupProps) {
               className={[styles.chip, styles.chipButton, used.missing ? styles.chipMissing : '']
                 .filter(Boolean)
                 .join(' ')}
-              title={used.missing ? `${used.name} is missing from the project file` : used.name}
+              title={
+                used.missing
+                  ? t('{name} is missing from the project file', { name: used.name })
+                  : used.name
+              }
               onClick={() => inspectStore.getState().inspect(kind, used.name)}
             >
               {used.name}

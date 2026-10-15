@@ -74,6 +74,20 @@
   background: var(--surface-hover);
 }
 
+.languageSelect {
+  flex: 0 0 auto;
+  height: 36px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.languageSelect:hover {
+  color: var(--text);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

@@ -10,6 +10,7 @@ import {
   type TickResult,
   type TreeNode,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 
 export type ValueType = 'number' | 'string' | 'boolean' | 'null';
 
@@ -118,14 +119,19 @@ export function statusLabel(viewed: TickResult | undefined): RunStatusLabel {
 /** "Run 2/5" / "Run 3/∞"; undefined when the tree runs only once. */
 export function passLabel(tick: TickResult | undefined): string | undefined {
   if (!tick || tick.passes === 1) return undefined;
-  return `Run ${tick.pass}/${tick.passes === 0 ? '∞' : tick.passes}`;
+  return t('Run {pass}/{passes}', {
+    pass: tick.pass,
+    passes: tick.passes === 0 ? '∞' : tick.passes,
+  });
 }
 
 /** "Finished after 5 runs: Success"; undefined unless a looped run has finished. */
 export function finishedLabel(tick: TickResult | undefined): string | undefined {
   if (!tick?.finished || tick.passes === 1) return undefined;
-  const result = tick.finished === 'success' ? 'Success' : 'Failure';
-  return `Finished after ${tick.pass} ${tick.pass === 1 ? 'run' : 'runs'}: ${result}`;
+  const result = tick.finished === 'success' ? t('Success') : t('Failure');
+  return tick.pass === 1
+    ? t('Finished after 1 run: {result}', { result })
+    : t('Finished after {count} runs: {result}', { count: tick.pass, result });
 }
 
 /** Parses the text of a blackboard value input for the given type. Undefined = ignore the input. */

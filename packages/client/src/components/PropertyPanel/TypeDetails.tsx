@@ -9,18 +9,20 @@ import {
 } from '@owlbt/shared';
 import { openProjectEditorFromTree } from '../../commands/coreCommands';
 import { inspectStore } from '../../store/inspectStore';
-import { treeStore } from '../../store/treeStore';
+import { treeStore, useTreeStore } from '../../store/treeStore';
+import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
 import { focusNode } from '../TreeCanvas/viewportStore';
 import { findTypeUsages, selectionFor, typesOfKind, type TypeUsage } from './treeInspect';
 import styles from './PropertyPanel.module.css';
+import { t } from '../../i18n';
 
 /** Most usages listed in the panel; the rest is counted. */
 export const USAGE_LIMIT = 20;
 
 const KIND_LABEL: Record<ItemKind, string> = {
-  node: 'NODE',
-  decorator: 'DECORATOR',
-  service: 'SERVICE',
+  node: t('NODE'),
+  decorator: t('DECORATOR'),
+  service: t('SERVICE'),
 };
 
 const PLACEHOLDER_SPLIT = /(\{\{[^{}]*\}\})/;
@@ -36,6 +38,7 @@ export interface TypeDetailsProps {
 export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
   const type = getItemType(project, kind, name);
   const usages = useMemo(() => findTypeUsages(root, kind, name), [root, kind, name]);
+  const treePath = useTreeStore((state) => state.treePath);
 
   return (
     <div className={styles.details}>
@@ -48,26 +51,39 @@ export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
         </span>
         <span className={styles.headTags}>
           {kind === 'node' && !type.isInvalid && (
-            <span className={styles.chip}>{type.isComposite ? 'COMPOSITE' : 'ACTION'}</span>
+            <span className={styles.chip}>{type.isComposite ? t('COMPOSITE') : t('ACTION')}</span>
           )}
           <span className={styles.kind}>{KIND_LABEL[kind]}</span>
         </span>
       </div>
 
       {type.isInvalid ? (
-        <p className={styles.error}>This type is no longer in the project file</p>
+        <p className={styles.error}>{t('This type is no longer in the project file')}</p>
       ) : (
         <TypeBody kind={kind} type={type} project={project} />
       )}
 
       <fieldset className={styles.fieldset}>
-        <legend>{`Used in this tree: ${usages.length}`}</legend>
+        <legend>{t('Used in this tree: {count}', { count: usages.length })}</legend>
         {usages.length === 0 ? (
-          <p className={styles.muted}>Not used in this tree</p>
+          <p className={styles.muted}>{t('Not used in this tree')}</p>
         ) : (
           <UsageList kind={kind} usages={usages} />
         )}
       </fieldset>
+
+      {treePath !== undefined && (
+        <fieldset className={styles.fieldset}>
+          <legend>{t('Used in the project')}</legend>
+          <ProjectUsages
+            key={`${kind}:${name}`}
+            path={treePath}
+            kind={kind}
+            name={name}
+            beforeOpen={confirmLeaveTree}
+          />
+        </fieldset>
+      )}
 
       <div className={styles.footer}>
         <button
@@ -75,18 +91,30 @@ export function TypeDetails({ kind, name, project, root }: TypeDetailsProps) {
           className={styles.textButton}
           onClick={() => void openProjectEditorFromTree(treeStore, { kind, name })}
         >
-          Edit in project
+          {t('Edit in project')}
         </button>
         <button
           type="button"
           className={styles.textButton}
           onClick={() => inspectStore.getState().clear()}
         >
-          Close
+          {t('Close')}
         </button>
       </div>
     </div>
   );
+}
+
+/**
+ * Asks before a project usage opens another tree while the open one has unsaved edits. Opening an
+ * item of the open tree only selects it.
+ */
+export function confirmLeaveTree(target: string): boolean {
+  const { treePath, dirty } = treeStore.getState();
+  if (!dirty || target === treePath) {
+    return true;
+  }
+  return window.confirm(t('The tree has unsaved changes. Open the other tree without saving?'));
 }
 
 interface TypeBodyProps {
@@ -102,17 +130,17 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
   return (
     <>
       <fieldset className={styles.fieldset}>
-        <legend>Description</legend>
+        <legend>{t('Description')}</legend>
         {type.description ? (
           <div className={styles.template}>{renderTemplate(type.description)}</div>
         ) : (
-          <p className={styles.muted}>No description</p>
+          <p className={styles.muted}>{t('No description')}</p>
         )}
       </fieldset>
 
       {bases.length > 0 && (
         <fieldset className={styles.fieldset}>
-          <legend>Inherits from</legend>
+          <legend>{t('Inherits from')}</legend>
           <ul className={styles.chipList}>
             {bases.map((base) =>
               Object.hasOwn(types, base) ? (
@@ -120,7 +148,7 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
                   <button
                     type="button"
                     className={`${styles.chip} ${styles.chipButton}`}
-                    title={`Show ${base}`}
+                    title={t('Show {name}', { name: base })}
                     onClick={() => inspectStore.getState().inspect(kind, base)}
                   >
                     {base}
@@ -128,7 +156,7 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
                 </li>
               ) : (
                 <li key={base}>
-                  <span className={styles.chip} title="abstract">
+                  <span className={styles.chip} title={t('abstract')}>
                     {base}
                   </span>
                 </li>
@@ -139,9 +167,9 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
       )}
 
       <fieldset className={styles.fieldset}>
-        <legend>Appearance</legend>
+        <legend>{t('Appearance')}</legend>
         <div className={styles.metaRow}>
-          <span className={styles.metaLabel}>Color</span>
+          <span className={styles.metaLabel}>{t('Color')}</span>
           <span className={styles.metaValue}>
             <span
               className={styles.swatch}
@@ -152,7 +180,7 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
           </span>
         </div>
         <div className={styles.metaRow}>
-          <span className={styles.metaLabel}>Icon</span>
+          <span className={styles.metaLabel}>{t('Icon')}</span>
           <span className={styles.metaValue}>
             {type.icon ? (
               <>
@@ -167,9 +195,9 @@ function TypeBody({ kind, type, project }: TypeBodyProps) {
       </fieldset>
 
       <fieldset className={styles.fieldset}>
-        <legend>Properties</legend>
+        <legend>{t('Properties')}</legend>
         {type.properties.length === 0 ? (
-          <p className={styles.muted}>No properties</p>
+          <p className={styles.muted}>{t('No properties')}</p>
         ) : (
           type.properties.map((prop) => <PropertyCard key={prop.name} prop={prop} />)
         )}
@@ -223,14 +251,15 @@ function PropertyCard({ prop }: { prop: CompiledProperty }) {
         <span className={styles.propType}>{prop.customType ?? prop.type}</span>
       </div>
       <div className={styles.propDefault}>
-        Default: {prop.default === undefined ? '—' : <code>{formatValue(prop.default)}</code>}
+        {t('Default:')}{' '}
+        {prop.default === undefined ? '—' : <code>{formatValue(prop.default)}</code>}
       </div>
       {hasConstraints && (
         <div className={styles.propMeta}>
           {range !== undefined && <span>{range}</span>}
           {prop.pattern !== undefined && (
             <span>
-              pattern <code>/{prop.pattern}/</code>
+              {t('pattern')} <code>/{prop.pattern}/</code>
             </span>
           )}
           {hasEnum && (
@@ -281,7 +310,7 @@ function UsageList({ kind, usages }: UsageListProps) {
           </li>
         ))}
       </ul>
-      {hidden > 0 && <p className={styles.more}>{`+${hidden} more`}</p>}
+      {hidden > 0 && <p className={styles.more}>{t('+{count} more', { count: hidden })}</p>}
     </>
   );
 }

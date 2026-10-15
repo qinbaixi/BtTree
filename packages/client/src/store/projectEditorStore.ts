@@ -1,7 +1,9 @@
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'immer';
 import {
+  collapseRenames,
   compileProject,
   findType,
+  type RefRename,
   type ItemKind,
   type ProjectFile,
   type ProjectReloadPayload,
@@ -15,6 +17,7 @@ import {
   type ProjectMeta,
   type ProjectSaveBody,
 } from '../lib/api';
+import { t } from '../i18n';
 import { alerts } from './alertStore';
 import {
   defaultSocketFactory,
@@ -31,7 +34,8 @@ export type ProjectSelection =
   | { view: 'type'; kind: ItemKind; name: string }
   | { view: 'custom'; name?: string }
   | { view: 'export' }
-  | { view: 'scenarios' };
+  | { view: 'scenarios' }
+  | { view: 'blackboard'; name?: string };
 
 export interface ProjectHistoryEntry {
   label: string;
@@ -41,10 +45,14 @@ export interface ProjectHistoryEntry {
   coalesceKey?: string;
   selectionBefore?: ProjectSelection;
   selectionAfter?: ProjectSelection;
+  /** Types / blackboard keys renamed by the step (tree files can be updated after saving). */
+  renames?: RefRename[];
 }
 
 export interface ApplyOptions {
   coalesceKey?: string;
+  /** Renames done by the step, recorded so that tree files can be updated after the next save. */
+  renames?: RefRename[];
 }
 
 export interface ProjectEditorDeps {
@@ -75,6 +83,11 @@ export interface ProjectEditorState {
   externalChange: boolean;
   /** The file on disk could not be read as a project (live reload). */
   externalError?: string;
+  /**
+   * Net renames of types and blackboard keys in the saves since the last clearSavedRenames: tree
+   * files may still use the old names.
+   */
+  savedRenames: RefRename[];
 
   load(path: string): Promise<void>;
   /**
@@ -99,6 +112,8 @@ export interface ProjectEditorState {
   dismissConflict(): void;
   /** Hides the "changed on disk" banner and keeps the edits. */
   keepMine(): void;
+  /** Forgets the saved renames (tree files were updated, or the user declined). */
+  clearSavedRenames(): void;
   /** Handles a `prj-reload` payload of the socket. */
   receive(payload: ProjectReloadPayload): void;
   connect(path: string): void;
@@ -144,7 +159,7 @@ export function parseProjectText(text: string): { json?: string; error?: string 
   try {
     const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return { error: 'Project file must contain a JSON object' };
+      return { error: t('Project file must contain a JSON object') };
     }
     return { json: canonicalJson(parsed) };
   } catch (err) {
@@ -178,6 +193,13 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
     let savedKey: string | undefined;
     /** Canonical JSON of the text the last save attempted to write. */
     let attemptedJson: string | undefined;
+    /** Renames since the last load or save, in order (undo adds the reverse rename). */
+    let renameLog: RefRename[] = [];
+    const logRenames = (renames: RefRename[] | undefined, reverse = false): void => {
+      for (const rename of renames ?? []) {
+        renameLog.push(reverse ? { ...rename, from: rename.to, to: rename.from } : rename);
+      }
+    };
 
     /** True when the draft has the content of the last load or save (undo back to it is clean). */
     const isSaved = (draft: ProjectFile | undefined): boolean =>
@@ -199,12 +221,13 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       }
       const parsed = parseProjectText(meta.content);
       if (parsed.json === undefined) {
-        set({ loading: false, loadError: parsed.error ?? 'Invalid project file' });
+        set({ loading: false, loadError: parsed.error ?? t('Invalid project file') });
         return;
       }
       const draft = JSON.parse(parsed.json) as ProjectFile;
       savedJson = parsed.json;
       savedKey = stableJson(draft);
+      renameLog = [];
       set((state) => ({
         projectPath: meta.path,
         baseHash: meta.hash,
@@ -227,7 +250,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
     const write = async (force: boolean): Promise<boolean> => {
       const { projectPath, draft, baseHash } = get();
       if (!projectPath || !draft || baseHash === undefined) {
-        alerts.error('Unable to save before the project is loaded');
+        alerts.error(t('Unable to save before the project is loaded'));
         return false;
       }
       try {
@@ -235,11 +258,12 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       } catch (err) {
         const message = errorText(err);
         set({ saveError: message });
-        alerts.error(`Not saved: ${message}`);
+        alerts.error(t('Not saved: {message}', { message }));
         return false;
       }
 
       const snapshot = draft;
+      const loggedRenames = renameLog.length;
       attemptedJson = canonicalJson(snapshot);
       const attemptedKey = stableJson(snapshot);
       set({ saving: true, saveError: undefined });
@@ -247,15 +271,21 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         const { hash } = await deps.save(projectPath, { content: snapshot, baseHash, force });
         savedJson = attemptedJson;
         savedKey = attemptedKey;
+        const saved = renameLog.slice(0, loggedRenames);
+        renameLog = renameLog.slice(loggedRenames);
         // Edits made while the request was running stay unsaved.
-        set({
+        set((state) => ({
           baseHash: hash,
           saving: false,
           conflict: false,
           externalChange: false,
           dirty: !isSaved(get().draft),
-        });
-        alerts.success('Project saved');
+          savedRenames:
+            saved.length > 0
+              ? collapseRenames([...state.savedRenames, ...saved])
+              : state.savedRenames,
+        }));
+        alerts.success(t('Project saved'));
         return true;
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
@@ -278,12 +308,19 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       saving: false,
       conflict: false,
       externalChange: false,
+      savedRenames: [],
 
       async load(path) {
         const token = ++loadToken;
         savedJson = undefined;
         savedKey = undefined;
-        set({ loading: true, loadError: undefined, projectPath: undefined, draft: undefined });
+        set({
+          loading: true,
+          loadError: undefined,
+          projectPath: undefined,
+          draft: undefined,
+          savedRenames: [],
+        });
         await adopt(path, token);
       },
 
@@ -316,6 +353,9 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
             inversePatches: [...inversePatches, ...last.inversePatches],
             selectionAfter,
           };
+          if (options?.renames) {
+            merged.renames = [...(last.renames ?? []), ...options.renames];
+          }
           undoStack = [...state.undoStack.slice(0, -1), merged];
         } else {
           const entry: ProjectHistoryEntry = {
@@ -326,8 +366,12 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
             selectionBefore: state.selection,
             selectionAfter,
           };
+          if (options?.renames && options.renames.length > 0) {
+            entry.renames = options.renames;
+          }
           undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
         }
+        logRenames(options?.renames);
         set({
           draft: nextDraft,
           selection: selectionAfter,
@@ -346,6 +390,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
           return;
         }
         const nextDraft = applyPatches(state.draft, entry.inversePatches);
+        logRenames(entry.renames && [...entry.renames].reverse(), true);
         set({
           draft: nextDraft,
           selection: entry.selectionBefore,
@@ -363,6 +408,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
           return;
         }
         const nextDraft = applyPatches(state.draft, entry.patches);
+        logRenames(entry.renames);
         set({
           draft: nextDraft,
           selection: entry.selectionAfter,
@@ -402,6 +448,10 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         set({ externalChange: false });
       },
 
+      clearSavedRenames() {
+        set({ savedRenames: [] });
+      },
+
       receive(payload) {
         if ('error' in payload) {
           set({ externalError: payload.error });
@@ -409,7 +459,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         }
         const parsed = parseProjectText(payload.content);
         if (parsed.json === undefined) {
-          set({ externalError: parsed.error ?? 'Invalid project file' });
+          set({ externalError: parsed.error ?? t('Invalid project file') });
           return;
         }
         set({ externalError: undefined });

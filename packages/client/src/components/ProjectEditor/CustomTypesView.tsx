@@ -6,6 +6,7 @@ import {
   type CustomTypeJson,
   type ProjectFile,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
 import { runEdit } from './PropertyTable';
@@ -70,7 +71,7 @@ function TypeRow({
       <td>
         <TextInput
           value={name}
-          ariaLabel={`Custom type name ${name}`}
+          ariaLabel={t('Custom type name {name}', { name })}
           className={styles.input}
           onCommit={onRename}
         />
@@ -78,7 +79,7 @@ function TypeRow({
       <td>
         <select
           className={styles.select}
-          aria-label={`Base type of ${name}`}
+          aria-label={t('Base type of {name}', { name })}
           value={custom.type}
           onChange={(event) => onType(event.target.value as 'string' | 'number')}
         >
@@ -90,8 +91,8 @@ function TypeRow({
         <TextInput
           live
           value={custom.pattern ?? ''}
-          ariaLabel={`Pattern of ${name}`}
-          placeholder="regular expression"
+          ariaLabel={t('Pattern of {name}', { name })}
+          placeholder={t('regular expression')}
           className={`${styles.input} ${styles.mono}`}
           onCommit={onPattern}
         />
@@ -100,8 +101,8 @@ function TypeRow({
         <input
           type="text"
           className={styles.input}
-          placeholder="Test value"
-          aria-label={`Test value for ${name}`}
+          placeholder={t('Test value')}
+          aria-label={t('Test value for {name}', { name })}
           value={sample}
           onChange={(event) => setSample(event.target.value)}
         />
@@ -115,20 +116,24 @@ function TypeRow({
           }
         >
           {result === 'none' && '—'}
-          {result === 'match' && 'matches'}
-          {result === 'no-match' && 'no match'}
-          {result === 'invalid' && 'invalid pattern'}
+          {result === 'match' && t('matches')}
+          {result === 'no-match' && t('no match')}
+          {result === 'invalid' && t('invalid pattern')}
         </span>
       </td>
       <td className={styles.small}>
-        {uses === 0 ? 'unused' : `${uses} propert${uses === 1 ? 'y' : 'ies'}`}
+        {uses === 0
+          ? t('unused')
+          : uses === 1
+            ? t('1 property')
+            : t('{count} properties', { count: uses })}
       </td>
       <td className={styles.rowActions}>
         <button
           type="button"
           className={`${styles.iconButton} ${styles.danger}`}
-          title="Delete custom type"
-          aria-label={`Delete custom type ${name}`}
+          title={t('Delete custom type')}
+          aria-label={t('Delete custom type {name}', { name })}
           onClick={onDelete}
         >
           <i className="fa-solid fa-trash" aria-hidden="true" />
@@ -167,7 +172,11 @@ export function CustomTypesView({ selectedName }: { selectedName?: string }) {
         updated = renameCustomType(d, oldName, value);
       });
       if (updated > 0) {
-        alerts.success(`Renamed; updated ${updated} propert${updated === 1 ? 'y' : 'ies'}`);
+        alerts.success(
+          updated === 1
+            ? t('Renamed; updated 1 property')
+            : t('Renamed; updated {count} properties', { count: updated }),
+        );
       }
     } catch (err) {
       alerts.error(err instanceof Error ? err.message : String(err));
@@ -177,9 +186,14 @@ export function CustomTypesView({ selectedName }: { selectedName?: string }) {
   const remove = (name: string) => {
     const uses = countCustomTypeUses(draft, name);
     const message =
-      uses > 0
-        ? `Delete custom type ${name}? ${uses} propert${uses === 1 ? 'y uses' : 'ies use'} it and will keep the name.`
-        : `Delete custom type ${name}?`;
+      uses > 1
+        ? t('Delete custom type {name}? {count} properties use it and will keep the name.', {
+            name,
+            count: uses,
+          })
+        : uses === 1
+          ? t('Delete custom type {name}? 1 property uses it and will keep the name.', { name })
+          : t('Delete custom type {name}?', { name });
     if (!window.confirm(message)) {
       return;
     }
@@ -191,28 +205,29 @@ export function CustomTypesView({ selectedName }: { selectedName?: string }) {
   return (
     <div className={styles.form}>
       <div className={styles.propertyHead}>
-        <h2 className={styles.heading}>Custom types</h2>
+        <h2 className={styles.heading}>{t('Custom types')}</h2>
         <button type="button" className={styles.button} onClick={addNew}>
-          + Custom type
+          {t('+ Custom type')}
         </button>
       </div>
       <p className={styles.muted}>
-        Custom types are reusable property types: a base type of string or number plus an optional
-        pattern. A property whose type is a custom type takes the base type and the pattern.
+        {t(
+          'Custom types are reusable property types: a base type of string or number plus an optional pattern. A property whose type is a custom type takes the base type and the pattern.',
+        )}
       </p>
       {names.length === 0 ? (
-        <p className={styles.muted}>No custom types yet.</p>
+        <p className={styles.muted}>{t('No custom types yet.')}</p>
       ) : (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Base type</th>
-                <th>Pattern</th>
-                <th>Test</th>
-                <th>Used by</th>
-                <th aria-label="Actions" />
+                <th>{t('Name')}</th>
+                <th>{t('Base type')}</th>
+                <th>{t('Pattern')}</th>
+                <th>{t('Test')}</th>
+                <th>{t('Used by')}</th>
+                <th aria-label={t('Row actions')} />
               </tr>
             </thead>
             <tbody>

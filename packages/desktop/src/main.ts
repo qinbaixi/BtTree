@@ -191,8 +191,11 @@ function createMainWindow(route: string): BrowserWindow {
   }
 
   win.once('ready-to-show', () => win.show());
-  // The page sets its own document title; the window keeps the app name.
-  win.on('page-title-updated', (event) => event.preventDefault());
+  // The window shows the page title, e.g. "*tree.json - owl-bt" while a tab has unsaved changes.
+  win.on('page-title-updated', (event, title) => {
+    event.preventDefault();
+    win.setTitle(title.trim() === '' ? APP_NAME : title);
+  });
   win.on('close', () => saveWindowState(win));
   win.on('closed', () => {
     if (mainWindow === win) {

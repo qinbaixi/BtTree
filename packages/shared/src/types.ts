@@ -34,6 +34,11 @@ export interface ItemTypeDescJson {
   properties?: PropertyDescJson[];
   /** Nodes only. */
   isComposite?: boolean;
+  /**
+   * Nodes only: the node is a subtree reference that runs the tree file named by its `Tree`
+   * property (a path relative to the project folder). Inherited like other fields.
+   */
+  subtree?: boolean;
   /** Erlang/Lua export settings. */
   export?: ItemExportJson;
   /** Run mode (simulator) rules. Inherited field by field from the bases. */
@@ -67,11 +72,34 @@ export interface SimulateJson {
   [key: string]: unknown;
 }
 
+/** Expected outcome of a scenario test (`owlbt test`). */
+export type ScenarioExpectedResult = 'success' | 'failure' | 'running';
+
+/** Expectations of a scenario test (`expect` of a scenario). Every field is optional. */
+export interface ScenarioExpectJson {
+  /** Result of the root node; `running` = still running after `maxTicks`. */
+  result?: ScenarioExpectedResult;
+  /** Exact number of ticks until the root finishes. */
+  ticks?: number;
+  /** Blackboard values after the run (deep equality; `null` also matches an unset key). */
+  blackboard?: Record<string, unknown>;
+}
+
 /** A named set of initial blackboard values for run mode (`scenarios` of owl-bt.json). */
 export interface ScenarioJson {
   name: string;
   description?: string;
   blackboard: Record<string, unknown>;
+  /** Scenario tests: tree paths or globs (relative to the project folder) to run on. Default: all trees. */
+  trees?: string | string[];
+  /** Scenario tests: tick budget of one run. Default 1000. */
+  maxTicks?: number;
+  /** Scenario tests: seed of the random generator (RandomSelector). Default 1. */
+  seed?: number;
+  /** Scenario tests: how actions without simulation (manual) finish. Default 'success'. */
+  manual?: 'success' | 'failure';
+  /** Scenario tests: expected outcome. Without it the scenario only reports its result. */
+  expect?: ScenarioExpectJson;
 }
 
 /** Per-type export settings (`export` of an item type in owl-bt.json). */
@@ -96,12 +124,32 @@ export interface FormatExportJson {
   package?: string;
 }
 
+/** How subtree references are exported: as reference nodes (default) or expanded in place. */
+export type SubtreeExportMode = 'reference' | 'inline';
+
 export interface ProjectExportJson {
+  /** Subtree references: 'reference' (default) or 'inline'. */
+  subtrees?: SubtreeExportMode;
   erlang?: FormatExportJson;
   lua?: FormatExportJson;
   ts?: FormatExportJson;
   cs?: FormatExportJson;
   go?: FormatExportJson;
+}
+
+/** Value types of a declared blackboard key. */
+export type BlackboardValueType = 'string' | 'number' | 'bool' | 'any';
+
+/**
+ * A declared blackboard key (`blackboard` of owl-bt.json). Properties whose type is the custom
+ * type `blackboardKey` hold key names; the editor suggests and checks them against these.
+ */
+export interface BlackboardKeyJson {
+  name: string;
+  type: BlackboardValueType | string;
+  default?: unknown;
+  description?: string;
+  [key: string]: unknown;
 }
 
 export interface ProjectFile {
@@ -111,6 +159,8 @@ export interface ProjectFile {
   services?: ItemTypeDescJson[];
   export?: ProjectExportJson;
   scenarios?: ScenarioJson[];
+  /** Declared blackboard keys (optional). */
+  blackboard?: BlackboardKeyJson[];
 }
 
 // ---------- Compiled project ----------
@@ -153,6 +203,8 @@ export interface CompiledItemType {
   export?: ItemExportJson;
   /** Run mode rules (merged with the ones of the bases). */
   simulate?: SimulateJson;
+  /** Nodes only: subtree reference (runs the tree named by the `Tree` property). */
+  subtree?: boolean;
   /** True for fallback descriptors of types missing from the project file. */
   isInvalid?: boolean;
 }
@@ -161,6 +213,8 @@ export interface CompiledProject {
   nodes: Record<string, CompiledItemType>;
   decorators: Record<string, CompiledItemType>;
   services: Record<string, CompiledItemType>;
+  /** Declared blackboard keys with a name. Only set when the project declares at least one. */
+  blackboard?: BlackboardKeyJson[];
 }
 
 // ---------- Tree file ----------

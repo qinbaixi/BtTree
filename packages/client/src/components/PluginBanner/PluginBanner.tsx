@@ -3,13 +3,17 @@ import { fetchPluginState, trustPlugin, type PluginState } from '../../lib/api';
 import { alerts } from '../../store/alertStore';
 import { treeStore, useTreeStore } from '../../store/treeStore';
 import styles from './PluginBanner.module.css';
+import { t } from '../../i18n';
 
-export const UNTRUSTED_MESSAGE =
-  'This project has a plugin (owl-bt.js) that runs code on your computer when trees are loaded and saved. It is not running.';
-export const CHANGED_MESSAGE =
-  'The project plugin (owl-bt.js) changed since you trusted it. It runs code on your computer when trees are loaded and saved, and it is not running.';
-export const DIRTY_CONFIRM =
-  'Trusting the plugin reloads the tree, and unsaved changes are discarded. Continue?';
+export const UNTRUSTED_MESSAGE = t(
+  'This project has a plugin (owl-bt.js) that runs code on your computer when trees are loaded and saved. It is not running.',
+);
+export const CHANGED_MESSAGE = t(
+  'The project plugin (owl-bt.js) changed since you trusted it. It runs code on your computer when trees are loaded and saved, and it is not running.',
+);
+export const DIRTY_CONFIRM = t(
+  'Trusting the plugin reloads the tree, and unsaved changes are discarded. Continue?',
+);
 
 /**
  * Warning under the breadcrumb while the project's plugin is not trusted. "Trust and run" trusts the
@@ -60,7 +64,9 @@ export default function PluginBanner({ treePath }: { treePath: string }) {
       await treeStore.getState().load(treePath);
     } catch (err) {
       alerts.error(
-        `Could not trust the plugin: ${err instanceof Error ? err.message : String(err)}`,
+        t('Could not trust the plugin: {message}', {
+          message: err instanceof Error ? err.message : String(err),
+        }),
       );
     } finally {
       setBusy(false);
@@ -76,10 +82,10 @@ export default function PluginBanner({ treePath }: { treePath: string }) {
         onClick={() => void trustAndRun()}
         disabled={busy}
       >
-        Trust and run
+        {t('Trust and run')}
       </button>
       <button type="button" className={styles.button} onClick={() => setDismissed(true)}>
-        Dismiss
+        {t('Dismiss')}
       </button>
     </div>
   );

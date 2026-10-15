@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   collectMissingTypes,
+  findTreeUsages,
+  getEffectiveValue,
+  isUndeclaredBlackboardKey,
   compileProject,
   createIdGen,
   getItemType,
@@ -130,6 +133,38 @@ describe('example-tree.json template', () => {
     expect(json.childNodes?.[1].services?.[0].timeBetweenTicks).toBeGreaterThan(0);
   });
 
+  it('declares every blackboard key it uses', () => {
+    expect((project.blackboard ?? []).map((key) => key.name)).toEqual([
+      'Target',
+      'Enemy',
+      'Waypoint',
+      'PatrolPoints',
+      'PatrolIndex',
+    ]);
+    const root = nodeFromJson(json, createIdGen());
+    let checked = 0;
+    const check = (node: typeof root): void => {
+      const items = [
+        { kind: 'node' as const, item: node },
+        ...node.decorators.map((item) => ({ kind: 'decorator' as const, item })),
+        ...node.services.map((item) => ({ kind: 'service' as const, item })),
+      ];
+      for (const { kind, item } of items) {
+        for (const prop of getItemType(project, kind, item.type).properties) {
+          if (prop.customType === 'blackboardKey') {
+            checked++;
+            const value = getEffectiveValue(prop, item.properties);
+            expect(isUndeclaredBlackboardKey(project, prop, value), String(value)).toBe(false);
+          }
+        }
+      }
+      node.childNodes.forEach(check);
+    };
+    check(root);
+    expect(checked).toBeGreaterThan(4);
+    expect(findTreeUsages(json, { kind: 'blackboardKey', name: 'Enemy' }, project)).toHaveLength(3);
+  });
+
   it('resolves every node type to a real descriptor', () => {
     const root = nodeFromJson(json, createIdGen());
     const check = (node: typeof root): void => {
@@ -149,6 +184,12 @@ describe('samples/basic', () => {
 
 describe('owl-bt.json template simulation rules', () => {
   const project = readJson<ProjectFile>(join(TEMPLATES_DIR, 'owl-bt.json'));
+
+  it('has valid blackboard declarations', () => {
+    expect(
+      validateProjectFile(project).filter((issue) => issue.path.startsWith('blackboard')),
+    ).toEqual([]);
+  });
 
   it('has valid simulate settings', () => {
     expect(validateProjectFile(project).filter((issue) => issue.path.includes('simulate'))).toEqual(

@@ -1,3 +1,4 @@
+import { compileBlackboard } from './blackboard';
 import type {
   CompiledItemType,
   CompiledProject,
@@ -24,6 +25,16 @@ const BUCKET_BY_KIND = {
 } as const satisfies Record<ItemKind, keyof CompiledProject>;
 
 type PropertyType = CompiledProperty['type'];
+
+/** Property that holds the referenced tree of a subtree reference node (see subtree.ts). */
+export const SUBTREE_PROPERTY = 'Tree';
+
+/** Declaration added to subtree types that do not declare the property themselves. */
+export const SUBTREE_PROPERTY_DESC: CompiledProperty = {
+  name: SUBTREE_PROPERTY,
+  type: 'string',
+  description: 'Tree file to run, relative to the project folder',
+};
 
 function isBasePropertyType(type: string): type is PropertyType {
   return type === 'string' || type === 'number' || type === 'bool' || type === 'enum';
@@ -167,7 +178,9 @@ function compileItem(
   customTypes: Record<string, CustomTypeJson>,
   bases: string[],
 ): CompiledItemType {
-  const isComposite = kind === 'node' ? !!desc.isComposite : false;
+  // Subtree references run another tree: they never have child nodes of their own.
+  const subtree = kind === 'node' && desc.subtree === true;
+  const isComposite = kind === 'node' && !subtree ? !!desc.isComposite : false;
   const item: CompiledItemType = {
     kind,
     name: desc.name,
@@ -180,6 +193,12 @@ function compileItem(
   if (desc.export !== undefined) item.export = desc.export;
   if (desc.simulate !== undefined) item.simulate = desc.simulate;
   if (bases.length > 0) item.bases = bases;
+  if (subtree) {
+    item.subtree = true;
+    if (!item.properties.some((p) => p.name === SUBTREE_PROPERTY)) {
+      item.properties.push({ ...SUBTREE_PROPERTY_DESC });
+    }
+  }
   return item;
 }
 
@@ -229,11 +248,16 @@ function compileKind(
  */
 export function compileProject(file: ProjectFile): CompiledProject {
   const customTypes = file.types ?? {};
-  return {
+  const compiled: CompiledProject = {
     nodes: compileKind('node', file.nodes, customTypes),
     decorators: compileKind('decorator', file.decorators, customTypes),
     services: compileKind('service', file.services, customTypes),
   };
+  const blackboard = compileBlackboard(file);
+  if (blackboard) {
+    compiled.blackboard = blackboard;
+  }
+  return compiled;
 }
 
 /**

@@ -187,6 +187,20 @@
                     "default": 0.5
                 }
             ]
+        },
+        {
+            "name": "SubTree",
+            "icon": "diagram-project",
+            "subtree": true,
+            "description": "运行子树 {{Tree}}",
+            "properties": [
+                {
+                    "name": "Tree",
+                    "type": "string",
+                    "default": "",
+                    "description": "要运行的树文件，相对项目目录的路径"
+                }
+            ]
         }
     ],
     "decorators": [
@@ -323,6 +337,37 @@
                     "default": "tick"
                 }
             ]
+        }
+    ],
+    "blackboard": [
+        {
+            "name": "Target",
+            "type": "string",
+            "default": "",
+            "description": "当前目标"
+        },
+        {
+            "name": "Enemy",
+            "type": "string",
+            "default": "",
+            "description": "视野内的敌人，没有时为空"
+        },
+        {
+            "name": "Waypoint",
+            "type": "string",
+            "default": "",
+            "description": "下一个巡逻点"
+        },
+        {
+            "name": "PatrolPoints",
+            "type": "any",
+            "description": "巡逻点列表"
+        },
+        {
+            "name": "PatrolIndex",
+            "type": "number",
+            "default": 0,
+            "description": "当前巡逻点序号"
         }
     ]
 }

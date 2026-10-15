@@ -11,6 +11,7 @@ import {
 import {
   findNode,
   getItemType,
+  subtreeOwnerId,
   type CompiledProject,
   type LogEntry,
   type LogKind,
@@ -44,15 +45,16 @@ import {
   summarizeTick,
 } from './runHelpers';
 import styles from './RunMode.module.css';
+import { t } from '../../i18n';
 
 const KIND_LABEL: Record<LogKind, string> = {
-  enter: 'Enter',
-  result: 'Result',
-  decorator: 'Decorator',
-  service: 'Service',
-  blackboard: 'Blackboard',
-  error: 'Error',
-  pass: 'Run',
+  enter: t('Enter'),
+  result: t('Result'),
+  decorator: t('Decorator'),
+  service: t('Service'),
+  blackboard: t('Blackboard'),
+  error: t('Error'),
+  pass: t('Run'),
 };
 
 /** Ticks rendered at most (older ones are behind a "show earlier" button). */
@@ -119,7 +121,7 @@ const TickGroup = memo(function TickGroup({
     >
       {passStart && (
         <div className={styles.passDivider} role="separator" data-testid="pass-divider">
-          Run {tick.pass}
+          {t('Run {pass}', { pass: tick.pass })}
         </div>
       )}
       <div className={styles.groupHead}>
@@ -127,33 +129,37 @@ const TickGroup = memo(function TickGroup({
           type="button"
           className={styles.groupToggle}
           aria-expanded={expanded}
-          aria-label={`Tick ${tick.tick}`}
+          aria-label={t('Tick {tick}', { tick: tick.tick })}
           onClick={() => onToggle(index)}
         >
           <i
             className={`fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} ${styles.chevron}`}
             aria-hidden="true"
           />
-          <span className={styles.tickBadge}>Tick {tick.tick}</span>
+          <span className={styles.tickBadge}>{t('Tick {tick}', { tick: tick.tick })}</span>
           {tick.passes !== 1 && (
             <span className={styles.runBadge} data-testid="run-badge">
-              Run {tick.pass}
+              {t('Run {pass}', { pass: tick.pass })}
             </span>
           )}
           <span className={styles.summary}>
             {summary.finished ? (
               <span className={`${styles.pill} ${styles[`pill_${summary.finished}`]}`}>
-                Tree finished: {summary.finished === 'success' ? 'Success' : 'Failure'}
+                {summary.finished === 'success'
+                  ? t('Tree finished: Success')
+                  : t('Tree finished: Failure')}
               </span>
             ) : summary.passResult ? (
               <span
                 className={`${styles.pill} ${styles[`pill_${summary.passResult}`]}`}
                 data-testid="pass-result"
               >
-                Run finished: {summary.passResult === 'success' ? 'Success' : 'Failure'}
+                {summary.passResult === 'success'
+                  ? t('Run finished: Success')
+                  : t('Run finished: Failure')}
               </span>
             ) : summary.activeNodes.length === 0 ? (
-              <span className={`${styles.pill} ${styles.pill_idle}`}>Idle</span>
+              <span className={`${styles.pill} ${styles.pill_idle}`}>{t('Idle')}</span>
             ) : (
               <>
                 {summary.activeNodes.slice(0, MAX_ACTIVE).map((id, i) => {
@@ -197,7 +203,7 @@ const TickGroup = memo(function TickGroup({
                         <span
                           className={`${styles.pill} ${waiting ? styles.pill_waiting : styles.pill_running}`}
                         >
-                          {waiting ? 'Waiting' : 'Running'}
+                          {waiting ? t('Waiting') : t('Running')}
                         </span>
                       </span>
                     </Fragment>
@@ -219,25 +225,27 @@ const TickGroup = memo(function TickGroup({
                 {change.key} {change.from}→{change.to}
               </span>
             ))}
-            {hiddenBb > 0 && <span className={styles.bbChip}>+{hiddenBb} more</span>}
+            {hiddenBb > 0 && (
+              <span className={styles.bbChip}>{t('+{count} more', { count: hiddenBb })}</span>
+            )}
             {summary.decoratorFails > 0 && (
-              <span className={styles.counter} title="Decorator checks failed">
+              <span className={styles.counter} title={t('Decorator checks failed')}>
                 <i className="fa-solid fa-filter" aria-hidden="true" /> {summary.decoratorFails}
               </span>
             )}
             {summary.errors > 0 && (
-              <span className={`${styles.counter} ${styles.counterError}`} title="Errors">
+              <span className={`${styles.counter} ${styles.counterError}`} title={t('Errors')}>
                 <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />{' '}
                 {summary.errors}
               </span>
             )}
             {breakpointHit && (
-              <span className={styles.counter} title="Breakpoint hit">
+              <span className={styles.counter} title={t('Breakpoint hit')}>
                 <i className="fa-solid fa-circle-pause" aria-hidden="true" />
               </span>
             )}
             {summary.manualPending && (
-              <span className={styles.counter} title="Waiting for a manual result">
+              <span className={styles.counter} title={t('Waiting for a manual result')}>
                 <i className="fa-solid fa-hand" aria-hidden="true" />
               </span>
             )}
@@ -246,16 +254,18 @@ const TickGroup = memo(function TickGroup({
         <button
           type="button"
           className={styles.viewButton}
-          aria-label={`View tick ${index}`}
-          title="Show this tick on the canvas"
+          aria-label={t('View tick {tick}', { tick: index })}
+          title={t('Show this tick on the canvas')}
           onClick={() => runStore.getState().seek(index)}
         >
           <i className="fa-solid fa-clock-rotate-left" aria-hidden="true" />
         </button>
       </div>
       {expanded && (
-        <ul className={styles.trace} aria-label={`Tick ${index} entries`}>
-          {visible.length === 0 && <li className={styles.traceEmpty}>No entries to show.</li>}
+        <ul className={styles.trace} aria-label={t('Tick {tick} entries', { tick: index })}>
+          {visible.length === 0 && (
+            <li className={styles.traceEmpty}>{t('No entries to show.')}</li>
+          )}
           {visible.map((entry, i) => (
             <TraceLine
               key={i}
@@ -335,10 +345,14 @@ function TraceLine({
         data-depth={depth}
         style={{ paddingLeft: 12 + depth * INDENT }}
         onClick={() => {
-          const selection = selectionForEntry(treeStore.getState().root, entry);
+          // Nodes of referenced trees select their subtree node in the open tree.
+          const ownerId = subtreeOwnerId(entry.nodeId);
+          const target =
+            ownerId === entry.nodeId ? entry : { ...entry, nodeId: ownerId, itemId: undefined };
+          const selection = selectionForEntry(treeStore.getState().root, target);
           if (selection) {
             treeStore.getState().select(selection);
-            focusNode(entry.nodeId);
+            focusNode(ownerId);
           }
         }}
       >
@@ -379,7 +393,10 @@ export default function RunLog() {
   const breakpoints = useRunStore((state) => state.breakpoints);
   const propOverrides = useRunStore((state) => state.overrides);
   const showIds = useRunViewStore((state) => state.showIds);
-  const root = useTreeStore((state) => state.root);
+  const treeRoot = useTreeStore((state) => state.root);
+  // Names and depths come from the tree that runs (it includes the nodes of referenced trees).
+  const runRoot = useRunStore((state) => state.runRoot);
+  const root = runRoot ?? treeRoot;
   const project = useProjectStore((state) => state.project);
   const [collapsed, setCollapsed] = useState(false);
   const [kinds, setKinds] = useState<ReadonlySet<LogKind>>(() => new Set(LOG_KINDS));
@@ -408,7 +425,7 @@ export default function RunLog() {
   const last = Math.max(0, history.length - 1);
   const live = viewIndex >= last;
   const depths = useMemo(() => buildDepthMap(root), [root]);
-  const ids = useMemo(() => buildExportIdMap(root), [root]);
+  const ids = useMemo(() => buildExportIdMap(treeRoot), [treeRoot]);
 
   useLayoutEffect(() => {
     const measure = (): void => {
@@ -509,8 +526,8 @@ export default function RunLog() {
           min={LOG_MIN_HEIGHT}
           max={Math.max(LOG_MIN_HEIGHT, Math.floor(area * LOG_MAX_RATIO))}
           defaultValue={LOG_DEFAULT_HEIGHT}
-          label="Resize run log"
-          title="Drag to resize the log (double click to reset)"
+          label={t('Resize run log')}
+          title={t('Drag to resize the log (double click to reset)')}
         />
       )}
       <div className={styles.logHead}>
@@ -518,7 +535,7 @@ export default function RunLog() {
           type="button"
           className={styles.iconButton}
           aria-expanded={!collapsed}
-          aria-label={collapsed ? 'Expand run log' : 'Collapse run log'}
+          aria-label={collapsed ? t('Expand run log') : t('Collapse run log')}
           onClick={() => setCollapsed(!collapsed)}
         >
           <i
@@ -526,7 +543,7 @@ export default function RunLog() {
             aria-hidden="true"
           />
         </button>
-        <span className={styles.logTitle}>Run log</span>
+        <span className={styles.logTitle}>{t('Run log')}</span>
         <div className={styles.timeline}>
           <input
             type="range"
@@ -535,7 +552,7 @@ export default function RunLog() {
             step={1}
             value={Math.min(viewIndex, last)}
             disabled={last === 0}
-            aria-label="Timeline"
+            aria-label={t('Timeline')}
             onChange={(event) => runStore.getState().seek(Number(event.target.value))}
           />
           <span className={styles.timelineLabel}>
@@ -547,29 +564,29 @@ export default function RunLog() {
               className={styles.link}
               onClick={() => runStore.getState().backToLive()}
             >
-              live
+              {t('live')}
             </button>
           )}
         </div>
-        <label className={styles.idToggle} title="Show the export node id (#N) next to nodes">
+        <label className={styles.idToggle} title={t('Show the export node id (#N) next to nodes')}>
           <input
             type="checkbox"
             checked={showIds}
             onChange={(event) => runViewStore.getState().setShowIds(event.target.checked)}
           />
-          Show node ids
+          {t('Show node ids')}
         </label>
         {!collapsed && (
           <div className={styles.logActions}>
             <button type="button" className={styles.link} onClick={() => setAll(true)}>
-              Expand all
+              {t('Expand all')}
             </button>
             <button type="button" className={styles.link} onClick={() => setAll(false)}>
-              Collapse all
+              {t('Collapse all')}
             </button>
           </div>
         )}
-        <div className={styles.filters} role="group" aria-label="Log filter">
+        <div className={styles.filters} role="group" aria-label={t('Log filter')}>
           {LOG_KINDS.map((kind) => (
             <label key={kind} className={styles.filter}>
               <input type="checkbox" checked={kinds.has(kind)} onChange={() => toggleKind(kind)} />
@@ -582,7 +599,7 @@ export default function RunLog() {
         <ul
           ref={listRef}
           className={styles.logList}
-          aria-label="Run log entries"
+          aria-label={t('Run log entries')}
           onScroll={(event) => {
             const list = event.currentTarget;
             atBottom.current = list.scrollHeight - list.scrollTop - list.clientHeight < NEAR_BOTTOM;
@@ -590,7 +607,7 @@ export default function RunLog() {
         >
           {dropped > 0 && (
             <li className={styles.logEmpty} data-testid="log-dropped">
-              Older ticks were dropped
+              {t('Older ticks were dropped')}
             </li>
           )}
           {start > floor && (
@@ -600,11 +617,11 @@ export default function RunLog() {
                 className={styles.link}
                 onClick={() => setLimit(history.length)}
               >
-                Show {start - floor} earlier ticks
+                {t('Show {count} earlier ticks', { count: start - floor })}
               </button>
             </li>
           )}
-          {groups.length === 0 && <li className={styles.logEmpty}>No log entries yet.</li>}
+          {groups.length === 0 && <li className={styles.logEmpty}>{t('No log entries yet.')}</li>}
           {groups.map((index) => (
             <TickGroup
               key={index}

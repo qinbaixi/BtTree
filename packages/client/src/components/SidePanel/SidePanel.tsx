@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { getJson, setJson } from '../../lib/storage';
 import styles from './SidePanel.module.css';
+import { t } from '../../i18n';
 
 export interface SidePanelProps {
   title: string;
@@ -36,8 +37,8 @@ export default function SidePanel({ title, name, position, width, children }: Si
           className={styles.expand}
           role="button"
           tabIndex={0}
-          aria-label={`Expand ${title}`}
-          title={`Expand ${title}`}
+          aria-label={t('Expand {title}', { title })}
+          title={t('Expand {title}', { title })}
           onClick={() => setAndPersist(true)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') setAndPersist(true);

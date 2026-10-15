@@ -1,4 +1,5 @@
-import type { TreeNodeJson } from '@owlbt/shared';
+import type { RefKind, RefRename, SubtreeLibrary, TreeNodeJson, TreeUsage } from '@owlbt/shared';
+import { t } from '../i18n';
 
 /** A failed request. `message` is the server's text (or its JSON `message`) when it sent one. */
 export class ApiError extends Error {
@@ -24,7 +25,10 @@ async function responseError(response: Response): Promise<ApiError> {
       // Not JSON after all; keep the text.
     }
   }
-  return new ApiError(response.status, message || `Request failed with status ${response.status}`);
+  return new ApiError(
+    response.status,
+    message || t('Request failed with status {status}', { status: response.status }),
+  );
 }
 
 /** Reads the response; non-2xx responses throw an ApiError carrying the server's message. */
@@ -187,8 +191,122 @@ export async function fetchPluginState(treePath: string): Promise<PluginState> {
   return (await response.json()) as PluginState;
 }
 
+export interface ScenarioTestCase {
+  /** Tree path relative to the project folder. */
+  tree: string;
+  treePath: string;
+  scenario: string;
+  status: 'pass' | 'fail' | 'ran' | 'error';
+  expect: boolean;
+  result?: 'success' | 'failure' | 'running';
+  ticks?: number;
+  maxTicks?: number;
+  failures: string[];
+  mismatches: Array<{ key: string; expected: unknown; actual?: unknown }>;
+  errors: string[];
+  durationMs: number;
+}
+
+export interface ScenarioTestReport {
+  projectDir: string;
+  projectPath: string;
+  cases: ScenarioTestCase[];
+  warnings: string[];
+  summary: { total: number; passed: number; failed: number; ran: number; errors: number };
+  ok: boolean;
+}
+
+/**
+ * Runs the scenario tests of the project that contains `path` (like `owlbt test`). `project`
+ * replaces owl-bt.json on disk (unsaved edits). Configuration errors throw ApiError 400.
+ */
+export async function runScenarioTests(
+  path: string,
+  project?: unknown,
+): Promise<ScenarioTestReport> {
+  const response = await request('/api/scenario-tests', postJson({ path, project }));
+  return (await response.json()) as ScenarioTestReport;
+}
+
 /** Trusts the current content of the project's plugin. Resolves with the new state. */
 export async function trustPlugin(treePath: string): Promise<PluginState> {
   const response = await request('/api/plugin/trust', postJson({ path: treePath }));
   return (await response.json()) as PluginState;
+}
+
+export interface FileUsages {
+  /** Absolute path of the tree file. */
+  path: string;
+  relPath: string;
+  usages: TreeUsage[];
+}
+
+export interface ProjectUsages {
+  projectDir: string;
+  truncated: boolean;
+  files: FileUsages[];
+  errors: Array<{ path: string; relPath: string; error: string }>;
+}
+
+/** Where a type or blackboard key is used in the tree files of the project that contains `path`. */
+export async function fetchUsages(
+  path: string,
+  kind: RefKind,
+  name: string,
+): Promise<ProjectUsages> {
+  const response = await request(`/api/usages?${new URLSearchParams({ path, kind, name })}`);
+  return (await response.json()) as ProjectUsages;
+}
+
+export interface ChangedTree {
+  path: string;
+  relPath: string;
+  count: number;
+  skipped?: boolean;
+}
+
+export interface UpdateReferencesResult {
+  projectDir: string;
+  truncated: boolean;
+  dryRun: boolean;
+  changed: ChangedTree[];
+  errors: Array<{ path: string; relPath: string; error: string }>;
+}
+
+/**
+ * Rewrites the tree files of the project for renamed types and blackboard keys. With `dryRun` the
+ * files are only counted; paths in `skip` are never written.
+ */
+export async function updateReferences(
+  path: string,
+  renames: readonly RefRename[],
+  options: { dryRun?: boolean; skip?: readonly string[] } = {},
+): Promise<UpdateReferencesResult> {
+  const response = await request(
+    '/api/references/rename',
+    postJson({ path, renames, dryRun: options.dryRun === true, skip: options.skip ?? [] }),
+  );
+  return (await response.json()) as UpdateReferencesResult;
+}
+
+/** Referenced trees of a tree's subtree nodes, as POST /api/subtrees resolves them. */
+export interface SubtreeResolution {
+  /** Folder of owl-bt.json; references are relative to it. */
+  projectDir: string;
+  /** Project-relative path of the tree itself; null when it is not inside the project folder. */
+  self: string | null;
+  /** Loaded trees (or why they cannot be used) by reference, including nested references. */
+  library: SubtreeLibrary;
+}
+
+/**
+ * Loads the trees named by `refs` (project-relative paths) and the trees they reference. Without
+ * `refs` the references of the tree file on disk are used.
+ */
+export async function resolveSubtrees(
+  treePath: string,
+  refs?: readonly string[],
+): Promise<SubtreeResolution> {
+  const response = await request('/api/subtrees', postJson({ path: treePath, refs }));
+  return (await response.json()) as SubtreeResolution;
 }

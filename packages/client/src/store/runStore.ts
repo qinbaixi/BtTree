@@ -1,4 +1,5 @@
 import {
+  blackboardKeyStartValue,
   createRun,
   normalizeLoops,
   type CompiledProject,
@@ -6,7 +7,9 @@ import {
   type Run,
   type RunCheckpoint,
   type ScenarioJson,
+  subtreeOwnerId,
   type Selection,
+  type SubtreeLibrary,
   type TickResult,
   type TreeNode,
 } from '@owlbt/shared';
@@ -23,7 +26,9 @@ import {
 import { getJson, setJson } from '../lib/storage';
 import { alerts } from './alertStore';
 import { projectStore } from './projectStore';
+import { subtreeStore } from './subtreeStore';
 import { treeStore } from './treeStore';
+import { t } from '../i18n';
 
 export const MIN_SPEED = 0.5;
 export const MAX_SPEED = 10;
@@ -56,6 +61,8 @@ export interface RunState {
   dropped: number;
   /** Increases whenever a new run is built. */
   runId: number;
+  /** The tree that runs: the open tree with the referenced trees of subtree nodes attached. */
+  runRoot?: TreeNode;
   /** Number of times the tree runs; 0 = endless. */
   loops: number;
   playing: boolean;
@@ -109,6 +116,10 @@ export interface RunStoreDeps {
   saveProject(path: string, body: ProjectSaveBody): Promise<{ hash: string }>;
   focus(nodeId: string): void;
   select(selection: Selection | undefined): void;
+  /** Trees referenced by subtree nodes, and the open tree's project-relative path. */
+  getSubtrees?(): { library: SubtreeLibrary; treeRef?: string };
+  /** Reloads the referenced trees; resolves true when they changed. */
+  refreshSubtrees?(): Promise<boolean>;
   notify: {
     error(message: string): void;
     success(message: string): void;
@@ -124,6 +135,11 @@ const defaultDeps: RunStoreDeps = {
   saveProject,
   focus: focusNode,
   select: (selection) => treeStore.getState().select(selection),
+  getSubtrees: () => {
+    const state = subtreeStore.getState();
+    return { library: state.library, treeRef: state.self };
+  },
+  refreshSubtrees: () => subtreeStore.getState().refresh(),
   notify: {
     error: (message) => void alerts.error(message),
     success: (message) => void alerts.success(message),
@@ -180,7 +196,9 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       }, 1000 / get().speed);
     };
 
-    const focusAndSelect = (nodeId: string): void => {
+    /** Nodes of referenced trees are not in the open tree: their subtree node is shown instead. */
+    const focusAndSelect = (runNodeId: string): void => {
+      const nodeId = subtreeOwnerId(runNodeId);
       deps.select({ kind: 'node', nodeId });
       deps.focus(nodeId);
     };
@@ -248,18 +266,22 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       if (!root || !project) {
         run = undefined;
         checkpoints = [];
-        set({ history: [], viewIndex: 0, dropped: 0, playing: false });
+        set({ history: [], viewIndex: 0, dropped: 0, playing: false, runRoot: undefined });
         return false;
       }
       const state = get();
+      const subtrees = deps.getSubtrees?.() ?? { library: {} };
       run = createRun(root, project, {
         blackboard: entriesToRecord(state.blackboard),
         seed: state.seed,
         overrides: state.overrides,
         loops: state.loops,
+        subtrees: subtrees.library,
+        treeRef: subtrees.treeRef,
       });
       checkpoints = [run.checkpoint()];
       set({
+        runRoot: run.root,
         history: [run.snapshot()],
         viewIndex: 0,
         dropped: 0,
@@ -313,7 +335,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
     ): Promise<boolean> => {
       const { treePath } = deps.getTree();
       if (!treePath) {
-        deps.notify.error('Open a tree before editing scenarios');
+        deps.notify.error(t('Open a tree before editing scenarios'));
         return false;
       }
       try {
@@ -332,10 +354,10 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
           deps.notify.error(
-            'The project file changed on disk. Run mode did not overwrite it; try again.',
+            t('The project file changed on disk. Run mode did not overwrite it; try again.'),
           );
         } else {
-          deps.notify.error(`Failed to save scenario: ${errorText(err)}`);
+          deps.notify.error(t('Failed to save scenario: {error}', { error: errorText(err) }));
         }
         return false;
       }
@@ -358,22 +380,41 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       enter() {
         const { root } = deps.getTree();
         if (!root || !deps.getProject()) {
-          deps.notify.error('Run mode needs a loaded tree and project');
+          deps.notify.error(t('Run mode needs a loaded tree and project'));
           return false;
         }
         const state = get();
         const scenarios = deps.getScenarios();
         if (state.selectedScenario === undefined && state.blackboard.length === 0) {
           const first = scenarios[0];
+          const declared = deps.getProject()?.blackboard ?? [];
           if (first) {
             set({
               selectedScenario: first.name,
               blackboard: recordToEntries(first.blackboard),
             });
+          } else if (declared.length > 0) {
+            // Without scenarios the run starts from the declared keys and their defaults.
+            set({
+              blackboard: declared.map((key) => ({
+                key: key.name,
+                value: blackboardKeyStartValue(key),
+              })),
+            });
           }
         }
         set({ active: true });
         build();
+        // Referenced trees are reloaded before the run starts; a change rebuilds the fresh run.
+        void (deps.refreshSubtrees?.() ?? Promise.resolve(false)).then(
+          (changed) => {
+            const current = get();
+            if (changed && current.active && current.history.length === 1 && !current.playing) {
+              build();
+            }
+          },
+          () => undefined,
+        );
         return true;
       },
 
@@ -381,7 +422,14 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         stopTimer();
         run = undefined;
         checkpoints = [];
-        set({ active: false, history: [], viewIndex: 0, dropped: 0, playing: false });
+        set({
+          active: false,
+          history: [],
+          viewIndex: 0,
+          dropped: 0,
+          playing: false,
+          runRoot: undefined,
+        });
       },
 
       reset() {
@@ -575,7 +623,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       loadScenario(name) {
         const scenario = deps.getScenarios().find((entry) => entry.name === name);
         if (!scenario) {
-          deps.notify.error(`Unknown scenario '${name}'`);
+          deps.notify.error(t("Unknown scenario '{name}'", { name }));
           return;
         }
         set({ selectedScenario: name, blackboard: recordToEntries(scenario.blackboard) });
@@ -585,20 +633,23 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       async saveScenario(name) {
         const trimmed = name.trim();
         if (trimmed === '') {
-          deps.notify.error('Scenario name must not be empty');
+          deps.notify.error(t('Scenario name must not be empty'));
           return false;
         }
         const blackboard = entriesToRecord(get().blackboard);
-        const ok = await updateScenarios((scenarios) => {
-          const entry: ScenarioJson = { name: trimmed, blackboard };
-          const index = scenarios.findIndex((s) => s.name === trimmed);
-          if (index < 0) {
-            return [...scenarios, entry];
-          }
-          const copy = scenarios.slice();
-          copy[index] = { ...scenarios[index], blackboard };
-          return copy;
-        }, `Scenario '${trimmed}' saved`);
+        const ok = await updateScenarios(
+          (scenarios) => {
+            const entry: ScenarioJson = { name: trimmed, blackboard };
+            const index = scenarios.findIndex((s) => s.name === trimmed);
+            if (index < 0) {
+              return [...scenarios, entry];
+            }
+            const copy = scenarios.slice();
+            copy[index] = { ...scenarios[index], blackboard };
+            return copy;
+          },
+          t("Scenario '{name}' saved", { name: trimmed }),
+        );
         if (ok) {
           set({ selectedScenario: trimmed });
         }
@@ -608,7 +659,7 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       async deleteScenario(name) {
         const ok = await updateScenarios(
           (scenarios) => scenarios.filter((s) => s.name !== name),
-          `Scenario '${name}' deleted`,
+          t("Scenario '{name}' deleted", { name }),
         );
         if (ok && get().selectedScenario === name) {
           set({ selectedScenario: undefined });

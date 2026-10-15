@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { validateProjectFile, type ProjectIssue } from '@owlbt/shared';
 import { isEditableTarget, matchesHotkey } from '../commands/useHotkeys';
+import { BlackboardView } from '../components/ProjectEditor/BlackboardView';
 import { CustomTypesView } from '../components/ProjectEditor/CustomTypesView';
 import { ExportSettingsView } from '../components/ProjectEditor/ExportSettingsView';
 import { ScenariosView } from '../components/ProjectEditor/ScenariosView';
 import { ProblemsBar } from '../components/ProjectEditor/ProblemsBar';
+import { ReferenceUpdateBanner } from '../components/ProjectEditor/ReferenceUpdateBanner';
 import { TypeForm } from '../components/ProjectEditor/TypeForm';
 import { TypeList } from '../components/ProjectEditor/TypeList';
 import { TypePreview } from '../components/ProjectEditor/TypePreview';
@@ -13,6 +15,7 @@ import { PanelResizer, usePreviewWidth } from '../components/ProjectEditor/Panel
 import { countIssuesByType, selectionForPath } from '../components/ProjectEditor/issues';
 import { getPathLastSegment } from '../lib/mru';
 import { parseTypeParam, setNavigator } from '../lib/appNavigation';
+import { t } from '../i18n';
 import { alertStore } from '../store/alertStore';
 import {
   projectEditorStore,
@@ -34,7 +37,8 @@ export default function ProjectEditor() {
   if (!path) {
     return (
       <div className={styles.missingPath}>
-        No project path given. <Link to="/">Go to the home page</Link> and open a project.
+        {t('No project path given.')} <Link to="/">{t('Go to the home page')}</Link>{' '}
+        {t('and open a project.')}
       </div>
     );
   }
@@ -125,7 +129,7 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
 
   const fileName = getPathLastSegment(projectPath ?? path);
   useEffect(() => {
-    document.title = `${dirty ? '*' : ''}${fileName} - project types - owl-bt`;
+    document.title = `${dirty ? '*' : ''}${fileName} - ${t('project types')} - owl-bt`;
   }, [dirty, fileName]);
 
   // Hotkeys: Ctrl+S saves (also from fields), undo/redo and Ctrl+F only outside text fields.
@@ -177,7 +181,7 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
   const goBack = () => {
     if (
       dirty &&
-      !window.confirm('You have unsaved changes to the project types. Leave without saving?')
+      !window.confirm(t('You have unsaved changes to the project types. Leave without saving?'))
     ) {
       return;
     }
@@ -192,11 +196,17 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
             <button
               type="button"
               className={styles.backButton}
-              title={from !== undefined ? `Back to the tree ${from}` : 'Back to the home page'}
+              title={
+                from !== undefined
+                  ? t('Back to the tree {path}', { path: from })
+                  : t('Back to the home page')
+              }
               onClick={goBack}
             >
               <i className="fa-solid fa-arrow-left" aria-hidden="true" />
-              {from !== undefined ? `Back to ${getPathLastSegment(from)}` : 'Back to Home'}
+              {from !== undefined
+                ? t('Back to {name}', { name: getPathLastSegment(from) })
+                : t('Back to Home')}
             </button>
           </li>
           <li className={styles.brand}>
@@ -208,10 +218,10 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
               type="button"
               className={styles.topButton}
               disabled={!dirty || saving || !draft}
-              title="Save (Ctrl+S)"
+              title={t('Save (Ctrl+S)')}
               onClick={() => void store.save()}
             >
-              <i className="fa-solid fa-floppy-disk" aria-hidden="true" /> Save
+              <i className="fa-solid fa-floppy-disk" aria-hidden="true" /> {t('Save')}
             </button>
           </li>
           <li>
@@ -219,10 +229,10 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
               type="button"
               className={styles.topButton}
               disabled={!canUndo}
-              title="Undo (Ctrl+Z)"
+              title={t('Undo (Ctrl+Z)')}
               onClick={() => store.undo()}
             >
-              <i className="fa-solid fa-rotate-left" aria-hidden="true" /> Undo
+              <i className="fa-solid fa-rotate-left" aria-hidden="true" /> {t('Undo')}
             </button>
           </li>
           <li>
@@ -230,59 +240,60 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
               type="button"
               className={styles.topButton}
               disabled={!canRedo}
-              title="Redo (Ctrl+Y)"
+              title={t('Redo (Ctrl+Y)')}
               onClick={() => store.redo()}
             >
-              <i className="fa-solid fa-rotate-right" aria-hidden="true" /> Redo
+              <i className="fa-solid fa-rotate-right" aria-hidden="true" /> {t('Redo')}
             </button>
           </li>
         </ul>
         <ol className={styles.breadcrumb}>
           <li>
-            <Link to="/">Home</Link>
+            <Link to="/">{t('Home')}</Link>
           </li>
           <li title={projectPath ?? path}>{fileName}</li>
           <li className={styles.active}>
-            Project types
+            {t('Project types')}
             {dirty && (
               <span className={styles.unsaved}>
                 <span className={styles.dot} aria-hidden="true" />
-                Unsaved
+                {t('Unsaved')}
               </span>
             )}
           </li>
         </ol>
         {externalChange && (
           <div role="status" className={styles.banner}>
-            <span>The project file changed on disk. Your unsaved edits are kept.</span>
+            <span>{t('The project file changed on disk. Your unsaved edits are kept.')}</span>
             <button type="button" className={styles.button} onClick={() => void store.reload()}>
-              Reload
+              {t('Reload')}
             </button>
             <button type="button" className={styles.button} onClick={() => store.keepMine()}>
-              Keep mine
+              {t('Keep mine')}
             </button>
           </div>
         )}
         {externalError !== undefined && (
           <div role="alert" className={styles.bannerError}>
-            The project file on disk cannot be read: {externalError}
+            {t('The project file on disk cannot be read: {error}', { error: externalError })}
           </div>
         )}
+        <ReferenceUpdateBanner />
       </div>
 
       {loadError !== undefined && !draft ? (
         <div role="alert" className={styles.loadError}>
-          Failed to load the project: {loadError}
+          {t('Failed to load the project: {error}', { error: loadError })}
         </div>
       ) : draft === undefined ? (
-        <div className={styles.loading}>{loading ? 'Loading project…' : ''}</div>
+        <div className={styles.loading}>{loading ? t('Loading project…') : ''}</div>
       ) : (
         <div
           className={styles.main}
           style={{ '--preview-width': `${previewWidth}px` } as CSSProperties}
         >
           <TypeList searchRef={searchRef} selection={selection} issueCounts={issueCounts} />
-          <section className={styles.center} aria-label="Editor">
+          <section className={styles.center} aria-label={t('Editor')}>
             <CenterPanel selection={selection} />
           </section>
           {selection?.view === 'type' && (
@@ -310,11 +321,12 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
             aria-labelledby="conflict-title"
           >
             <h2 id="conflict-title" className={styles.heading}>
-              Project file changed on disk
+              {t('Project file changed on disk')}
             </h2>
             <p>
-              owl-bt.json was changed after it was loaded. Reload to discard your edits and take the
-              file from disk, or overwrite the file with your edits.
+              {t(
+                'owl-bt.json was changed after it was loaded. Reload to discard your edits and take the file from disk, or overwrite the file with your edits.',
+              )}
             </p>
             <div className={styles.dialogButtons}>
               <button
@@ -322,17 +334,17 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
                 className={styles.button}
                 onClick={() => store.dismissConflict()}
               >
-                Cancel
+                {t('Cancel')}
               </button>
               <button type="button" className={styles.button} onClick={() => void store.reload()}>
-                Reload from disk
+                {t('Reload from disk')}
               </button>
               <button
                 type="button"
                 className={`${styles.button} ${styles.primary}`}
                 onClick={() => void store.overwrite()}
               >
-                Overwrite
+                {t('Overwrite')}
               </button>
             </div>
           </div>
@@ -361,7 +373,12 @@ function CenterPanel({ selection }: { selection?: ProjectSelection }) {
   if (selection?.view === 'scenarios') {
     return <ScenariosView />;
   }
+  if (selection?.view === 'blackboard') {
+    return <BlackboardView selectedName={selection.name} />;
+  }
   return (
-    <p className={styles.muted}>Select a type on the left, or add a node, decorator or service.</p>
+    <p className={styles.muted}>
+      {t('Select a type on the left, or add a node, decorator or service.')}
+    </p>
   );
 }

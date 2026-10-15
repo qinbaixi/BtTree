@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { getStorageItem, setStorageItem } from './storage';
+import { t } from '../i18n';
 
 export type ThemeId = 'light' | 'classic';
 
@@ -20,8 +21,10 @@ export function isThemeId(value: unknown): value is ThemeId {
   return THEMES.some((theme) => theme.id === value);
 }
 
+/** Translated name of a theme. */
 export function themeLabel(id: ThemeId): string {
-  return THEMES.find((theme) => theme.id === id)?.label ?? id;
+  const label = THEMES.find((theme) => theme.id === id)?.label;
+  return label !== undefined ? t(label) : id;
 }
 
 /** Stored theme, or the default when nothing (or an unknown value) is stored. */

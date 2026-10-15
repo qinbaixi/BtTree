@@ -2,7 +2,13 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import type { ErrorRequestHandler, Request, Response } from 'express';
 import express, { Router } from 'express';
-import { compileProject, type ProjectFile, type TreeNodeJson } from '@owlbt/shared';
+import {
+  collectSubtreeRefsJson,
+  compileProject,
+  parseAndCompileProject,
+  type ProjectFile,
+  type TreeNodeJson,
+} from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
 import { withFileLock, writeFileAtomic } from './fileLock';
 import {
@@ -14,6 +20,7 @@ import {
 } from './picker';
 import { exportProject, exportTree, parseExportFormats } from './export';
 import { formatJsonLike, sha256 } from './projectFile';
+import { runScenarioTests, ScenarioConfigError } from './scenarioTests';
 import {
   getProject,
   isPathInDir,
@@ -24,6 +31,9 @@ import {
   type ProjectOptions,
 } from './project';
 import { revoke, trust } from './pluginTrust';
+import { registerReferenceRoutes } from './referenceRoutes';
+import { formatTreeText, parseTreeText } from './treeFile';
+import { loadSubtreeLibrary, treeRefOf } from './subtrees';
 import {
   initProject,
   loadWorkspace,
@@ -43,8 +53,6 @@ export interface RouterOptions {
 
 /** Response header of GET /api/tree when the project has a plugin: trusted, changed or untrusted. */
 export const PLUGIN_HEADER = 'X-Owlbt-Plugin';
-
-const UTF8_BOM = String.fromCharCode(0xfeff);
 
 function requireAbsolutePath(raw: unknown, name = 'path'): string {
   if (typeof raw !== 'string' || raw === '') {
@@ -248,7 +256,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
     let tree: TreeNodeJson;
     try {
-      tree = JSON.parse(raw.startsWith(UTF8_BOM) ? raw.slice(1) : raw) as TreeNodeJson;
+      tree = parseTreeText(raw);
     } catch (err) {
       res.status(422).json({ message: `Invalid JSON in tree file: ${messageOf(err)}` });
       return;
@@ -297,10 +305,8 @@ export function createApiRouter(options: RouterOptions = {}): Router {
         }
       }
       // A new file gets tab indentation. An existing file keeps its indentation, line endings and BOM.
-      const hasBom = original?.startsWith(UTF8_BOM) === true;
-      const text = formatJsonLike(tree, hasBom ? original?.slice(1) : original, '\t');
       try {
-        await writeFileAtomic(treePath, hasBom ? `${UTF8_BOM}${text}` : text);
+        await writeFileAtomic(treePath, formatTreeText(tree, original));
       } catch (err) {
         if (isErrno(err, 'ENOENT')) {
           throw new HttpError(404, 'Path not found');
@@ -383,6 +389,56 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     res.json({ path: treePath });
   });
 
+  /**
+   * Resolves subtree references for a tree of the project: loads the trees named by `refs`
+   * (project-relative paths; default: the references of the tree file on disk) and the trees they
+   * reference, recursively. Responds with the project folder, the tree's own project-relative path
+   * (`self`, used to detect cycles back to it) and the loaded trees or their errors by reference.
+   */
+  router.post('/subtrees', async (req, res) => {
+    const body = objectBody(req.body);
+    const treePath = requireAbsolutePath(body.path, 'path');
+    const project = await requireProjectFor(treePath, projectOptions);
+    const compiled = parseAndCompileProject(project.content);
+    if (!compiled.project) {
+      throw new HttpError(422, `Invalid project file: ${compiled.error ?? 'unknown error'}`);
+    }
+    if (body.refs !== undefined && !Array.isArray(body.refs)) {
+      throw new HttpError(400, 'refs must be an array');
+    }
+    let refs: unknown[];
+    if (Array.isArray(body.refs)) {
+      refs = body.refs;
+    } else {
+      let raw: string;
+      try {
+        raw = await readFile(treePath, 'utf8');
+      } catch (err) {
+        if (isErrno(err, 'ENOENT')) {
+          throw new HttpError(404, 'Path not found');
+        }
+        throw err;
+      }
+      try {
+        const tree = parseTreeText(raw);
+        refs = collectSubtreeRefsJson(tree, compiled.project);
+      } catch (err) {
+        throw new HttpError(422, `Invalid JSON in tree file: ${messageOf(err)}`);
+      }
+    }
+    const plugin = project.plugin;
+    const library = await loadSubtreeLibrary(project.dir, compiled.project, refs, {
+      transform: plugin?.onTreeLoad
+        ? async (path, tree) => {
+            const ctx = buildContext(project, path, tree);
+            await plugin.onTreeLoad?.(ctx);
+            return ctx.tree;
+          }
+        : undefined,
+    });
+    res.json({ projectDir: project.dir, self: treeRefOf(project.dir, treePath) ?? null, library });
+  });
+
   router.post('/export', async (req, res) => {
     const body = objectBody(req.body);
     const treePath = requireAbsolutePath(body.path, 'path');
@@ -390,11 +446,46 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     res.json(await exportTree(treePath, formats));
   });
 
+  registerReferenceRoutes(router);
+
   router.post('/export/batch', async (req, res) => {
     const body = objectBody(req.body);
     const dir = requireAbsolutePath(body.dir, 'dir');
     const formats = parseExportFormats(body.formats);
     res.json(await exportProject(dir, formats));
+  });
+
+  router.post('/scenario-tests', async (req, res) => {
+    const body = objectBody(req.body);
+    const path = requireAbsolutePath(body.path, 'path');
+    const stringList = (raw: unknown, name: string): string[] | undefined => {
+      if (raw === undefined) return undefined;
+      if (!Array.isArray(raw) || raw.some((item) => typeof item !== 'string')) {
+        throw new HttpError(400, `${name} must be an array of strings`);
+      }
+      return raw as string[];
+    };
+    const project = body.project;
+    if (
+      project !== undefined &&
+      (typeof project !== 'object' || project === null || Array.isArray(project))
+    ) {
+      throw new HttpError(400, 'project must be an object');
+    }
+    try {
+      res.json(
+        await runScenarioTests(path, {
+          trees: stringList(body.trees, 'trees'),
+          scenarios: stringList(body.scenarios, 'scenarios'),
+          project: project as ProjectFile | undefined,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof ScenarioConfigError) {
+        throw new HttpError(400, err.message);
+      }
+      throw err;
+    }
   });
 
   return router;

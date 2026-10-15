@@ -10,17 +10,21 @@ import {
   renameType,
   setBases,
   snakeCase,
+  SUBTREE_PROPERTY,
   updateType,
   type ItemKind,
   type ItemExportJson,
   type ProjectFile,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
+import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
 import { IconPicker } from './IconPicker';
 import { unknownPlaceholders } from './issues';
 import { PropertyTable, runEdit, type ProjectRecipe } from './PropertyTable';
 import { SimulationSection } from './SimulationSection';
+import { confirmLeaveProject } from './ReferenceUpdateBanner';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
@@ -34,14 +38,22 @@ export const KNOWN_TYPE_KEYS: readonly string[] = [
   'description',
   'properties',
   'isComposite',
+  'subtree',
   'export',
   'simulate',
 ];
 
 export const KIND_LABEL: Record<ItemKind, string> = {
-  node: 'Node',
-  decorator: 'Decorator',
-  service: 'Service',
+  node: t('Node'),
+  decorator: t('Decorator'),
+  service: t('Service'),
+};
+
+/** Error shown when a new name is already taken by another type of the same kind. */
+const NAME_TAKEN: Record<ItemKind, string> = {
+  node: "'{name}' is already used by another node",
+  decorator: "'{name}' is already used by another decorator",
+  service: "'{name}' is already used by another service",
 };
 
 /** Colors offered as presets next to the color input. */
@@ -114,6 +126,7 @@ export interface TypeFormProps {
 /** Editor of one node, decorator or service type: identity, appearance, description, properties and export. */
 export function TypeForm({ kind, name }: TypeFormProps) {
   const draft = useProjectEditorStore((state) => state.draft);
+  const projectPath = useProjectEditorStore((state) => state.projectPath);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [iconOpen, setIconOpen] = useState(false);
 
@@ -122,7 +135,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
   }
   const desc = findType(draft, kind, name);
   if (!desc) {
-    return <p className={styles.muted}>This type is no longer in the project file.</p>;
+    return <p className={styles.muted}>{t('This type is no longer in the project file.')}</p>;
   }
 
   const effective = listEffectiveProperties(draft, kind, name);
@@ -134,7 +147,8 @@ export function TypeForm({ kind, name }: TypeFormProps) {
     .filter((other) => !bases.includes(other) && canAddBase(draft, kind, name, other));
   const references = findTypeReferences(draft, kind, name);
   const unknown = Object.keys(desc).filter((key) => !KNOWN_TYPE_KEYS.includes(key));
-  const isComposite = kind === 'node' && desc.isComposite === true;
+  const isSubtree = kind === 'node' && desc.subtree === true;
+  const isComposite = kind === 'node' && desc.isComposite === true && !isSubtree;
   const color = desc.color ?? defaultColorFor(kind, isComposite);
   const placeholders = desc.description ? unknownPlaceholders(desc.description, propNames) : [];
   const exp = desc.export;
@@ -151,11 +165,11 @@ export function TypeForm({ kind, name }: TypeFormProps) {
       return;
     }
     if (next === '') {
-      setNameError('Name is required');
+      setNameError(t('Name is required'));
       return;
     }
     if (findType(draft, kind, next)) {
-      setNameError(`'${next}' is already used by another ${KIND_LABEL[kind].toLowerCase()}`);
+      setNameError(t(NAME_TAKEN[kind], { name: next }));
       return;
     }
     let updated = 0;
@@ -165,9 +179,14 @@ export function TypeForm({ kind, name }: TypeFormProps) {
         updated = renameType(d, kind, name, next);
       },
       { view: 'type', kind, name: next },
+      { renames: [{ kind, from: name, to: next }] },
     );
     if (changed && updated > 0) {
-      alerts.success(`Renamed; updated ${updated} base reference${updated === 1 ? '' : 's'}`);
+      alerts.success(
+        updated === 1
+          ? t('Renamed; updated 1 base reference')
+          : t('Renamed; updated {count} base references', { count: updated }),
+      );
     }
   };
 
@@ -181,7 +200,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
     } else if (HEX_COLOR.test(text)) {
       setColor(text);
     } else {
-      alerts.error('Color must look like #rrggbb');
+      alerts.error(t('Color must look like #rrggbb'));
     }
   };
 
@@ -215,7 +234,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           <TextInput
             key={name}
             value={name}
-            ariaLabel="Type name"
+            ariaLabel={t('Type name')}
             className={`${styles.nameInput} ${nameError ? styles.invalidInput : ''}`}
             onCommit={rename}
             invalid={nameError !== undefined}
@@ -228,9 +247,11 @@ export function TypeForm({ kind, name }: TypeFormProps) {
         </div>
         <span className={styles.kindTag}>{KIND_LABEL[kind]}</span>
         {kind === 'node' && (
-          <span className={styles.kindTag}>{isComposite ? 'Composite' : 'Action'}</span>
+          <span className={styles.kindTag}>
+            {isSubtree ? t('Subtree') : isComposite ? t('Composite') : t('Action')}
+          </span>
         )}
-        {desc.isAbstract === true && <span className={styles.kindTag}>abstract</span>}
+        {desc.isAbstract === true && <span className={styles.kindTag}>{t('abstract')}</span>}
       </div>
 
       <div className={styles.optionRow}>
@@ -239,11 +260,41 @@ export function TypeForm({ kind, name }: TypeFormProps) {
             <input
               type="checkbox"
               checked={isComposite}
+              disabled={isSubtree}
               onChange={(event) =>
                 patchType('Set composite', { isComposite: event.target.checked })
               }
             />
-            Composite (has child nodes)
+            {t('Composite (has child nodes)')}
+          </label>
+        )}
+        {kind === 'node' && (
+          <label
+            className={styles.checkLabel}
+            title={t(
+              'Runs the tree file named by its {property} property (relative to the project folder)',
+              { property: SUBTREE_PROPERTY },
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={isSubtree}
+              onChange={(event) => {
+                const on = event.target.checked;
+                set(on ? 'Make subtree reference' : 'Remove subtree reference', (d) => {
+                  updateType(d, kind, name, { subtree: on ? true : undefined });
+                  // A new subtree type gets the property that holds the referenced tree.
+                  const target = findType(d, kind, name);
+                  if (on && target && !propNames.includes(SUBTREE_PROPERTY)) {
+                    target.properties = [
+                      ...(target.properties ?? []),
+                      { name: SUBTREE_PROPERTY, type: 'string', default: '' },
+                    ];
+                  }
+                });
+              }}
+            />
+            {t('Subtree reference (runs another tree file)')}
           </label>
         )}
         <label className={styles.checkLabel}>
@@ -254,12 +305,12 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               patchType('Set abstract', { isAbstract: event.target.checked ? true : undefined })
             }
           />
-          Abstract (base only, not in the tree)
+          {t('Abstract (base only, not in the tree)')}
         </label>
       </div>
 
-      <section className={styles.section} aria-label="Base types">
-        <div className={styles.fieldLabel}>Base types</div>
+      <section className={styles.section} aria-label={t('Base types')}>
+        <div className={styles.fieldLabel}>{t('Base types')}</div>
         <ul className={styles.chipList}>
           {bases.map((base) => (
             <li
@@ -270,8 +321,8 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               <button
                 type="button"
                 className={styles.chipButton}
-                aria-label={`Remove base ${base}`}
-                title="Remove base"
+                aria-label={t('Remove base {name}', { name: base })}
+                title={t('Remove base')}
                 onClick={() =>
                   set('Remove base', (d) =>
                     setBases(
@@ -287,11 +338,11 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               </button>
             </li>
           ))}
-          {bases.length === 0 && <li className={styles.muted}>None</li>}
+          {bases.length === 0 && <li className={styles.muted}>{t('None')}</li>}
         </ul>
         <select
           className={styles.select}
-          aria-label="Add base type"
+          aria-label={t('Add base type')}
           value=""
           disabled={baseCandidates.length === 0}
           onChange={(event) => {
@@ -302,7 +353,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           }}
         >
           <option value="">
-            {baseCandidates.length === 0 ? 'No other types can be added' : '+ Add base…'}
+            {baseCandidates.length === 0 ? t('No other types can be added') : t('+ Add base…')}
           </option>
           {baseCandidates.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -310,18 +361,20 @@ export function TypeForm({ kind, name }: TypeFormProps) {
             </option>
           ))}
         </select>
-        {references.length > 0 && <p className={styles.muted}>Base of: {references.join(', ')}</p>}
+        {references.length > 0 && (
+          <p className={styles.muted}>{t('Base of: {types}', { types: references.join(', ') })}</p>
+        )}
       </section>
 
-      <section className={styles.section} aria-label="Appearance">
+      <section className={styles.section} aria-label={t('Appearance')}>
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Icon</span>
+          <span className={styles.fieldLabel}>{t('Icon')}</span>
           <div className={styles.inline}>
             <TextInput
               live
               value={desc.icon ?? ''}
-              ariaLabel="Icon name"
-              placeholder="e.g. arrow-right"
+              ariaLabel={t('Icon name')}
+              placeholder={t('e.g. arrow-right')}
               className={styles.input}
               onCommit={(value) =>
                 set(
@@ -332,17 +385,17 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               }
             />
             <button type="button" className={styles.button} onClick={() => setIconOpen(true)}>
-              Choose…
+              {t('Choose…')}
             </button>
           </div>
         </div>
 
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Color</span>
+          <span className={styles.fieldLabel}>{t('Color')}</span>
           <div className={styles.inline}>
             <input
               type="color"
-              aria-label="Color"
+              aria-label={t('Color')}
               className={styles.colorInput}
               value={hex6}
               onChange={(event) => setColor(event.target.value, `color:${kind}:${name}`)}
@@ -350,7 +403,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
             <TextInput
               key={`${name}:${desc.color ?? ''}`}
               value={desc.color ?? ''}
-              ariaLabel="Color hex"
+              ariaLabel={t('Color hex')}
               placeholder={defaultColorFor(kind, isComposite)}
               className={styles.input}
               onCommit={commitColorText}
@@ -361,7 +414,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               disabled={desc.color === undefined}
               onClick={() => setColor(undefined)}
             >
-              Default
+              {t('Default')}
             </button>
           </div>
           <div className={styles.swatches}>
@@ -371,7 +424,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
                 type="button"
                 className={styles.swatch}
                 style={{ background: preset }}
-                aria-label={`Color ${preset}`}
+                aria-label={t('Color {color}', { color: preset })}
                 title={preset}
                 onClick={() => setColor(preset)}
               />
@@ -380,14 +433,14 @@ export function TypeForm({ kind, name }: TypeFormProps) {
         </div>
       </section>
 
-      <section className={styles.section} aria-label="Description">
-        <div className={styles.fieldLabel}>Description</div>
+      <section className={styles.section} aria-label={t('Description')}>
+        <div className={styles.fieldLabel}>{t('Description')}</div>
         <TextInput
           live
           multiline
           value={desc.description ?? ''}
-          ariaLabel="Description template"
-          placeholder="Text with {{PropertyName}} placeholders"
+          ariaLabel={t('Description template')}
+          placeholder={t('Text with {{PropertyName}} placeholders')}
           className={styles.textarea}
           onCommit={(value) =>
             set(
@@ -398,7 +451,9 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           }
         />
         <div className={styles.placeholderHint}>
-          {desc.description?.endsWith('{{') ? 'Pick a property to insert:' : 'Insert property:'}
+          {desc.description?.endsWith('{{')
+            ? t('Pick a property to insert:')
+            : t('Insert property:')}
           <ul className={styles.chipList}>
             {propNames.map((prop) => (
               <li key={prop}>
@@ -411,12 +466,14 @@ export function TypeForm({ kind, name }: TypeFormProps) {
                 </button>
               </li>
             ))}
-            {propNames.length === 0 && <li className={styles.muted}>No properties yet</li>}
+            {propNames.length === 0 && <li className={styles.muted}>{t('No properties yet')}</li>}
           </ul>
         </div>
         {placeholders.length > 0 && (
           <div role="alert" className={styles.warningText}>
-            Unknown placeholder{placeholders.length > 1 ? 's' : ''}: {placeholders.join(', ')}
+            {placeholders.length > 1
+              ? t('Unknown placeholders: {names}', { names: placeholders.join(', ') })
+              : t('Unknown placeholder: {names}', { names: placeholders.join(', ') })}
           </div>
         )}
       </section>
@@ -431,20 +488,23 @@ export function TypeForm({ kind, name }: TypeFormProps) {
 
       <details className={styles.section}>
         <summary className={styles.sectionTitle}>
-          Export (Erlang / Lua / TypeScript / C# / Go)
+          {t('Export (Erlang / Lua / TypeScript / C# / Go)')}
         </summary>
         <p className={styles.helpText}>
-          Controls how this type is written by File → Export. Each exported node gets{' '}
-          <code>type</code> and <code>sub_type</code> fields; leave them empty to use the defaults
-          shown in grey. <em>Constant fields</em> are extra fields written as-is on every node of
-          this type, for example <code>finish_once = true</code>.
+          {t('Controls how this type is written by File → Export. Each exported node gets')}{' '}
+          <code>type</code> {t('and')} <code>sub_type</code>{' '}
+          {t('fields; leave them empty to use the defaults shown in grey.')}{' '}
+          <em>{t('Constant fields')}</em>{' '}
+          {t('are extra fields written as-is on every node of this type, for example')}{' '}
+          <code>finish_once = true</code>
+          {t('.')}
         </p>
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Exported type</span>
+          <span className={styles.fieldLabel}>{t('Exported type')}</span>
           <TextInput
             value={exp?.type ?? ''}
-            ariaLabel="Exported type"
-            placeholder={`default: ${defaultExportType}`}
+            ariaLabel={t('Exported type')}
+            placeholder={t('default: {value}', { value: defaultExportType })}
             className={styles.input}
             onCommit={(value) =>
               editExports('Set export type', (e) => {
@@ -454,11 +514,13 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           />
         </div>
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Exported sub_type</span>
+          <span className={styles.fieldLabel}>{t('Exported sub_type')}</span>
           <TextInput
             value={exp?.subType === undefined ? '' : String(exp.subType)}
-            ariaLabel="Exported sub_type"
-            placeholder={`default: ${snakeCase(name)} (a number such as 27 is also allowed)`}
+            ariaLabel={t('Exported sub_type')}
+            placeholder={t('default: {value} (a number such as 27 is also allowed)', {
+              value: snakeCase(name),
+            })}
             className={styles.input}
             onCommit={(value) =>
               editExports('Set export sub_type', (e) => {
@@ -470,7 +532,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
           />
         </div>
         <div className={styles.field}>
-          <span className={styles.fieldLabel}>Constant fields</span>
+          <span className={styles.fieldLabel}>{t('Constant fields')}</span>
           <ExportFieldRows
             fields={(exp?.fields as Record<string, unknown> | undefined) ?? {}}
             onChange={(label, mutate) => editExports(label, mutate)}
@@ -480,9 +542,22 @@ export function TypeForm({ kind, name }: TypeFormProps) {
 
       <SimulationSection kind={kind} name={name} desc={desc} isComposite={isComposite} />
 
+      {projectPath !== undefined && desc.isAbstract !== true && (
+        <section className={styles.section} aria-label={t('Usages')}>
+          <div className={styles.fieldLabel}>{t('Usages')}</div>
+          <ProjectUsages
+            key={`${kind}:${name}`}
+            path={projectPath}
+            kind={kind}
+            name={name}
+            beforeOpen={confirmLeaveProject}
+          />
+        </section>
+      )}
+
       {unknown.length > 0 && (
-        <section className={styles.section} aria-label="Unknown fields">
-          <div className={styles.fieldLabel}>Unknown fields (kept as they are)</div>
+        <section className={styles.section} aria-label={t('Unknown fields')}>
+          <div className={styles.fieldLabel}>{t('Unknown fields (kept as they are)')}</div>
           <p className={styles.muted}>
             {unknown.map((key) => (
               <code key={key} className={styles.unknownKey}>
@@ -529,12 +604,12 @@ function ExportFieldRows({ fields, onChange }: ExportFieldRowsProps) {
         <div key={key} className={styles.kvRow}>
           <TextInput
             value={key}
-            ariaLabel={`Field name ${key}`}
+            ariaLabel={t('Field name {key}', { key })}
             className={styles.input}
             onCommit={(newKey) => {
               const trimmed = newKey.trim();
               if (trimmed === '' || (trimmed !== key && Object.hasOwn(fields, trimmed))) {
-                alerts.error('Field names must be unique and not empty');
+                alerts.error(t('Field names must be unique and not empty'));
                 return;
               }
               onChange(
@@ -551,7 +626,7 @@ function ExportFieldRows({ fields, onChange }: ExportFieldRowsProps) {
           />
           <TextInput
             value={formatExportValue(value)}
-            ariaLabel={`Field value ${key}`}
+            ariaLabel={t('Field value {key}', { key })}
             className={styles.input}
             onCommit={(text) =>
               onChange(
@@ -565,8 +640,8 @@ function ExportFieldRows({ fields, onChange }: ExportFieldRowsProps) {
           <button
             type="button"
             className={`${styles.iconButton} ${styles.danger}`}
-            aria-label={`Remove field ${key}`}
-            title="Remove field"
+            aria-label={t('Remove field {key}', { key })}
+            title={t('Remove field')}
             onClick={() =>
               onChange(
                 'Remove export field',
@@ -596,7 +671,7 @@ function ExportFieldRows({ fields, onChange }: ExportFieldRowsProps) {
           );
         }}
       >
-        + Field
+        {t('+ Field')}
       </button>
     </div>
   );

@@ -141,6 +141,18 @@ select.control {
   box-shadow: 0 0 0 3px var(--danger-soft);
 }
 
+.undeclared {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.fieldWarning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--warning);
+  font-size: 11px;
+}
+
 .defaultValue {
   color: var(--text-muted);
   font-style: italic;
@@ -567,6 +579,19 @@ select.control {
 
 .problem:hover {
   border-color: var(--danger);
+}
+
+.problemWarning {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+}
+
+.problemWarning:hover {
+  border-color: var(--warning);
+}
+
+.problemWarning .problemMessage {
+  color: var(--warning);
 }
 
 .problemTitle {

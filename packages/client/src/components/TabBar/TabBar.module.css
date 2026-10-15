@@ -1,0 +1,155 @@
+.bar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 32px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--surface-muted);
+  border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  padding: 0 4px 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.active {
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.active:hover {
+  background: var(--surface);
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirty {
+  margin-left: 2px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.close {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  visibility: hidden;
+}
+
+.tab:hover .close,
+.active .close {
+  visibility: visible;
+}
+
+.close:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.add {
+  flex: 0 0 auto;
+  width: 32px;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 16px;
+  background: none;
+  border: 0;
+}
+
+.add:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 18vh;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.dialog {
+  width: min(420px, 90vw);
+  padding: 18px 20px 16px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.message {
+  margin: 0 0 16px;
+  overflow-wrap: anywhere;
+}
+
+.buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.buttons button {
+  height: 30px;
+  padding: 0 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+}
+
+.buttons button:hover {
+  background: var(--surface-hover);
+}
+
+.buttons .primary {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.buttons .primary:hover {
+  background: var(--accent-hover);
+}

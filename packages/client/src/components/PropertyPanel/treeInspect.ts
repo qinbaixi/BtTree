@@ -1,20 +1,24 @@
 import {
+  getEffectiveValue,
   getItemType,
   isItemValid,
+  isUndeclaredBlackboardKey,
   validateItem,
   type CompiledItemType,
   type CompiledProject,
   type Selection,
   type ItemKind,
+  type SubtreeProblem,
   type SubItem,
   type TreeNode,
 } from '@owlbt/shared';
+import { t } from '../../i18n';
 
 /** Separator between names in a location path, e.g. 'Root › Pause'. */
 export const PATH_SEPARATOR = ' › ';
 
 /** Shown as the location of items that sit directly under the root. */
-export const TOP_LEVEL_LABEL = 'Top level';
+export const TOP_LEVEL_LABEL = t('Top level');
 
 /** Compiled types of one kind (nodes, decorators or services). */
 export function typesOfKind(
@@ -107,6 +111,8 @@ export interface TreeProblem {
   /** Location of the item, e.g. 'Root › Missing'. */
   path: string;
   message: string;
+  /** Warnings (undeclared blackboard keys) do not make the tree invalid. Default: error. */
+  severity?: 'warning';
 }
 
 export interface UsedType {
@@ -131,8 +137,15 @@ export interface TreeSummary {
   usedTypes: Record<ItemKind, UsedType[]>;
 }
 
-/** Counts, problems and used types of a tree. */
-export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSummary {
+/**
+ * Counts, problems and used types of a tree. `subtreeProblems` (by node id) adds the problems of
+ * subtree references: missing files, references outside the project and cycles.
+ */
+export function summarizeTree(
+  root: TreeNode,
+  project: CompiledProject,
+  subtreeProblems?: ReadonlyMap<string, SubtreeProblem>,
+): TreeSummary {
   const summary: TreeSummary = {
     nodes: 0,
     composite: 0,
@@ -162,12 +175,29 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
   ) => {
     const type = getItemType(project, kind, item.type);
     if (isItemValid(type, item.properties)) {
+      const undeclared = type.properties.filter((prop) =>
+        isUndeclaredBlackboardKey(project, prop, getEffectiveValue(prop, item.properties)),
+      );
+      if (undeclared.length > 0) {
+        const names = undeclared.map(
+          (prop) => `${prop.name} = '${String(getEffectiveValue(prop, item.properties))}'`,
+        );
+        summary.problems.push({
+          kind,
+          nodeId: node.id,
+          itemId,
+          type: item.type,
+          path: formatPath([...ancestors, itemName(node)]),
+          message: t('Undeclared blackboard key: {keys}', { keys: names.join(', ') }),
+          severity: 'warning',
+        });
+      }
       return;
     }
     const validation = validateItem(type, item.properties);
     const message = validation.missingType
-      ? `Missing type '${item.type}'`
-      : `Invalid: ${validation.invalidProperties.join(', ')}`;
+      ? t("Missing type '{type}'", { type: item.type })
+      : t('Invalid: {properties}', { properties: validation.invalidProperties.join(', ') });
     summary.problems.push({
       kind,
       nodeId: node.id,
@@ -192,6 +222,16 @@ export function summarizeTree(root: TreeNode, project: CompiledProject): TreeSum
     }
     countType('node', node.type, type.isInvalid);
     addProblem('node', node, ancestors, node);
+    const subtreeProblem = subtreeProblems?.get(node.id);
+    if (subtreeProblem) {
+      summary.problems.push({
+        kind: 'node',
+        nodeId: node.id,
+        type: node.type,
+        path: formatPath([...ancestors, itemName(node)]),
+        message: subtreeProblem.message,
+      });
+    }
 
     for (const decorator of node.decorators) {
       summary.decorators += 1;

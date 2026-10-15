@@ -1,4 +1,10 @@
-import type { FormatExportJson, ProjectExportJson, ProjectFile } from '@owlbt/shared';
+import type {
+  FormatExportJson,
+  ProjectExportJson,
+  ProjectFile,
+  SubtreeExportMode,
+} from '@owlbt/shared';
+import { t } from '../../i18n';
 import { useProjectEditorStore } from '../../store/projectEditorStore';
 import { runEdit } from './PropertyTable';
 import { TextInput } from './TextInput';
@@ -66,6 +72,24 @@ export function setExportField(
   }
 }
 
+/** Sets `export.subtrees`; the default ('reference' or undefined) removes the field. */
+export function setSubtreeExportMode(
+  draft: ProjectFile,
+  mode: SubtreeExportMode | undefined,
+): void {
+  const all: ProjectExportJson = draft.export ?? {};
+  if (mode === undefined || mode === 'reference') {
+    delete all.subtrees;
+  } else {
+    all.subtrees = mode;
+  }
+  if (Object.keys(all).length === 0) {
+    delete draft.export;
+  } else {
+    draft.export = all;
+  }
+}
+
 /** Center column: output folder, file name template, C# namespace and Go package per export format. */
 export function ExportSettingsView() {
   const draft = useProjectEditorStore((state) => state.draft);
@@ -76,11 +100,33 @@ export function ExportSettingsView() {
 
   return (
     <div className={styles.form}>
-      <h2 className={styles.heading}>Export settings</h2>
+      <h2 className={styles.heading}>{t('Export settings')}</h2>
       <p className={styles.muted}>
-        Output settings of the project. Paths are relative to the project folder. Empty fields use
-        the defaults shown as placeholders.
+        {t(
+          'Output settings of the project. Paths are relative to the project folder. Empty fields use the defaults shown as placeholders.',
+        )}
       </p>
+      <section className={styles.section} aria-label={t('Subtree references')}>
+        <div className={styles.sectionTitle}>{t('Subtree references')}</div>
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>{t('Export as')}</span>
+          <select
+            className={styles.input}
+            aria-label={t('Subtree export mode')}
+            value={exports.subtrees === 'inline' ? 'inline' : 'reference'}
+            onChange={(event) =>
+              runEdit('Set subtree export mode', (d) =>
+                setSubtreeExportMode(d, event.target.value as SubtreeExportMode),
+              )
+            }
+          >
+            <option value="reference">
+              {t('Reference (node names the tree; the game loads it)')}
+            </option>
+            <option value="inline">{t('Inline (expand the referenced tree in place)')}</option>
+          </select>
+        </div>
+      </section>
       {FORMATS.map((info) => {
         const current = exports[info.format] ?? {};
         const edit = (field: Field, value: string) =>
@@ -88,23 +134,27 @@ export function ExportSettingsView() {
             setExportField(d, info.format, field, value.trim() === '' ? undefined : value.trim());
           });
         return (
-          <section key={info.format} className={styles.section} aria-label={`${info.label} export`}>
+          <section
+            key={info.format}
+            className={styles.section}
+            aria-label={t('{format} export', { format: info.label })}
+          >
             <div className={styles.sectionTitle}>{info.label}</div>
             <div className={styles.field}>
-              <span className={styles.fieldLabel}>Output folder</span>
+              <span className={styles.fieldLabel}>{t('Output folder')}</span>
               <TextInput
                 value={current.outDir ?? ''}
-                ariaLabel={`${info.label} output folder`}
+                ariaLabel={t('{format} output folder', { format: info.label })}
                 placeholder={info.outDir}
                 className={styles.input}
                 onCommit={(value) => edit('outDir', value)}
               />
             </div>
             <div className={styles.field}>
-              <span className={styles.fieldLabel}>File name</span>
+              <span className={styles.fieldLabel}>{t('File name')}</span>
               <TextInput
                 value={current.fileName ?? ''}
-                ariaLabel={`${info.label} file name`}
+                ariaLabel={t('{format} file name', { format: info.label })}
                 placeholder={info.fileName}
                 className={styles.input}
                 onCommit={(value) => edit('fileName', value)}
@@ -112,10 +162,10 @@ export function ExportSettingsView() {
             </div>
             {info.namespace !== undefined && (
               <div className={styles.field}>
-                <span className={styles.fieldLabel}>Namespace</span>
+                <span className={styles.fieldLabel}>{t('Namespace')}</span>
                 <TextInput
                   value={current.namespace ?? ''}
-                  ariaLabel="C# namespace"
+                  ariaLabel={t('C# namespace')}
                   placeholder={info.namespace}
                   className={styles.input}
                   onCommit={(value) => edit('namespace', value)}
@@ -124,10 +174,10 @@ export function ExportSettingsView() {
             )}
             {info.package !== undefined && (
               <div className={styles.field}>
-                <span className={styles.fieldLabel}>Package</span>
+                <span className={styles.fieldLabel}>{t('Package')}</span>
                 <TextInput
                   value={current.package ?? ''}
-                  ariaLabel="Go package"
+                  ariaLabel={t('Go package')}
                   placeholder={info.package}
                   className={styles.input}
                   onCommit={(value) => edit('package', value)}
