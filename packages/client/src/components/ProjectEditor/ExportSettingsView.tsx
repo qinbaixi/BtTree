@@ -4,13 +4,16 @@ import type {
   ProjectFile,
   SubtreeExportMode,
 } from '@owlbt/shared';
+import { useEffect, useState } from 'react';
 import { t } from '../../i18n';
+import { fetchPluginExporters, type PluginExporterInfo } from '../../lib/api';
 import { useProjectEditorStore } from '../../store/projectEditorStore';
 import { runEdit } from './PropertyTable';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
 
-type Format = 'erlang' | 'lua' | 'ts' | 'cs' | 'go';
+/** A built-in format or the name of an exporter of owl-bt.js. */
+type Format = string;
 
 interface FormatInfo {
   format: Format;
@@ -54,16 +57,21 @@ export function setExportField(
   value: string | undefined,
 ): void {
   const all: ProjectExportJson = draft.export ?? {};
-  const current: FormatExportJson = { ...(all[format] ?? {}) };
+  const formats = all as Record<string, unknown>;
+  const existing = formats[format];
+  const current: FormatExportJson =
+    typeof existing === 'object' && existing !== null && !Array.isArray(existing)
+      ? { ...(existing as FormatExportJson) }
+      : {};
   if (value === undefined) {
     delete current[field];
   } else {
     current[field] = value;
   }
   if (Object.keys(current).length === 0) {
-    delete all[format];
+    delete formats[format];
   } else {
-    all[format] = current;
+    formats[format] = current;
   }
   if (Object.keys(all).length === 0) {
     delete draft.export;
@@ -90,13 +98,66 @@ export function setSubtreeExportMode(
   }
 }
 
+/** Plugin formats shown with the defaults of their exporter (outDir from owl-bt.js). */
+export function pluginFormatInfos(exporters: readonly PluginExporterInfo[]): FormatInfo[] {
+  return exporters.map((exporter) => ({
+    format: exporter.format,
+    label: exporter.label,
+    outDir: exporter.outDir,
+    fileName: '{name}',
+  }));
+}
+
+/** Loads the exporters of owl-bt.js for the edited project (none while it is not trusted). */
+function usePluginExporters(projectPath: string | undefined): {
+  exporters: PluginExporterInfo[];
+  error?: string;
+} {
+  const [loaded, setLoaded] = useState<{
+    projectPath: string;
+    exporters: PluginExporterInfo[];
+    error?: string;
+  }>();
+  useEffect(() => {
+    if (projectPath === undefined) {
+      return undefined;
+    }
+    let current = true;
+    fetchPluginExporters(projectPath).then(
+      (result) => {
+        if (current) {
+          setLoaded({ projectPath, exporters: result.exporters, error: result.error });
+        }
+      },
+      () => {
+        // Without the list only the built-in formats are shown.
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [projectPath]);
+  return loaded?.projectPath === projectPath && loaded
+    ? { exporters: loaded.exporters, error: loaded.error }
+    : { exporters: [] };
+}
+
 /** Center column: output folder, file name template, C# namespace and Go package per export format. */
 export function ExportSettingsView() {
   const draft = useProjectEditorStore((state) => state.draft);
+  const projectPath = useProjectEditorStore((state) => state.projectPath);
+  const plugin = usePluginExporters(projectPath);
   if (!draft) {
     return null;
   }
-  const exports = draft.export ?? {};
+  const exports = (draft.export ?? {}) as ProjectExportJson & Record<string, unknown>;
+  const formatSettings = (format: Format): FormatExportJson => {
+    const value = exports[format];
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? (value as FormatExportJson)
+      : {};
+  };
+  const formats = [...FORMATS, ...pluginFormatInfos(plugin.exporters)];
 
   return (
     <div className={styles.form}>
@@ -127,8 +188,13 @@ export function ExportSettingsView() {
           </select>
         </div>
       </section>
-      {FORMATS.map((info) => {
-        const current = exports[info.format] ?? {};
+      {plugin.error !== undefined && (
+        <p className={styles.muted}>
+          {t('Plugin export formats are unavailable: {message}', { message: plugin.error })}
+        </p>
+      )}
+      {formats.map((info) => {
+        const current = formatSettings(info.format);
         const edit = (field: Field, value: string) =>
           runEdit(`Set ${info.label} ${field}`, (d) => {
             setExportField(d, info.format, field, value.trim() === '' ? undefined : value.trim());

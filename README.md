@@ -1048,7 +1048,7 @@ module.exports = {
 }
 ```
 
-优先级：命令行 `--out` > `export.<格式名>.outDir` > 导出器的 `outDir` > 默认的 `export/<格式名>`。`fileName` 默认 `{name}`，扩展名自动补上。
+优先级：命令行 `--out` > `export.<格式名>.outDir` > 导出器的 `outDir` > 默认的 `export/<格式名>`。`fileName` 默认 `{name}`，扩展名自动补上。项目编辑器的「Export settings」中也会列出插件格式（插件已信任时），可以直接填写输出目录和文件名，留空时占位符显示导出器的默认目录。
 
 ### 使用
 
