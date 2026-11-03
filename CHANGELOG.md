@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+## [0.3.1] - 2026-11-03
+
+新增自定义导出格式：在项目的 `exporters/` 文件夹中为每种格式写一个 JS 文件，即可在编辑器和命令行中导出为需求方需要的任意格式。
+
 ### 新增
 
 - 自定义导出格式：在项目的 `exporters/` 文件夹中每种格式写一个 JS 文件（文件名即格式名），或在 `owl-bt.js` 中用 `exporters` 定义导出器（`render(model, ctx)` 拿到与内置格式相同的导出模型，返回文件内容）。导出器文件与 `owl-bt.js` 一起信任。插件格式会出现在菜单 File 的导出项、命令面板和首页的批量导出中，`owlbt export --format <名字>` 与 `/api/export` 也可使用。输出目录未配置时默认为 `export/<格式名>`，也可由导出器的 `outDir` 或 `owl-bt.json` 的 `export.<格式名>.outDir` 指定。项目编辑器的「Export settings」也会列出插件格式。插件未信任时不会运行，新增 `GET /api/exporters` 列出可用的插件格式。
@@ -89,7 +93,8 @@
 - 保存请求体上限提高到 50 MB；服务端异常不再导致进程退出。
 - 保存树文件时保留原文件的缩进、换行与 BOM；无效 JSON 返回清晰的错误信息。
 
-[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.3.0...HEAD
+[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/qinbaixi/BtTree/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/qinbaixi/BtTree/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/qinbaixi/BtTree/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/qinbaixi/BtTree/releases/tag/v0.1.0
