@@ -5,7 +5,14 @@ import { createAlertStore } from '../store/alertStore';
 import { createDialogStore } from '../store/dialogStore';
 import { createProjectStore } from '../store/projectStore';
 import { createTreeStore } from '../store/treeStore';
-import { EXPORT_COMMAND_IDS, EXPORT_SUCCESS_ALERT_MS, coreCommands } from './coreCommands';
+import { exporterStore } from '../store/exporterStore';
+import { withPluginExports, TOP_MENU_SECTIONS } from '../components/TopMenu/TopMenu';
+import {
+  EXPORT_COMMAND_IDS,
+  EXPORT_SUCCESS_ALERT_MS,
+  coreCommands,
+  pluginExportCommandId,
+} from './coreCommands';
 import { commandRegistry, type Command, type CommandContext } from './registry';
 
 vi.mock('../lib/api', async (importOriginal) => {
@@ -202,5 +209,46 @@ describe('export commands', () => {
     expect(alertsOf(ctx)).toEqual([
       expect.objectContaining({ type: 'error', message: 'Export failed: No project found' }),
     ]);
+  });
+
+  describe('plugin formats', () => {
+    const XML = { format: 'xml', label: 'XML', extension: '.xml', outDir: 'export/xml' };
+    const CSV = { format: 'csv', label: 'CSV', extension: '.csv', outDir: 'export/csv' };
+
+    afterEach(() => {
+      exporterStore.setState({ exporters: [] });
+    });
+
+    it('registers one command per plugin format and drops removed ones', async () => {
+      exporterStore.setState({ exporters: [XML, CSV] });
+      expect(commandRegistry[pluginExportCommandId('xml')]?.name).toBe('Export: XML');
+      expect(commandRegistry[pluginExportCommandId('csv')]?.name).toBe('Export: CSV');
+
+      const { ctx } = await loadedSetup();
+      exportTreeMock.mockResolvedValue({ treePath: 'tree.json', files: [], warnings: [] });
+      await commandRegistry[pluginExportCommandId('xml')].exec(ctx);
+      await cmd(EXPORT_COMMAND_IDS.all).exec(ctx);
+      expect(exportTreeMock.mock.calls).toEqual([
+        ['tree.json', ['xml']],
+        ['tree.json', ['erlang', 'lua', 'ts', 'cs', 'go', 'xml', 'csv']],
+      ]);
+
+      exporterStore.setState({ exporters: [CSV] });
+      expect(commandRegistry[pluginExportCommandId('xml')]).toBeUndefined();
+      expect(commandRegistry[pluginExportCommandId('csv')]).toBeDefined();
+    });
+
+    it('adds plugin items to the File menu before "Export: All formats"', () => {
+      const file = TOP_MENU_SECTIONS[0].items;
+      expect(withPluginExports(file, [])).toBe(file);
+      const titles = withPluginExports(file, [XML, CSV]).map((item) => item.title);
+      const go = titles.indexOf('Export: Go');
+      expect(titles.slice(go, go + 4)).toEqual([
+        'Export: Go',
+        'Export: XML',
+        'Export: CSV',
+        'Export: All formats',
+      ]);
+    });
   });
 });

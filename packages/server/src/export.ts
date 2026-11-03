@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, relative, resolve, sep } from 'node:path';
+import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import {
   buildExportModel,
   collectSubtreeRefsJson,
@@ -17,20 +17,32 @@ import {
   toLua,
   toTypeScript,
   type CompiledProject,
+  type ExportModel,
+  type FormatExportJson,
   type ProjectFile,
   type SubtreeExportMode,
   type SubtreeLibrary,
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
-import { findProjectFile } from './project';
+import {
+  BUILTIN_EXPORT_FORMATS,
+  collectPluginExporters,
+  isBuiltinExportFormat,
+  isPluginFormatName,
+  type BuiltinExportFormat,
+  type ResolvedPluginExporter,
+} from './pluginExporters';
+import { findProjectFile, getProject, PROJECT_FILE_NAME } from './project';
 import { loadSubtreeLibrary, treeRefOf, type SubtreeFileCache } from './subtrees';
 import { loadWorkspace, type WorkspaceTree } from './workspace';
 
-export const EXPORT_FORMATS = ['erlang', 'lua', 'ts', 'cs', 'go'] as const;
-export type ExportFormat = (typeof EXPORT_FORMATS)[number];
+/** Built-in formats. Projects can add more with `exporters` in owl-bt.js. */
+export const EXPORT_FORMATS = BUILTIN_EXPORT_FORMATS;
+/** A built-in format or the name of a plugin exporter. */
+export type ExportFormat = string;
 
-const FORMAT_DEFAULTS: Record<ExportFormat, { outDir: string; extension: string }> = {
+const FORMAT_DEFAULTS: Record<BuiltinExportFormat, { outDir: string; extension: string }> = {
   erlang: { outDir: 'export/erlang', extension: '.erl' },
   lua: { outDir: 'export/lua', extension: '.lua' },
   ts: { outDir: 'export/ts', extension: '.ts' },
@@ -56,6 +68,8 @@ export interface ExportTreeResult {
 export interface ExportOptions {
   /** Output folder for every format (the CLI `--out` option). Relative paths resolve against the process folder. */
   outDir?: string;
+  /** Runs owl-bt.js exporters without the trust check (the --trust-plugins flag). */
+  trustAllPlugins?: boolean;
 }
 
 export interface ExportProjectResult {
@@ -69,8 +83,8 @@ export interface ExportProjectResult {
 export const EXPORT_CONCURRENCY = 4;
 
 /**
- * The project file as the exporter needs it: parsed and compiled once. Export never runs the
- * project plugin (owl-bt.js), so it is not loaded.
+ * The project file as the exporter needs it: parsed and compiled once. The project plugin
+ * (owl-bt.js) is only loaded when a plugin format is requested, and only when it is trusted.
  */
 interface ExportProject {
   dir: string;
@@ -78,6 +92,22 @@ interface ExportProject {
   compiled?: CompiledProject;
   /** Set when owl-bt.json does not compile. */
   error?: string;
+  /** Exporters of owl-bt.js (empty when the plugin was not loaded). */
+  exporters: Map<string, ResolvedPluginExporter>;
+  /** Problems with the `exporters` of owl-bt.js. */
+  pluginWarnings: string[];
+  /** Why plugin formats are unavailable (untrusted or broken owl-bt.js). */
+  pluginError?: string;
+}
+
+/** How the project plugin is loaded for an export. */
+interface PluginLoad {
+  load: boolean;
+  trustAllPlugins?: boolean;
+}
+
+function needsPlugin(formats: ExportFormat[]): boolean {
+  return formats.some((format) => !isBuiltinExportFormat(format));
 }
 
 /** Cache of loaded projects by owl-bt.json path, shared by the trees of one batch. */
@@ -98,22 +128,59 @@ export function subtreeExportMode(file: ProjectFile): {
   };
 }
 
-async function readExportProject(path: string): Promise<ExportProject> {
+/** Loads the exporters of owl-bt.js next to owl-bt.json, when it exists and is trusted. */
+export async function loadPluginExporters(
+  projectPath: string,
+  trustAllPlugins?: boolean,
+): Promise<Pick<ExportProject, 'exporters' | 'pluginWarnings' | 'pluginError'>> {
+  let project: Awaited<ReturnType<typeof getProject>>;
+  try {
+    project = await getProject(projectPath, { trustAllPlugins });
+  } catch (err) {
+    return {
+      exporters: new Map(),
+      pluginWarnings: [],
+      pluginError: `owl-bt.js failed to load: ${messageOf(err)}`,
+    };
+  }
+  if (project?.pluginStatus && !project.pluginStatus.trusted) {
+    return {
+      exporters: new Map(),
+      pluginWarnings: [],
+      pluginError:
+        'owl-bt.js is not trusted; trust it in the editor or pass --trust-plugins to use its exporters',
+    };
+  }
+  const { exporters, warnings } = collectPluginExporters(project?.plugin);
+  return { exporters, pluginWarnings: warnings };
+}
+
+async function readExportProject(path: string, plugin: PluginLoad): Promise<ExportProject> {
   const content = await readFile(path, 'utf8');
   const compiled = parseAndCompileProject(content);
+  const pluginPart = plugin.load
+    ? await loadPluginExporters(path, plugin.trustAllPlugins)
+    : { exporters: new Map<string, ResolvedPluginExporter>(), pluginWarnings: [] };
   if (!compiled.project) {
-    return { dir: dirname(path), file: {}, error: compiled.error ?? 'unknown error' };
+    return {
+      dir: dirname(path),
+      file: {},
+      error: compiled.error ?? 'unknown error',
+      ...pluginPart,
+    };
   }
   return {
     dir: dirname(path),
     file: JSON.parse(content) as ProjectFile,
     compiled: compiled.project,
+    ...pluginPart,
   };
 }
 
 /** The project that applies to a tree, or undefined when there is none. */
 async function loadExportProject(
   treePath: string,
+  plugin: PluginLoad,
   cache?: ProjectCache,
 ): Promise<ExportProject | undefined> {
   const path = await findProjectFile(treePath);
@@ -121,16 +188,24 @@ async function loadExportProject(
     return undefined;
   }
   if (!cache) {
-    return readExportProject(path);
+    return readExportProject(path, plugin);
   }
   let pending = cache.get(path);
   if (!pending) {
-    pending = readExportProject(path);
+    pending = readExportProject(path, plugin);
     cache.set(path, pending);
     // A failed read (e.g. too many open files) is not cached: the next tree tries again.
     pending.catch(() => cache.delete(path));
   }
   return pending;
+}
+
+/** `export.<format>` of owl-bt.json, or an empty object. */
+function formatConfig(file: ProjectFile, format: ExportFormat): FormatExportJson {
+  const value: unknown = (file.export as Record<string, unknown> | undefined)?.[format];
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as FormatExportJson)
+    : {};
 }
 
 /** Where one format of a tree is written, from the project's export settings. */
@@ -139,9 +214,14 @@ function outputFile(
   treePath: string,
   format: ExportFormat,
   options: ExportOptions,
-): { path: string; baseName: string } {
-  const defaults = FORMAT_DEFAULTS[format];
-  const config = project.file.export?.[format] ?? {};
+): { path: string; baseName: string } | undefined {
+  const defaults = isBuiltinExportFormat(format)
+    ? FORMAT_DEFAULTS[format]
+    : project.exporters.get(format);
+  if (!defaults) {
+    return undefined;
+  }
+  const config = formatConfig(project.file, format);
   const treeName = basename(treePath).replace(/\.json$/i, '');
   const outDir = resolve(project.dir, options.outDir ?? config.outDir ?? defaults.outDir);
   const fileName = (config.fileName ?? '{name}').replace(/\{name\}/g, treeName);
@@ -166,6 +246,10 @@ async function writeGroups(
   options: ExportOptions,
   cache: ProjectCache,
 ): Promise<number[][]> {
+  const plugin: PluginLoad = {
+    load: needsPlugin(formats),
+    trustAllPlugins: options.trustAllPlugins,
+  };
   // Union-find over trees: two trees are linked when they write the same file.
   const parent = trees.map((_, index) => index);
   const find = (index: number): number => {
@@ -180,7 +264,7 @@ async function writeGroups(
   for (const [index, tree] of trees.entries()) {
     let project: ExportProject | undefined;
     try {
-      project = await loadExportProject(tree.path, cache);
+      project = await loadExportProject(tree.path, plugin, cache);
     } catch {
       continue; // Reported by the tree's own export.
     }
@@ -188,7 +272,11 @@ async function writeGroups(
       continue;
     }
     for (const format of formats) {
-      const { path } = outputFile(project, tree.path, format, options);
+      const output = outputFile(project, tree.path, format, options);
+      if (!output) {
+        continue; // Unknown format: reported by the tree's own export.
+      }
+      const { path } = output;
       const key = process.platform === 'win32' ? path.toLowerCase() : path;
       const other = firstWriter.get(key);
       if (other === undefined) {
@@ -211,15 +299,46 @@ async function writeGroups(
   return [...groups.values()];
 }
 
+/** Throws HttpError 400 for a format that is neither built in nor defined by owl-bt.js. */
+function checkFormats(project: ExportProject, formats: ExportFormat[]): void {
+  for (const format of formats) {
+    if (!isBuiltinExportFormat(format) && !project.exporters.has(format)) {
+      const reason = project.pluginError ?? project.pluginWarnings.join('; ');
+      throw new HttpError(
+        400,
+        `Unknown export format: ${format}${reason === '' ? '' : ` (${reason})`}`,
+      );
+    }
+  }
+}
+
+/** Runs a plugin exporter and checks that it produced text. */
+async function renderPluginExport(
+  exporter: ResolvedPluginExporter,
+  model: ExportModel,
+  ctx: Parameters<ResolvedPluginExporter['render']>[1],
+): Promise<string | Uint8Array> {
+  const content: unknown = await exporter.render(model, ctx);
+  if (typeof content === 'string' || content instanceof Uint8Array) {
+    return content;
+  }
+  throw new Error(
+    `render must return a string or a Buffer, got ${content === null ? 'null' : typeof content}`,
+  );
+}
+
 function messageOf(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
 function isExportFormat(value: unknown): value is ExportFormat {
-  return (EXPORT_FORMATS as readonly unknown[]).includes(value);
+  return isBuiltinExportFormat(value) || isPluginFormatName(value);
 }
 
-/** Validates the `formats` of a request: a non-empty list of known formats, without duplicates. */
+/**
+ * Validates the `formats` of a request: a non-empty list of built-in formats or plugin format
+ * names, without duplicates. Whether the plugin defines a format is checked when exporting.
+ */
 export function parseExportFormats(raw: unknown): ExportFormat[] {
   if (!Array.isArray(raw) || raw.length === 0) {
     throw new HttpError(400, 'formats must be a non-empty array');
@@ -256,10 +375,15 @@ async function exportTreeIn(
   cache?: ProjectCache,
   subtreeCache?: SubtreeFileCache,
 ): Promise<ExportTreeResult> {
-  const project = await loadExportProject(treePath, cache);
+  const project = await loadExportProject(
+    treePath,
+    { load: needsPlugin(formats), trustAllPlugins: options.trustAllPlugins },
+    cache,
+  );
   if (!project) {
     throw new HttpError(404, 'No project found');
   }
+  checkFormats(project, formats);
 
   const result: ExportTreeResult = { treePath, files: [], warnings: [] };
 
@@ -309,10 +433,32 @@ async function exportTreeIn(
   const sourcePath = relative(project.dir, treePath).split(sep).join('/');
 
   for (const format of formats) {
-    const config = projectFile.export?.[format] ?? {};
-    const { path, baseName } = outputFile(project, treePath, format, options);
-    let content: string;
-    if (format === 'erlang') {
+    const config = formatConfig(projectFile, format);
+    const output = outputFile(project, treePath, format, options);
+    if (!output) {
+      continue; // Checked above.
+    }
+    const { path, baseName } = output;
+    let content: string | Uint8Array;
+    const exporter = project.exporters.get(format);
+    if (!isBuiltinExportFormat(format) && exporter) {
+      try {
+        content = await renderPluginExport(exporter, model, {
+          format,
+          tree: json,
+          treePath,
+          sourcePath,
+          baseName,
+          outPath: path,
+          project: projectFile,
+          projectDir: project.dir,
+          config: { ...config },
+          warn: (message) => result.warnings.push(`${format}: ${String(message)}`),
+        });
+      } catch (err) {
+        return { ...result, error: `Exporter ${format} failed: ${messageOf(err)}` };
+      }
+    } else if (format === 'erlang') {
       content = toErlang(model, { module: sanitizeModuleName(baseName), sourcePath });
     } else if (format === 'lua') {
       content = toLua(model, { sourcePath });
@@ -371,6 +517,17 @@ export async function exportProject(
   const cache: ProjectCache = new Map();
   const subtreeCache: SubtreeFileCache = new Map();
   const { trees } = workspace;
+  if (needsPlugin(formats)) {
+    // Fail the whole batch for a format the project's plugin does not define.
+    const project = await loadExportProject(
+      join(workspace.projectDir, PROJECT_FILE_NAME),
+      { load: true, trustAllPlugins: options.trustAllPlugins },
+      cache,
+    );
+    if (project) {
+      checkFormats(project, formats);
+    }
+  }
   const groups = await writeGroups(trees, formats, options, cache);
   const results: ExportProjectResult['results'] = new Array(trees.length);
   let next = 0;

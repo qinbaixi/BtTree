@@ -47,7 +47,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **树内搜索**：`Ctrl+F` 按类型、标签、注释、属性值查找节点、装饰器和服务，并逐个跳转。
 - **未保存提示**：任一标签页有未保存修改时，窗口标题显示 `*`，关闭或刷新页面前会询问。
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
-- **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存。
+- **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存；还可以用 `exporters` 添加自定义导出格式，显示在编辑器的导出菜单中。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
 - **项目范围引用**：查找某个类型或黑板键在项目所有树中的用法并一键跳转；重命名类型或黑板键后可批量更新所有树文件。
 - **黑板键声明**：在 `owl-bt.json` 中声明黑板键，属性面板提供键名补全，并对未声明的键给出警告。
@@ -953,7 +953,7 @@ owlbt export ./my-project --format go
 ```
 
 - 路径可以是树文件，也可以是目录（导出该目录所属项目中的全部树）
-- `--format` 可选 `erlang`、`lua`、`ts`、`cs`、`go`，默认 `erlang,lua`；`--out` 覆盖所有格式的输出目录
+- `--format` 可选 `erlang`、`lua`、`ts`、`cs`、`go` 以及 `owl-bt.js` 中定义的导出器名（见「自定义导出格式」），默认 `erlang,lua`；`--out` 覆盖所有格式的输出目录
 - 每个写入的文件都会打印路径，警告输出到标准错误；只要有一个树导出失败，退出码为 1。命令不启动服务
 
 ### 编辑器
@@ -991,6 +991,79 @@ get_node(1) ->
 
 </details>
 
+## 自定义导出格式（插件导出器）
+
+除了内置的五种格式，项目可以在 `owl-bt.js` 中用 `exporters` 自己写导出器，把树导出成需求方要的任意格式（XML、CSV、JSON、某种自定义配置……）。插件导出器拿到的是和内置格式**同一份导出模型**（编号、字段顺序、属性值都一致），只负责把它转成文本。
+
+<details>
+<summary>写法、输出位置、在编辑器和命令行中使用</summary>
+
+### 写法
+
+```js
+'use strict';
+
+module.exports = {
+  exporters: {
+    // 键是格式名：字母开头，只含字母、数字、_、-；不能与内置格式（erlang、lua、ts、cs、go）或 all、subtrees 重名
+    xml: {
+      label: 'XML', // 菜单中显示的名字，默认为格式名
+      extension: '.xml', // 扩展名，可省略点；默认为 .<格式名>
+      // outDir: 'export/xml', // 输出目录（相对项目目录），默认 export/<格式名>
+      render(model, ctx) {
+        const items = model.entries.map(
+          (e) => `  <item id="${e.id}" kind="${e.kind}"><!-- ${e.comment} --></item>`,
+        );
+        return `<tree root="${model.rootId}">\n${items.join('\n')}\n</tree>\n`;
+      },
+    },
+  },
+};
+```
+
+`render(model, ctx)` 返回文件内容（字符串或 Buffer，也可以是返回它们的 Promise）。抛出异常或返回其他类型时该树导出失败，错误信息为 `Exporter <格式名> failed: ...`。
+
+`model`（与内置导出器相同的 `ExportModel`）：
+
+- `rootId`：根节点编号（固定为 1）
+- `entries`：按编号排列的条目，每项为 `{ id, kind, comment, fields }`。`kind` 为 `node` / `decorator` / `service`；`comment` 为 `<类型>[ - <标签>]`；`fields` 是 `[键, 值]` 数组，顺序与「导出内容」一节相同
+- 值可能是 `null`、布尔、数字、字符串、数组、`{ atom: 'name' }`（枚举值、`type`、`sub_type` 等名字）或 `{ map: [[键, 值], ...] }`（有序的键值表，如 `properties`）
+- `warnings`：模型生成时的警告
+
+`ctx`：
+
+- `format`：格式名；`tree`：树文件的原始 JSON；`treePath`：树文件绝对路径；`sourcePath`：相对项目目录的树路径（`/` 分隔）
+- `baseName`：输出文件名（不含目录和扩展名）；`outPath`：将写入的文件绝对路径
+- `project`：解析后的 `owl-bt.json`；`projectDir`：项目目录
+- `config`：`owl-bt.json` 中 `export.<格式名>` 的内容（没有时为空对象），可以放导出器自己的选项
+- `warn(message)`：添加一条警告，显示在导出结果中
+
+### 输出位置
+
+和内置格式一样，`owl-bt.json` 的 `export.<格式名>` 可以设置 `outDir` 和 `fileName`：
+
+```json
+"export": {
+  "xml": { "outDir": "build/xml", "fileName": "bt_{name}" }
+}
+```
+
+优先级：命令行 `--out` > `export.<格式名>.outDir` > 导出器的 `outDir` > 默认的 `export/<格式名>`。`fileName` 默认 `{name}`，扩展名自动补上。
+
+### 使用
+
+- 编辑器：菜单 File 中「Export: Go」之后会出现每个插件格式的「Export: <label>」，命令面板中也有；「Export: All formats」会同时导出插件格式。首页的「导出」区域也会列出插件格式的勾选框
+- 命令行：`owlbt export ./my-project --format lua,xml`
+- HTTP：`POST /api/export` 和 `POST /api/export/batch` 的 `formats` 中直接写格式名；`GET /api/exporters?path=<树文件或 owl-bt.json 绝对路径>` 返回 `{ exporters: [{ format, label, extension, outDir }], warnings, error? }`
+
+### 信任
+
+插件导出器同样受「插件信任」约束：`owl-bt.js` 未信任时，编辑器不显示插件格式（首页会说明原因），命令行和 API 请求插件格式会报错 `Unknown export format: xml (owl-bt.js is not trusted; ...)`。在编辑器中点击 **Trust and run** 后菜单即出现插件格式；命令行可加 `--trust-plugins`。只导出内置格式时不会加载 `owl-bt.js`。
+
+`exporters` 中无效的条目（名字不合法、没有 `render`、扩展名不合法）会被跳过，原因列在 `GET /api/exporters` 的 `warnings` 中，也会附在 `Unknown export format` 的错误信息里。
+
+</details>
+
 ## 项目插件（owl-bt.js）
 
 如果项目目录中存在 `owl-bt.js`，服务端会在加载和保存树时调用它；插件需要在编辑器中确认信任后才会运行。
@@ -998,7 +1071,7 @@ get_node(1) ->
 <details>
 <summary>插件接口与信任机制</summary>
 
-插件必须是 CommonJS 模块，导出包含以下可选钩子的对象：
+插件必须是 CommonJS 模块，导出包含以下可选钩子的对象（另有 `exporters`，见「自定义导出格式」）：
 
 - `onTreeLoad(ctx)`：加载树时调用。修改 `ctx.tree` 即可改变返回给编辑器的内容。
 - `onTreeSave(ctx)`：保存树时调用。修改 `ctx.tree` 会写入文件。返回 `false` 会拒绝保存（HTTP 409），返回字符串会以该字符串作为原因拒绝保存（HTTP 409）。返回其他值（包括 `undefined`）则正常保存。
@@ -1098,6 +1171,7 @@ module.exports = {
 | `POST` | `/api/dialog/pick` | 打开本机的系统文件 / 文件夹选择框，见下文 |
 | `POST` | `/api/export` | 导出单个树为 Erlang / Lua / TypeScript / C# / Go，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
 | `POST` | `/api/export/batch` | 导出项目中的全部树，见「导出 Erlang / Lua / TypeScript / C# / Go」 |
+| `GET` | `/api/exporters?path=<树文件或 owl-bt.json 绝对路径>` | `owl-bt.js` 定义的导出格式 `{ exporters, warnings, error? }`；插件未信任时 `exporters` 为空，`error` 说明原因。见「自定义导出格式」 |
 | `POST` | `/api/scenario-tests` | 运行场景测试（同 `owlbt test`）。请求体 `{ path, project?, trees?, scenarios? }`：`path` 为树文件、文件夹或 `owl-bt.json` 的绝对路径；`project` 可代替磁盘上的 `owl-bt.json`（项目编辑器用它测试未保存的修改）；`trees` / `scenarios` 为过滤条件（字符串数组）。返回报告 `{ projectDir, projectPath, cases, warnings, summary, ok }`；配置错误时 400 |
 | `GET` | `/api/usages?path=&kind=&name=` | 在 `path`（树文件、`owl-bt.json` 或项目内文件夹的绝对路径）所属项目的全部树中查找用法，见下文 |
 | `POST` | `/api/references/rename` | 批量改写树文件中被重命名的类型和黑板键，见下文 |

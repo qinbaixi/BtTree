@@ -27,10 +27,14 @@ describe('parseExportFormats', () => {
   });
 
   it('rejects anything else with 400', () => {
-    for (const bad of [undefined, 'lua', [], ['python'], [42]]) {
+    for (const bad of [undefined, 'lua', [], ['my format'], ['all'], ['subtrees'], [42]]) {
       expect(() => parseExportFormats(bad)).toThrow(HttpError);
     }
-    expect(() => parseExportFormats(['python'])).toThrow('Unknown export format: python');
+    expect(() => parseExportFormats(['x.y'])).toThrow('Unknown export format: x.y');
+  });
+
+  it('accepts names of plugin exporters (checked against owl-bt.js when exporting)', () => {
+    expect(parseExportFormats(['python', 'lua'])).toEqual(['python', 'lua']);
     expect(() => parseExportFormats([])).toThrow('formats must be a non-empty array');
   });
 });

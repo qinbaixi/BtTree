@@ -419,7 +419,7 @@ describe('Home', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
 
       expect(await screen.findByText('trees/new.json')).toBeTruthy();
-      expect(calls.filter((c) => c.method === 'GET')).toHaveLength(2);
+      expect(calls.filter((c) => c.url.pathname === '/api/workspace')).toHaveLength(2);
     });
   });
 
@@ -500,6 +500,50 @@ describe('Home', () => {
       expect(isChecked('TypeScript')).toBe(true);
       expect(isChecked('Erlang')).toBe(false);
       expect(isChecked('C#')).toBe(false);
+    });
+
+    it('shows the formats of the project plugin and exports the ticked ones', async () => {
+      window.localStorage.setItem(EXPORT_FORMATS_STORAGE_KEY, '["lua","xml","other"]');
+      window.localStorage.setItem(LAST_DIR_STORAGE_KEY, '/work/trees');
+      const calls = mockApi({
+        'GET /api/workspace': () => json(WORKSPACE),
+        'GET /api/exporters': () =>
+          json({
+            exporters: [
+              { format: 'xml', label: 'XML', extension: '.xml', outDir: 'export/xml' },
+              { format: 'csv', label: 'CSV', extension: '.csv', outDir: 'export/csv' },
+            ],
+            warnings: [],
+          }),
+        'POST /api/export/batch': () => json(BATCH),
+      });
+      renderHome();
+      await screen.findByRole('checkbox', { name: 'XML' });
+
+      expect(isChecked('XML')).toBe(true);
+      expect(isChecked('CSV')).toBe(false);
+      expect(
+        calls.find((c) => c.url.pathname === '/api/exporters')?.url.searchParams.get('path'),
+      ).toBe('/work/owl-bt.json');
+      fireEvent.click(screen.getByRole('checkbox', { name: 'CSV' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
+      await screen.findByRole('list', { name: 'Export results' });
+      const batchCall = calls.find((c) => c.url.pathname === '/api/export/batch');
+      // "other" is not a format of this project, so it is not sent.
+      expect(batchCall?.body).toEqual({ dir: '/work/trees', formats: ['lua', 'xml', 'csv'] });
+    });
+
+    it('says why plugin formats are unavailable', async () => {
+      window.localStorage.setItem(LAST_DIR_STORAGE_KEY, '/work/trees');
+      mockApi({
+        'GET /api/workspace': () => json(WORKSPACE),
+        'GET /api/exporters': () =>
+          json({ exporters: [], warnings: [], error: 'owl-bt.js is not trusted' }),
+      });
+      renderHome();
+      expect(
+        await screen.findByText('Plugin export formats are unavailable: owl-bt.js is not trusted'),
+      ).toBeTruthy();
     });
 
     it('stores and exports TypeScript and C# when they are ticked', async () => {

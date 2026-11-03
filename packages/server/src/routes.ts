@@ -18,10 +18,12 @@ import {
   type PickKind,
   type Picker,
 } from './picker';
-import { exportProject, exportTree, parseExportFormats } from './export';
+import { exportProject, exportTree, loadPluginExporters, parseExportFormats } from './export';
+import { exporterInfo } from './pluginExporters';
 import { formatJsonLike, sha256 } from './projectFile';
 import { runScenarioTests, ScenarioConfigError } from './scenarioTests';
 import {
+  findProjectFile,
   getProject,
   isPathInDir,
   PLUGIN_FILE_NAME,
@@ -443,7 +445,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     const body = objectBody(req.body);
     const treePath = requireAbsolutePath(body.path, 'path');
     const formats = parseExportFormats(body.formats);
-    res.json(await exportTree(treePath, formats));
+    res.json(await exportTree(treePath, formats, { trustAllPlugins: options.trustAllPlugins }));
   });
 
   registerReferenceRoutes(router);
@@ -452,7 +454,25 @@ export function createApiRouter(options: RouterOptions = {}): Router {
     const body = objectBody(req.body);
     const dir = requireAbsolutePath(body.dir, 'dir');
     const formats = parseExportFormats(body.formats);
-    res.json(await exportProject(dir, formats));
+    res.json(await exportProject(dir, formats, { trustAllPlugins: options.trustAllPlugins }));
+  });
+
+  /**
+   * Export formats that owl-bt.js adds for the project of a path. Untrusted plugins are not run:
+   * their formats stay hidden and `error` says why.
+   */
+  router.get('/exporters', async (req, res) => {
+    const path = requireAbsolutePath(req.query.path);
+    const projectPath = await findProjectFile(path);
+    if (!projectPath) {
+      throw new HttpError(404, 'No project found');
+    }
+    const loaded = await loadPluginExporters(projectPath, options.trustAllPlugins);
+    res.json({
+      exporters: [...loaded.exporters.values()].map(exporterInfo),
+      warnings: loaded.pluginWarnings,
+      ...(loaded.pluginError === undefined ? {} : { error: loaded.pluginError }),
+    });
   });
 
   router.post('/scenario-tests', async (req, res) => {

@@ -32,6 +32,10 @@ export function registerCommand(command: Command): void {
   commandRegistry[command.id] = command;
 }
 
+export function unregisterCommand(id: string): void {
+  delete commandRegistry[id];
+}
+
 export function getCommand(id: string): Command | undefined {
   return commandRegistry[id];
 }

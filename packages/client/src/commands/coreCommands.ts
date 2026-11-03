@@ -22,7 +22,7 @@ import {
   type TreeNode,
 } from '@owlbt/shared';
 import { focusNode } from '../components/TreeCanvas/viewportStore';
-import { exportTree, type ExportFormat, type ExportTreeResult } from '../lib/api';
+import { EXPORT_FORMATS, exportTree, type ExportFormat, type ExportTreeResult } from '../lib/api';
 import { readClipboard, writeClipboard } from '../lib/clipboard';
 import { navigateTo, projectEditorUrl, type ProjectEditorLink } from '../lib/appNavigation';
 import { t } from '../i18n';
@@ -39,7 +39,14 @@ import {
   listNodeChoices,
   type ItemChoice,
 } from './itemTypes';
-import { commandRegistry, registerCommand, type Command, type CommandContext } from './registry';
+import {
+  commandRegistry,
+  registerCommand,
+  unregisterCommand,
+  type Command,
+  type CommandContext,
+} from './registry';
+import { exporterStore } from '../store/exporterStore';
 import { formatHotkey } from './useHotkeys';
 
 export const COMMAND_PALETTE_ID = 'core:CommandPalette';
@@ -492,7 +499,11 @@ export const EXPORT_SUCCESS_ALERT_MS = 15000;
  * Exports the open tree to the given formats. Unsaved changes are saved first; the export is
  * cancelled when the user declines or the save fails. Written files, warnings and errors are shown as alerts.
  */
-function exportCommand(id: string, name: string, formats: ExportFormat[]): Command {
+function exportCommand(
+  id: string,
+  name: string,
+  formats: ExportFormat[] | (() => ExportFormat[]),
+): Command {
   return {
     id,
     name,
@@ -517,7 +528,7 @@ function exportCommand(id: string, name: string, formats: ExportFormat[]): Comma
 
       let result: ExportTreeResult;
       try {
-        result = await exportTree(treePath, formats);
+        result = await exportTree(treePath, typeof formats === 'function' ? formats() : formats);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         ctx.alerts.getState().push('error', t('Export failed: {message}', { message }));
@@ -545,13 +556,37 @@ const exportLua = exportCommand(EXPORT_COMMAND_IDS.lua, t('Export: Lua'), ['lua'
 const exportTs = exportCommand(EXPORT_COMMAND_IDS.ts, t('Export: TypeScript'), ['ts']);
 const exportCs = exportCommand(EXPORT_COMMAND_IDS.cs, t('Export: C#'), ['cs']);
 const exportGo = exportCommand(EXPORT_COMMAND_IDS.go, t('Export: Go'), ['go']);
-const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, t('Export: All formats'), [
-  'erlang',
-  'lua',
-  'ts',
-  'cs',
-  'go',
+/** Built-in formats plus the formats of the project plugin. */
+const exportAll = exportCommand(EXPORT_COMMAND_IDS.all, t('Export: All formats'), () => [
+  ...EXPORT_FORMATS,
+  ...exporterStore.getState().exporters.map((exporter) => exporter.format),
 ]);
+
+/** Command id of the export command of a plugin format. */
+export function pluginExportCommandId(format: string): string {
+  return `plugin:Export:${format}`;
+}
+
+/** Keeps one export command per plugin format registered (File menu and command palette). */
+let pluginExportIds: string[] = [];
+function syncPluginExportCommands(): void {
+  for (const id of pluginExportIds) {
+    unregisterCommand(id);
+  }
+  pluginExportIds = [];
+  for (const exporter of exporterStore.getState().exporters) {
+    const id = pluginExportCommandId(exporter.format);
+    registerCommand(
+      exportCommand(id, t('Export: {label}', { label: exporter.label }), [exporter.format]),
+    );
+    pluginExportIds.push(id);
+  }
+}
+exporterStore.subscribe((state, previous) => {
+  if (state.exporters !== previous.exporters) {
+    syncPluginExportCommands();
+  }
+});
 
 export const EDIT_PROJECT_COMMAND_ID = 'core:EditProjectTypes';
 

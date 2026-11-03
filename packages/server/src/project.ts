@@ -21,6 +21,8 @@ export interface PluginContext {
 export interface Plugin {
   onTreeLoad?(ctx: PluginContext): unknown;
   onTreeSave?(ctx: PluginContext): unknown;
+  /** Custom export formats by name (see pluginExporters.ts). */
+  exporters?: unknown;
 }
 
 export interface PluginStatus {
