@@ -139,9 +139,13 @@ function reportExport(result: ExportTreeResult & { relPath?: string }): boolean 
 program
   .command('export <path>')
   .description(
-    'export trees to Erlang, Lua, TypeScript, C# and/or Go: a tree file, or every tree of a project folder',
+    'export trees to Erlang, Lua, TypeScript, C#, Go and/or formats of owl-bt.js exporters: a tree file, or every tree of a project folder',
   )
-  .option('--format <formats>', 'comma separated formats: erlang, lua, ts, cs, go', 'erlang,lua')
+  .option(
+    '--format <formats>',
+    'comma separated formats: erlang, lua, ts, cs, go or an exporter name from owl-bt.js',
+    'erlang,lua',
+  )
   .option('--out <dir>', 'output folder for every format (default: the project export settings)')
   .action(async (pathArg: string, options: { format: string; out?: string }) => {
     const target = resolve(pathArg);
@@ -152,11 +156,12 @@ program
         .filter((name) => name !== ''),
     );
     const outDir = options.out === undefined ? undefined : resolve(options.out);
+    const trustAllPlugins = shouldTrustPlugins();
 
     const info = await stat(target);
     let failed = false;
     if (info.isDirectory()) {
-      const batch = await exportProject(target, formats, { outDir });
+      const batch = await exportProject(target, formats, { outDir, trustAllPlugins });
       if (batch.results.length === 0) {
         console.log('No tree files found in the project.');
       }
@@ -168,7 +173,7 @@ program
       }
       console.log(`Exported ${batch.results.length} tree(s) from ${batch.projectDir}`);
     } else {
-      failed = reportExport(await exportTree(target, formats, { outDir }));
+      failed = reportExport(await exportTree(target, formats, { outDir, trustAllPlugins }));
     }
     if (failed) {
       process.exitCode = 1;

@@ -3,6 +3,7 @@ import { commandContext, commandRegistry, execCommand } from '../../commands/reg
 import {
   EDIT_PROJECT_COMMAND_ID,
   EXPORT_COMMAND_IDS,
+  pluginExportCommandId,
   RUN_COMMAND_IDS,
   THEME_COMMAND_IDS,
 } from '../../commands/coreCommands';
@@ -13,6 +14,8 @@ import { getLanguage, t, type Language } from '../../i18n';
 import { useProjectStore } from '../../store/projectStore';
 import { useRunStore } from '../../store/runStore';
 import { useTreeStore } from '../../store/treeStore';
+import { useExporterStore } from '../../store/exporterStore';
+import type { PluginExporterInfo } from '../../lib/api';
 import { useTheme, type ThemeId } from '../../lib/theme';
 import styles from './TopMenu.module.css';
 
@@ -88,6 +91,22 @@ export const TOP_MENU_SECTIONS: TopMenuSection[] = [
   },
 ];
 
+/** Adds the export items of the project plugin's formats before "Export: All formats". */
+export function withPluginExports(
+  items: TopMenuItem[],
+  exporters: readonly PluginExporterInfo[],
+): TopMenuItem[] {
+  const index = items.findIndex((item) => item.commandId === EXPORT_COMMAND_IDS.all);
+  if (index < 0 || exporters.length === 0) {
+    return items;
+  }
+  const pluginItems = exporters.map((exporter) => ({
+    title: t('Export: {label}', { label: exporter.label }),
+    commandId: pluginExportCommandId(exporter.format),
+  }));
+  return [...items.slice(0, index), ...pluginItems, ...items.slice(index)];
+}
+
 function isEnabled(commandId: string): boolean {
   const command = commandRegistry[commandId];
   return command !== undefined && command.canExec(commandContext);
@@ -97,6 +116,7 @@ export default function TopMenu() {
   const [openSection, setOpenSection] = useState<string | undefined>();
   const rootRef = useRef<HTMLUListElement>(null);
   const theme = useTheme();
+  const pluginExporters = useExporterStore((state) => state.exporters);
 
   // Re-evaluate enabled state when the tree (incl. undo/redo) or the project changes.
   useTreeStore((state) => state.version);
@@ -148,7 +168,7 @@ export default function TopMenu() {
             </button>
             {isOpen && (
               <ul className={styles.dropdown} role="menu">
-                {section.items.map((item) => {
+                {withPluginExports(section.items, pluginExporters).map((item) => {
                   const enabled = isEnabled(item.commandId);
                   const checkable = item.themeId !== undefined || item.languageId !== undefined;
                   const checked =

@@ -6,10 +6,10 @@ import styles from './PluginBanner.module.css';
 import { t } from '../../i18n';
 
 export const UNTRUSTED_MESSAGE = t(
-  'This project has a plugin (owl-bt.js) that runs code on your computer when trees are loaded and saved. It is not running.',
+  'This project has plugin code (owl-bt.js or exporters/) that runs code on your computer when trees are loaded, saved or exported. It is not running.',
 );
 export const CHANGED_MESSAGE = t(
-  'The project plugin (owl-bt.js) changed since you trusted it. It runs code on your computer when trees are loaded and saved, and it is not running.',
+  'The project plugin code (owl-bt.js or exporters/) changed since you trusted it. It runs code on your computer when trees are loaded, saved or exported, and it is not running.',
 );
 export const DIRTY_CONFIRM = t(
   'Trusting the plugin reloads the tree, and unsaved changes are discarded. Continue?',

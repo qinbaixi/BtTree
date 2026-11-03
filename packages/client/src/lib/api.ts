@@ -106,9 +106,36 @@ export async function createTree(path: string): Promise<{ path: string }> {
   return (await response.json()) as { path: string };
 }
 
-export type ExportFormat = 'erlang' | 'lua' | 'ts' | 'cs' | 'go';
+export type BuiltinExportFormat = 'erlang' | 'lua' | 'ts' | 'cs' | 'go';
 
-export const EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua', 'ts', 'cs', 'go'];
+/** A built-in format or the name of an exporter of the project plugin (owl-bt.js). */
+export type ExportFormat = string;
+
+export const EXPORT_FORMATS: readonly BuiltinExportFormat[] = ['erlang', 'lua', 'ts', 'cs', 'go'];
+
+/** An export format added by `exporters` in owl-bt.js. */
+export interface PluginExporterInfo {
+  format: string;
+  label: string;
+  /** With the leading dot. */
+  extension: string;
+  /** Default output folder relative to the project (owl-bt.json `export.<format>.outDir` wins). */
+  outDir: string;
+}
+
+export interface PluginExporters {
+  exporters: PluginExporterInfo[];
+  /** Problems with the `exporters` entries of owl-bt.js. */
+  warnings: string[];
+  /** Why the plugin formats are unavailable, e.g. the plugin is not trusted. */
+  error?: string;
+}
+
+/** Export formats owl-bt.js adds for the project of a tree file or project file. */
+export async function fetchPluginExporters(path: string): Promise<PluginExporters> {
+  const response = await request(`/api/exporters?${new URLSearchParams({ path })}`);
+  return (await response.json()) as PluginExporters;
+}
 
 export interface ExportedFile {
   format: ExportFormat;

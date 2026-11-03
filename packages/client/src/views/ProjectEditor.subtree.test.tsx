@@ -15,7 +15,11 @@ const PROJECT = {
   ],
 };
 
-const meta = vi.hoisted(() => ({ content: '' }));
+const meta = vi.hoisted(() => ({
+  content: '',
+  exporters: [] as Array<{ format: string; label: string; extension: string; outDir: string }>,
+  pluginError: undefined as string | undefined,
+}));
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -27,6 +31,11 @@ vi.mock('../lib/api', async (importOriginal) => {
       content: meta.content,
     })),
     saveProject: vi.fn(async () => ({ hash: 'h2' })),
+    fetchPluginExporters: vi.fn(async () => ({
+      exporters: meta.exporters,
+      warnings: [],
+      error: meta.pluginError,
+    })),
   };
 });
 
@@ -53,6 +62,8 @@ const draft = () => projectEditorStore.getState().draft;
 describe('project editor: subtree references', () => {
   beforeEach(() => {
     meta.content = JSON.stringify(PROJECT, null, 2);
+    meta.exporters = [];
+    meta.pluginError = undefined;
     projectEditorStore.setState({ dirty: false, undoStack: [], redoStack: [] });
   });
 
@@ -90,6 +101,36 @@ describe('project editor: subtree references', () => {
     await waitFor(() => expect(draft()?.export?.subtrees).toBe('inline'));
     fireEvent.change(select, { target: { value: 'reference' } });
     await waitFor(() => expect(draft()?.export).toBeUndefined());
+  });
+
+  it('edits the output settings of plugin formats', async () => {
+    meta.exporters = [{ format: 'xml', label: 'XML', extension: '.xml', outDir: 'out/xml' }];
+    renderEditor();
+    const list = await screen.findByRole('complementary', { name: 'Project types' });
+    fireEvent.click(within(list).getByRole('button', { name: /Export settings/ }));
+    const folder = (await screen.findByRole('textbox', {
+      name: 'XML output folder',
+    })) as HTMLInputElement;
+    expect(folder.placeholder).toBe('out/xml');
+    fireEvent.change(folder, { target: { value: 'build/xml' } });
+    fireEvent.blur(folder);
+    await waitFor(() => expect(draft()?.export).toEqual({ xml: { outDir: 'build/xml' } }));
+    const name = screen.getByRole('textbox', { name: 'XML file name' });
+    fireEvent.change(name, { target: { value: 'bt_{name}' } });
+    fireEvent.blur(name);
+    await waitFor(() =>
+      expect(draft()?.export).toEqual({ xml: { outDir: 'build/xml', fileName: 'bt_{name}' } }),
+    );
+  });
+
+  it('says why plugin formats are missing from the export settings', async () => {
+    meta.pluginError = 'owl-bt.js is not trusted';
+    renderEditor();
+    const list = await screen.findByRole('complementary', { name: 'Project types' });
+    fireEvent.click(within(list).getByRole('button', { name: /Export settings/ }));
+    expect(
+      await screen.findByText('Plugin export formats are unavailable: owl-bt.js is not trusted'),
+    ).toBeTruthy();
   });
 
   it('keeps other export settings when the mode changes', () => {

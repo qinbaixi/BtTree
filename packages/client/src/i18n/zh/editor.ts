@@ -19,6 +19,7 @@ export const editor: Record<string, string> = {
   'Export: TypeScript': '导出：TypeScript',
   'Export: C#': '导出：C#',
   'Export: Go': '导出：Go',
+  'Export: {label}': '导出：{label}',
   'Export: All formats': '导出：所有格式',
   'Save changes before editing project types?': '编辑项目类型前保存更改吗？',
   'Edit project types…': '编辑项目类型…',
@@ -104,10 +105,10 @@ export const editor: Record<string, string> = {
   'Show details of {name}': '查看 {name} 的详情',
 
   // Plugin banner
-  'This project has a plugin (owl-bt.js) that runs code on your computer when trees are loaded and saved. It is not running.':
-    '此项目包含插件 (owl-bt.js)，它会在加载和保存行为树时在你的电脑上运行代码。插件当前未运行。',
-  'The project plugin (owl-bt.js) changed since you trusted it. It runs code on your computer when trees are loaded and saved, and it is not running.':
-    '项目插件 (owl-bt.js) 在你信任之后已被修改。它会在加载和保存行为树时在你的电脑上运行代码，当前未运行。',
+  'This project has plugin code (owl-bt.js or exporters/) that runs code on your computer when trees are loaded, saved or exported. It is not running.':
+    '此项目包含插件代码 (owl-bt.js 或 exporters/)，它会在加载、保存或导出行为树时在你的电脑上运行代码。插件当前未运行。',
+  'The project plugin code (owl-bt.js or exporters/) changed since you trusted it. It runs code on your computer when trees are loaded, saved or exported, and it is not running.':
+    '项目插件代码 (owl-bt.js 或 exporters/) 在你信任之后已被修改。它会在加载、保存或导出行为树时在你的电脑上运行代码，当前未运行。',
   'Trusting the plugin reloads the tree, and unsaved changes are discarded. Continue?':
     '信任插件会重新加载行为树，未保存的更改将被丢弃。是否继续？',
   'Could not trust the plugin: {message}': '无法信任插件：{message}',
@@ -191,6 +192,7 @@ export const editor: Record<string, string> = {
   'Only the first 500 tree files are listed.': '仅列出了前 500 个行为树文件。',
   Export: '导出',
   'Export all': '全部导出',
+  'Plugin export formats are unavailable: {message}': '插件导出格式不可用：{message}',
   'Initialize a project to export its trees.': '初始化项目后才能导出其行为树。',
   'Exporting…': '正在导出…',
   'New tree': '新建行为树',

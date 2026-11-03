@@ -5,12 +5,15 @@ import {
   createTree,
   EXPORT_FORMATS,
   exportProject,
+  fetchPluginExporters,
   fetchWorkspace,
   initProject,
   pickPath,
+  type BuiltinExportFormat,
   type ExportFormat,
   type ExportProjectResult,
   type PickKind,
+  type PluginExporterInfo,
   type Workspace,
 } from '../lib/api';
 import { projectEditorUrl } from '../lib/appNavigation';
@@ -34,7 +37,7 @@ export const LAST_DIR_STORAGE_KEY = 'owlbt.lastDir';
 /** Export formats last chosen in the workspace panel. */
 export const EXPORT_FORMATS_STORAGE_KEY = 'owlbt.exportFormats';
 
-const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+const EXPORT_FORMAT_LABELS: Record<BuiltinExportFormat, string> = {
   erlang: 'Erlang',
   lua: 'Lua',
   ts: 'TypeScript',
@@ -46,15 +49,32 @@ const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
 const DEFAULT_EXPORT_FORMATS: readonly ExportFormat[] = ['erlang', 'lua'];
 
 /**
- * Stored formats in canonical order. Without a valid stored list the default formats are used;
- * unknown entries in a stored list are ignored.
+ * Stored formats. Without a valid stored list the default formats are used. Plugin formats are
+ * kept even when the current project has no such exporter; only available formats are exported.
  */
 function readStoredFormats(): ExportFormat[] {
   const stored = getJson<unknown>(EXPORT_FORMATS_STORAGE_KEY, DEFAULT_EXPORT_FORMATS);
   if (!Array.isArray(stored)) {
     return [...DEFAULT_EXPORT_FORMATS];
   }
-  return EXPORT_FORMATS.filter((format) => stored.includes(format));
+  return stored.filter((format, index): format is string => {
+    return typeof format === 'string' && stored.indexOf(format) === index;
+  });
+}
+
+/** Display name of a format in the export results (plugin formats show their name). */
+function formatLabel(format: ExportFormat): string {
+  return (EXPORT_FORMAT_LABELS as Record<string, string>)[format] ?? format;
+}
+
+/** Built-in formats and the formats of the project plugin, in the order they are shown. */
+function exportChoices(
+  pluginExporters: readonly PluginExporterInfo[],
+): Array<{ format: ExportFormat; label: string }> {
+  return [
+    ...EXPORT_FORMATS.map((format) => ({ format, label: EXPORT_FORMAT_LABELS[format] })),
+    ...pluginExporters.map((exporter) => ({ format: exporter.format, label: exporter.label })),
+  ];
 }
 
 /** Switches between the light and classic dark themes. */
@@ -142,7 +162,7 @@ function ExportResults({ result }: { result: ExportProjectResult }) {
             ) : (
               tree.files.map((file) => (
                 <div key={file.path} className={styles.exportFile} title={file.path}>
-                  <span className={styles.exportFormat}>{EXPORT_FORMAT_LABELS[file.format]}</span>
+                  <span className={styles.exportFormat}>{formatLabel(file.format)}</span>
                   {getPathLastSegment(file.path)}
                 </div>
               ))
@@ -192,12 +212,49 @@ function WorkspacePanel({
   const [exportResult, setExportResult] = useState<ExportProjectResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
 
+  const [pluginExport, setPluginExport] = useState<{
+    projectPath: string;
+    exporters: PluginExporterInfo[];
+    error?: string;
+  }>();
+
   const dir = workspace?.dir ?? folder;
+  const projectPath = workspace?.projectPath;
+
+  // Formats added by owl-bt.js (only listed while the plugin is trusted).
+  useEffect(() => {
+    if (projectPath === undefined) {
+      return undefined;
+    }
+    let current = true;
+    fetchPluginExporters(projectPath).then(
+      (result) => {
+        if (current) {
+          setPluginExport({ projectPath, exporters: result.exporters, error: result.error });
+        }
+      },
+      () => {
+        // Without the list only the built-in formats are offered.
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [projectPath]);
+
+  // A list loaded for another project is not shown.
+  const pluginState = pluginExport?.projectPath === projectPath ? pluginExport : undefined;
+  const pluginExporters = pluginState?.exporters ?? [];
+  const pluginExportError = pluginState?.error;
+  const choices = exportChoices(pluginExporters);
+  const selectedFormats = choices
+    .map((choice) => choice.format)
+    .filter((format) => exportFormats.includes(format));
 
   const toggleExportFormat = (format: ExportFormat) => {
-    const next = EXPORT_FORMATS.filter((item) =>
-      item === format ? !exportFormats.includes(item) : exportFormats.includes(item),
-    );
+    const next = exportFormats.includes(format)
+      ? exportFormats.filter((item) => item !== format)
+      : [...exportFormats, format];
     setExportFormats(next);
     setJson(EXPORT_FORMATS_STORAGE_KEY, next);
   };
@@ -207,7 +264,7 @@ function WorkspacePanel({
     setExportError(null);
     setExportResult(null);
     try {
-      setExportResult(await exportProject(dir, exportFormats));
+      setExportResult(await exportProject(dir, selectedFormats));
     } catch (err) {
       setExportError(errorMessage(err));
     } finally {
@@ -331,14 +388,14 @@ function WorkspacePanel({
               {t('Export')}
             </h3>
             <div className={styles.exportRow}>
-              {EXPORT_FORMATS.map((format) => (
+              {choices.map(({ format, label }) => (
                 <label key={format} className={styles.checkLabel}>
                   <input
                     type="checkbox"
                     checked={exportFormats.includes(format)}
                     onChange={() => toggleExportFormat(format)}
                   />
-                  {EXPORT_FORMAT_LABELS[format]}
+                  {label}
                 </label>
               ))}
               <button
@@ -347,7 +404,7 @@ function WorkspacePanel({
                 onClick={() => void onExportAll()}
                 disabled={
                   exporting ||
-                  exportFormats.length === 0 ||
+                  selectedFormats.length === 0 ||
                   workspace.projectPath === undefined ||
                   workspace.trees.length === 0
                 }
@@ -357,6 +414,13 @@ function WorkspacePanel({
             </div>
             {workspace.projectPath === undefined && (
               <p className={styles.muted}>{t('Initialize a project to export its trees.')}</p>
+            )}
+            {pluginExportError !== undefined && (
+              <p className={styles.muted}>
+                {t('Plugin export formats are unavailable: {message}', {
+                  message: pluginExportError,
+                })}
+              </p>
             )}
             {exporting && <p className={styles.muted}>{t('Exporting…')}</p>}
             {exportError !== null && (
