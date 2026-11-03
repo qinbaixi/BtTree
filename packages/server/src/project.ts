@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { Module, createRequire } from 'node:module';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ProjectFile, TreeNodeJson } from '@owlbt/shared';
 import { trustStatus } from './pluginTrust';
 
@@ -26,7 +26,7 @@ export interface Plugin {
 }
 
 export interface PluginStatus {
-  /** Absolute path of owl-bt.js. */
+  /** Absolute path of owl-bt.js, or of the first exporter file when there is no owl-bt.js. */
   path: string;
   trusted: boolean;
   /** True when the plugin was trusted before but its content changed since. */
@@ -41,8 +41,12 @@ export interface Project {
   content: string;
   /** The plugin, only when it is trusted (or trusting is disabled). */
   plugin?: Plugin;
-  /** Set when owl-bt.js exists. Untrusted plugins are not loaded. */
+  /** Set when owl-bt.js or exporters/*.js exists. Untrusted plugins are not loaded. */
   pluginStatus?: PluginStatus;
+  /** owl-bt.js (when it exists) and the exporter files: everything trusted together. */
+  pluginFiles?: string[];
+  /** Exporter files that failed to load or clash with owl-bt.js. */
+  pluginWarnings?: string[];
 }
 
 export interface ProjectOptions {
@@ -91,9 +95,52 @@ export function compilePlugin(pluginPath: string, source: string): Plugin | unde
   return typeof exported === 'object' && exported !== null ? (exported as Plugin) : undefined;
 }
 
+/** Folder next to owl-bt.json with one exporter per `<format>.js` file. */
+export const EXPORTERS_DIR_NAME = 'exporters';
+
+/** Exporter files of a project folder (`exporters/*.js` and `*.cjs`), sorted by name. */
+export async function listExporterFiles(dir: string): Promise<string[]> {
+  let names: string[];
+  try {
+    names = await readdir(join(dir, EXPORTERS_DIR_NAME));
+  } catch {
+    return [];
+  }
+  const files: string[] = [];
+  for (const name of names.sort()) {
+    if (/\.c?js$/i.test(name)) {
+      const file = join(dir, EXPORTERS_DIR_NAME, name);
+      if (await isFile(file)) {
+        files.push(file);
+      }
+    }
+  }
+  return files;
+}
+
+/** Format name of an exporter file: the file name without `.js` / `.cjs`. */
+export function exporterFormatOf(file: string): string {
+  return basename(file).replace(/\.c?js$/i, '');
+}
+
+/** Evaluates one exporter file. A function export is the `render` function. */
+function compileExporterFile(file: string, source: string): unknown {
+  const mod = new Module(file) as Module & { _compile(code: string, filename: string): void };
+  mod.filename = file;
+  mod.paths = (Module as unknown as { _nodeModulePaths(dir: string): string[] })._nodeModulePaths(
+    dirname(file),
+  );
+  mod.require = createRequire(file);
+  mod._compile(source, file);
+  const exported: unknown = mod.exports;
+  return typeof exported === 'function' ? { render: exported } : exported;
+}
+
 /**
- * Loads the project that applies to a tree or project file. The plugin next to owl-bt.json runs
- * only when the trust store has the current content of owl-bt.js (or trustAllPlugins is set).
+ * Loads the project that applies to a tree or project file. The plugin code (owl-bt.js next to
+ * owl-bt.json and the files in exporters/) runs only when the trust store has the current content
+ * of every one of those files (or trustAllPlugins is set). Exporter files are merged into
+ * `plugin.exporters`; owl-bt.js wins when both define a format.
  */
 export async function getProject(
   treePath: string,
@@ -106,35 +153,72 @@ export async function getProject(
   const dir = dirname(path);
   const content = await readFile(path, 'utf8');
   const pluginPath = join(dir, PLUGIN_FILE_NAME);
-  if (!existsSync(pluginPath)) {
+  const exporterFiles = await listExporterFiles(dir);
+  const pluginFiles = [...(existsSync(pluginPath) ? [pluginPath] : []), ...exporterFiles];
+  if (pluginFiles.length === 0) {
     return { path, dir, content };
   }
 
-  const source = await readFile(pluginPath, 'utf8');
-  if (options.trustAllPlugins === true) {
-    return {
-      path,
-      dir,
-      content,
-      plugin: compilePlugin(pluginPath, source),
-      pluginStatus: { path: pluginPath, trusted: true },
-    };
+  const sources = await Promise.all(pluginFiles.map((file) => readFile(file, 'utf8')));
+  const statusPath = pluginFiles[0];
+  if (options.trustAllPlugins !== true) {
+    const statuses = await Promise.all(
+      pluginFiles.map((file, index) => trustStatus(file, sources[index])),
+    );
+    if (statuses.some((status) => !status.trusted)) {
+      return {
+        path,
+        dir,
+        content,
+        pluginFiles,
+        pluginStatus: {
+          path: statusPath,
+          trusted: false,
+          changed: statuses.some((status) => status.changed),
+        },
+      };
+    }
   }
-  const status = await trustStatus(pluginPath, source);
-  if (!status.trusted) {
-    return {
-      path,
-      dir,
-      content,
-      pluginStatus: { path: pluginPath, trusted: false, changed: status.changed },
-    };
+
+  const hasMain = pluginFiles[0] === pluginPath;
+  const main = hasMain ? compilePlugin(pluginPath, sources[0]) : undefined;
+  const pluginWarnings: string[] = [];
+  const fileExporters: Record<string, unknown> = {};
+  exporterFiles.forEach((file, index) => {
+    const format = exporterFormatOf(file);
+    const label = `${EXPORTERS_DIR_NAME}/${basename(file)}`;
+    try {
+      fileExporters[format] = compileExporterFile(file, sources[index + (hasMain ? 1 : 0)]);
+    } catch (err) {
+      pluginWarnings.push(
+        `${label} failed to load: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  });
+  const mainExporters: unknown = main?.exporters;
+  let exporters: unknown = mainExporters;
+  if (Object.keys(fileExporters).length > 0) {
+    const fromMain =
+      typeof mainExporters === 'object' && mainExporters !== null && !Array.isArray(mainExporters)
+        ? (mainExporters as Record<string, unknown>)
+        : {};
+    for (const format of Object.keys(fileExporters)) {
+      if (format in fromMain) {
+        pluginWarnings.push(
+          `${EXPORTERS_DIR_NAME}/${format}: owl-bt.js also defines exporter "${format}"; using owl-bt.js`,
+        );
+      }
+    }
+    exporters = { ...fileExporters, ...fromMain };
   }
   return {
     path,
     dir,
     content,
-    plugin: compilePlugin(pluginPath, source),
-    pluginStatus: { path: pluginPath, trusted: true },
+    plugin: { ...(main ?? {}), exporters },
+    pluginFiles,
+    pluginWarnings,
+    pluginStatus: { path: statusPath, trusted: true },
   };
 }
 

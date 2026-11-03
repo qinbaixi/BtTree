@@ -6,7 +6,7 @@
 
 ### 新增
 
-- 自定义导出格式：项目插件 `owl-bt.js` 可以用 `exporters` 定义自己的导出器（`render(model, ctx)` 拿到与内置格式相同的导出模型，返回文件内容）。插件格式会出现在菜单 File 的导出项、命令面板和首页的批量导出中，`owlbt export --format <名字>` 与 `/api/export` 也可使用。输出目录未配置时默认为 `export/<格式名>`，也可由导出器的 `outDir` 或 `owl-bt.json` 的 `export.<格式名>.outDir` 指定。项目编辑器的「Export settings」也会列出插件格式。插件未信任时不会运行，新增 `GET /api/exporters` 列出可用的插件格式。
+- 自定义导出格式：在项目的 `exporters/` 文件夹中每种格式写一个 JS 文件（文件名即格式名），或在 `owl-bt.js` 中用 `exporters` 定义导出器（`render(model, ctx)` 拿到与内置格式相同的导出模型，返回文件内容）。导出器文件与 `owl-bt.js` 一起信任。插件格式会出现在菜单 File 的导出项、命令面板和首页的批量导出中，`owlbt export --format <名字>` 与 `/api/export` 也可使用。输出目录未配置时默认为 `export/<格式名>`，也可由导出器的 `outDir` 或 `owl-bt.json` 的 `export.<格式名>.outDir` 指定。项目编辑器的「Export settings」也会列出插件格式。插件未信任时不会运行，新增 `GET /api/exporters` 列出可用的插件格式。
 
 ## [0.3.0] - 2026-10-15
 

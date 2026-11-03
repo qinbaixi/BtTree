@@ -47,7 +47,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **树内搜索**：`Ctrl+F` 按类型、标签、注释、属性值查找节点、装饰器和服务，并逐个跳转。
 - **未保存提示**：任一标签页有未保存修改时，窗口标题显示 `*`，关闭或刷新页面前会询问。
 - **JSON 格式**：项目和树都是普通 JSON 文件，方便接入任何游戏引擎。
-- **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存；还可以用 `exporters` 添加自定义导出格式，显示在编辑器的导出菜单中。
+- **项目插件**：可用 `owl-bt.js` 在加载或保存树时执行自定义逻辑，并可拒绝保存；还可以在 `exporters/` 文件夹中为每种自定义导出格式写一个 JS 文件，显示在编辑器的导出菜单中。
 - **类型系统**：项目文件可定义节点、装饰器、服务，并支持继承、抽象类型、自定义属性类型。
 - **项目范围引用**：查找某个类型或黑板键在项目所有树中的用法并一键跳转；重命名类型或黑板键后可批量更新所有树文件。
 - **黑板键声明**：在 `owl-bt.json` 中声明黑板键，属性面板提供键名补全，并对未声明的键给出警告。
@@ -993,33 +993,45 @@ get_node(1) ->
 
 ## 自定义导出格式（插件导出器）
 
-除了内置的五种格式，项目可以在 `owl-bt.js` 中用 `exporters` 自己写导出器，把树导出成需求方要的任意格式（XML、CSV、JSON、某种自定义配置……）。插件导出器拿到的是和内置格式**同一份导出模型**（编号、字段顺序、属性值都一致），只负责把它转成文本。
+除了内置的五种格式，项目可以自己写导出器，把树导出成需求方要的任意格式（XML、CSV、JSON、某种自定义配置……）。最简单的做法是在 `owl-bt.json` 旁边建一个 `exporters/` 文件夹，**每种格式一个 JS 文件**，文件名就是格式名。插件导出器拿到的是和内置格式**同一份导出模型**（编号、字段顺序、属性值都一致），只负责把它转成文本。
 
 <details>
 <summary>写法、输出位置、在编辑器和命令行中使用</summary>
 
 ### 写法
 
+```
+my-project/
+├─ owl-bt.json
+├─ exporters/
+│  ├─ xml.js      ← 格式 xml
+│  └─ csv.js      ← 格式 csv（见 samples/basic/exporters/csv.js）
+└─ trees/
+```
+
+`exporters/xml.js`（CommonJS 模块）：
+
 ```js
 'use strict';
 
 module.exports = {
-  exporters: {
-    // 键是格式名：字母开头，只含字母、数字、_、-；不能与内置格式（erlang、lua、ts、cs、go）或 all、subtrees 重名
-    xml: {
-      label: 'XML', // 菜单中显示的名字，默认为格式名
-      extension: '.xml', // 扩展名，可省略点；默认为 .<格式名>
-      // outDir: 'export/xml', // 输出目录（相对项目目录），默认 export/<格式名>
-      render(model, ctx) {
-        const items = model.entries.map(
-          (e) => `  <item id="${e.id}" kind="${e.kind}"><!-- ${e.comment} --></item>`,
-        );
-        return `<tree root="${model.rootId}">\n${items.join('\n')}\n</tree>\n`;
-      },
-    },
+  label: 'XML', // 菜单中显示的名字，默认为格式名（文件名）
+  extension: '.xml', // 扩展名，可省略点；默认为 .<格式名>
+  // outDir: 'export/xml', // 输出目录（相对项目目录），默认 export/<格式名>
+  render(model, ctx) {
+    const items = model.entries.map(
+      (e) => `  <item id="${e.id}" kind="${e.kind}"><!-- ${e.comment} --></item>`,
+    );
+    return `<tree root="${model.rootId}">\n${items.join('\n')}\n</tree>\n`;
   },
 };
 ```
+
+只需要 `render` 时也可以直接导出函数：`module.exports = (model, ctx) => '...';`。
+
+- 文件名（去掉 `.js` / `.cjs`）就是格式名：字母开头，只含字母、数字、`_`、`-`，不能与内置格式（erlang、lua、ts、cs、go）或 `all`、`subtrees` 重名
+- 只读取 `exporters/` 下一层的 `.js` / `.cjs` 文件，子文件夹和其他文件会被忽略
+- 也可以写在 `owl-bt.js` 里：`module.exports = { exporters: { xml: { label, extension, outDir, render } } }`。两处都定义了同名格式时使用 `owl-bt.js` 中的那个，并给出警告
 
 `render(model, ctx)` 返回文件内容（字符串或 Buffer，也可以是返回它们的 Promise）。抛出异常或返回其他类型时该树导出失败，错误信息为 `Exporter <格式名> failed: ...`。
 
@@ -1058,15 +1070,15 @@ module.exports = {
 
 ### 信任
 
-插件导出器同样受「插件信任」约束：`owl-bt.js` 未信任时，编辑器不显示插件格式（首页会说明原因），命令行和 API 请求插件格式会报错 `Unknown export format: xml (owl-bt.js is not trusted; ...)`。在编辑器中点击 **Trust and run** 后菜单即出现插件格式；命令行可加 `--trust-plugins`。只导出内置格式时不会加载 `owl-bt.js`。
+导出器文件和 `owl-bt.js` 一样会在你的电脑上运行代码，因此它们与 `owl-bt.js` 一起作为「项目插件」受「插件信任」约束：`owl-bt.js` 和 `exporters/*.js` 中任一文件未信任（新增或修改过）时，插件代码全部不运行，编辑器顶部显示提示，不显示插件格式（首页和导出设置中会说明原因），命令行和 API 请求插件格式会报错 `Unknown export format: xml (the project plugin ... is not trusted; ...)`。在编辑器中点击 **Trust and run** 会一次信任 `owl-bt.js` 和全部导出器文件，之后菜单即出现插件格式；命令行可加 `--trust-plugins`。只导出内置格式时不会加载任何插件代码。
 
-`exporters` 中无效的条目（名字不合法、没有 `render`、扩展名不合法）会被跳过，原因列在 `GET /api/exporters` 的 `warnings` 中，也会附在 `Unknown export format` 的错误信息里。
+无效的导出器（名字不合法、没有 `render`、扩展名不合法、文件加载出错）会被跳过，原因列在 `GET /api/exporters` 的 `warnings` 中，也会附在 `Unknown export format` 的错误信息里。
 
 </details>
 
 ## 项目插件（owl-bt.js）
 
-如果项目目录中存在 `owl-bt.js`，服务端会在加载和保存树时调用它；插件需要在编辑器中确认信任后才会运行。
+如果项目目录中存在 `owl-bt.js`，服务端会在加载和保存树时调用它；插件需要在编辑器中确认信任后才会运行。项目的 `exporters/*.js`（自定义导出格式，见上一节）与 `owl-bt.js` 一起信任。
 
 <details>
 <summary>插件接口与信任机制</summary>

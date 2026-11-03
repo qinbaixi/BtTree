@@ -128,7 +128,7 @@ describe('plugin exporters', () => {
       'Unknown export format: nope',
     );
     writePlugin(`require('fs').writeFileSync(${JSON.stringify(join(root, 'ran'))}, 'x');${PLUGIN}`);
-    await expect(exportTree(treePath, ['txt'])).rejects.toThrow(/owl-bt\.js is not trusted/);
+    await expect(exportTree(treePath, ['txt'])).rejects.toThrow(/is not trusted/);
     expect(existsSync(join(root, 'ran'))).toBe(false);
     // Built-in formats never load the plugin.
     const lua = await exportTree(treePath, ['lua']);
@@ -210,6 +210,109 @@ describe('plugin exporters', () => {
         .post('/api/export')
         .send({ path: treePath, formats: ['txt'] });
       expect(untrusted.status).toBe(400);
+    });
+  });
+
+  describe('exporters folder', () => {
+    const writeExporter = (name: string, source: string) => {
+      mkdirSync(join(root, 'exporters'), { recursive: true });
+      writeFileSync(join(root, 'exporters', name), source);
+    };
+
+    beforeEach(() => {
+      rmSync(join(root, 'owl-bt.js'));
+    });
+
+    it('loads one exporter per file, named after the file', async () => {
+      writeExporter(
+        'yaml.js',
+        `module.exports = { label: 'YAML', extension: 'yml', render: (m) => 'root: ' + m.rootId + '\\n' };`,
+      );
+      writeExporter('ids.cjs', `module.exports = (m) => m.entries.map((e) => e.id).join(',');`);
+      writeExporter('notes.txt', 'not code');
+
+      const result = await exportTree(treePath, ['yaml', 'ids'], { trustAllPlugins: true });
+      expect(result.error).toBeUndefined();
+      expect(result.files).toEqual([
+        { format: 'yaml', path: join(root, 'export', 'yaml', 'mon.yml') },
+        { format: 'ids', path: join(root, 'export', 'ids', 'mon.ids') },
+      ]);
+      expect(readFileSync(result.files[0].path, 'utf8')).toBe('root: 1\n');
+      expect(readFileSync(result.files[1].path, 'utf8')).toBe('1,2');
+    });
+
+    it('prefers owl-bt.js on a name clash and reports broken files', async () => {
+      writePlugin(`module.exports = { exporters: { txt: { render: () => 'main' } } };`);
+      writeExporter('txt.js', `module.exports = () => 'file';`);
+      writeExporter('bad.js', `throw new Error('syntax-ish');`);
+      const res = await request(
+        createApp({ clientDist: join(root, 'no-client-build'), trustAllPlugins: true }),
+      )
+        .get('/api/exporters')
+        .query({ path: treePath });
+      expect(res.body.exporters.map((e: { format: string }) => e.format)).toEqual(['txt']);
+      expect(res.body.warnings).toEqual([
+        'exporters/bad.js failed to load: syntax-ish',
+        'exporters/txt: owl-bt.js also defines exporter "txt"; using owl-bt.js',
+      ]);
+      const result = await exportTree(treePath, ['txt'], { trustAllPlugins: true });
+      expect(readFileSync(result.files[0].path, 'utf8')).toBe('main');
+    });
+
+    it('runs exporter files only after the whole plugin is trusted', async () => {
+      const marker = join(root, 'ran');
+      writePlugin(`module.exports = {};`);
+      writeExporter(
+        'yaml.js',
+        `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x'); module.exports = () => 'y';`,
+      );
+      const application = createApp({ clientDist: join(root, 'no-client-build') });
+
+      const before = await request(application).get('/api/plugin').query({ path: treePath });
+      expect(before.body).toEqual({
+        pluginPath: join(root, 'owl-bt.js'),
+        trusted: false,
+        changed: false,
+      });
+      const hidden = await request(application).get('/api/exporters').query({ path: treePath });
+      expect(hidden.body.exporters).toEqual([]);
+      expect(existsSync(marker)).toBe(false);
+
+      const trusted = await request(application).post('/api/plugin/trust').send({ path: treePath });
+      expect(trusted.body.trusted).toBe(true);
+      const shown = await request(application).get('/api/exporters').query({ path: treePath });
+      expect(shown.body.exporters.map((e: { format: string }) => e.format)).toEqual(['yaml']);
+      expect(existsSync(marker)).toBe(true);
+
+      // Editing an exporter file makes the plugin untrusted again.
+      rmSync(marker);
+      writeExporter('yaml.js', `module.exports = () => 'changed';`);
+      const changed = await request(application).get('/api/plugin').query({ path: treePath });
+      expect(changed.body).toMatchObject({ trusted: false, changed: true });
+      // A new exporter file is untrusted too.
+      writeExporter(
+        'yaml.js',
+        `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x'); module.exports = () => 'y';`,
+      );
+      writeExporter('new.js', `module.exports = () => 'n';`);
+      const added = await request(application).get('/api/plugin').query({ path: treePath });
+      expect(added.body).toMatchObject({ trusted: false });
+    });
+
+    it('treats a project with only exporter files as having a plugin', async () => {
+      writeExporter('yaml.js', `module.exports = () => 'y';`);
+      const application = createApp({ clientDist: join(root, 'no-client-build') });
+      const state = await request(application).get('/api/plugin').query({ path: treePath });
+      expect(state.body).toEqual({
+        pluginPath: join(root, 'exporters', 'yaml.js'),
+        trusted: false,
+        changed: false,
+      });
+      await request(application).post('/api/plugin/trust').send({ path: treePath });
+      const result = await exportTree(treePath, ['yaml']);
+      expect(result.files).toEqual([
+        { format: 'yaml', path: join(root, 'export', 'yaml', 'mon.yaml') },
+      ]);
     });
   });
 });

@@ -331,7 +331,10 @@ export function createApiRouter(options: RouterOptions = {}): Router {
         throw new HttpError(404, 'No plugin found');
       }
       try {
-        await apply(join(project.dir, PLUGIN_FILE_NAME));
+        // owl-bt.js and the exporter files are trusted (or revoked) together.
+        for (const file of project.pluginFiles ?? [join(project.dir, PLUGIN_FILE_NAME)]) {
+          await apply(file);
+        }
       } catch (err) {
         if (isErrno(err, 'ENOENT')) {
           throw new HttpError(404, 'No plugin found');

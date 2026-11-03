@@ -148,11 +148,11 @@ export async function loadPluginExporters(
       exporters: new Map(),
       pluginWarnings: [],
       pluginError:
-        'owl-bt.js is not trusted; trust it in the editor or pass --trust-plugins to use its exporters',
+        'the project plugin (owl-bt.js, exporters/) is not trusted; trust it in the editor or pass --trust-plugins to use its exporters',
     };
   }
   const { exporters, warnings } = collectPluginExporters(project?.plugin);
-  return { exporters, pluginWarnings: warnings };
+  return { exporters, pluginWarnings: [...(project?.pluginWarnings ?? []), ...warnings] };
 }
 
 async function readExportProject(path: string, plugin: PluginLoad): Promise<ExportProject> {
