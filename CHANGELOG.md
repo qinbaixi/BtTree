@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+## [0.3.3] - 2026-11-06
+
+老项目一键补齐新内置类型，示例随软件打包、首页直接查看，节点上的装饰器和服务移到顶部。
+
 ### 新增
 
 - 内置示例：示例项目随软件一起打包，首页新增「查看示例」按钮和「示例」区，不用先初始化或打开项目，点一下示例里的树就能直接打开（包括效用 AI 示例 `trees/ai/fighter.json`）。示例以副本形式放在用户目录（桌面版在应用数据目录的 `samples/`，命令行版在 `~/.owlbt/samples/`，可用 `OWLBT_SAMPLES_HOME` 修改），可以随意编辑和运行；应用更新改动了示例时副本会被重置。
@@ -123,7 +127,8 @@
 - 保存请求体上限提高到 50 MB；服务端异常不再导致进程退出。
 - 保存树文件时保留原文件的缩进、换行与 BOM；无效 JSON 返回清晰的错误信息。
 
-[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.3.2...HEAD
+[未发布]: https://github.com/qinbaixi/BtTree/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/qinbaixi/BtTree/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/qinbaixi/BtTree/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/qinbaixi/BtTree/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/qinbaixi/BtTree/compare/v0.2.0...v0.3.0
