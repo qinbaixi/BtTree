@@ -11,6 +11,9 @@ export interface ScorePreview {
   points: Array<[number, number]>;
 }
 
+/** Stands in for empty string properties while sampling (see previewScore). */
+const PREVIEW_KEY = 'input';
+
 /** True when the expression reads the blackboard (a key or `get(...)`). */
 export function readsBlackboard(expr: Expr): boolean {
   switch (expr.type) {
@@ -48,9 +51,14 @@ export function previewScore(
   }
   if (!readsBlackboard(expr)) return undefined;
 
+  // Every blackboard read returns the input, so the key name does not matter: an empty string
+  // property (e.g. an Input key not chosen yet) gets a placeholder so that get({{Input}}) works.
   const propValue = (name: string): unknown => {
     const prop = type.properties.find((p) => p.name === name);
-    if (prop) return getEffectiveValue(prop, properties);
+    if (prop) {
+      const value = getEffectiveValue(prop, properties);
+      return prop.type === 'string' && (value === undefined || value === '') ? PREVIEW_KEY : value;
+    }
     return Object.hasOwn(properties, name) ? properties[name] : undefined;
   };
   const lo = propValue('Min');
