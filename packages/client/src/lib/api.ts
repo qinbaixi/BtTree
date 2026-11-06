@@ -337,3 +337,67 @@ export async function resolveSubtrees(
   const response = await request('/api/subtrees', postJson({ path: treePath, refs }));
   return (await response.json()) as SubtreeResolution;
 }
+
+/** A built-in type that is newer than the project file (it was created from an older template). */
+export interface MissingBuiltin {
+  kind: 'node' | 'decorator' | 'service';
+  name: string;
+  since: string;
+}
+
+export interface ProjectUpgradeState {
+  projectPath: string;
+  hash: string;
+  missing: MissingBuiltin[];
+}
+
+/** Lists the built-in types that the project of `treePath` does not define yet. */
+export async function fetchProjectUpgrade(treePath: string): Promise<ProjectUpgradeState> {
+  const response = await request(treeUrl('project/upgrade', treePath));
+  return (await response.json()) as ProjectUpgradeState;
+}
+
+export interface ProjectUpgradeResult {
+  projectPath: string;
+  hash: string;
+  added: MissingBuiltin[];
+  addedCustomTypes: string[];
+}
+
+/**
+ * Adds the missing built-in types to owl-bt.json, keeping its formatting. Throws ApiError 409 when
+ * the file changed since `baseHash`.
+ */
+export async function upgradeProject(
+  treePath: string,
+  baseHash?: string,
+): Promise<ProjectUpgradeResult> {
+  const response = await request(treeUrl('project/upgrade', treePath), postJson({ baseHash }));
+  return (await response.json()) as ProjectUpgradeResult;
+}
+
+export interface SampleInfo {
+  id: string;
+  /** Tree files relative to the sample folder. */
+  trees: string[];
+}
+
+/** The samples built into the app. */
+export async function fetchSamples(): Promise<SampleInfo[]> {
+  const response = await request('/api/samples');
+  return ((await response.json()) as { samples: SampleInfo[] }).samples;
+}
+
+export interface OpenedSample {
+  id: string;
+  /** Writable copy of the sample. */
+  dir: string;
+  projectPath: string;
+  trees: Array<{ path: string; relPath: string }>;
+}
+
+/** Copies a sample to a writable folder (once per app version) and lists its trees. */
+export async function openSample(id: string): Promise<OpenedSample> {
+  const response = await request('/api/samples/open', postJson({ id }));
+  return (await response.json()) as OpenedSample;
+}

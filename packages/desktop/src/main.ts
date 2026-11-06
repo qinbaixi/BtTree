@@ -67,6 +67,13 @@ function templatesDir(): string {
     : resolve(__dirname, '../../server/templates');
 }
 
+/** Folder with the built-in samples: resources/samples when packaged, the repository's samples in development. */
+function samplesDir(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'samples')
+    : resolve(__dirname, '../../../samples');
+}
+
 function windowStatePath(): string {
   return join(app.getPath('userData'), 'window-state.json');
 }
@@ -263,6 +270,9 @@ async function startServer(): Promise<RunResult> {
     throw new Error(`the client build is missing at ${clientDistDir()}`);
   }
   process.env.OWLBT_TEMPLATES_DIR = templatesDir();
+  // Samples are opened from a writable copy under the user profile.
+  process.env.OWLBT_SAMPLES_DIR = samplesDir();
+  process.env.OWLBT_SAMPLES_HOME ??= join(app.getPath('userData'), 'samples');
   // Plugin trust decisions live with the user profile. An explicit OWLBT_TRUST_FILE (e.g. for tests) wins.
   process.env.OWLBT_TRUST_FILE ??= join(app.getPath('userData'), 'trusted-plugins.json');
 

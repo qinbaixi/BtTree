@@ -14,6 +14,8 @@ extraResources:
     to: client
   - from: ../server/templates
     to: templates
+  - from: ../../samples
+    to: samples
 asar: true
 # Where the installed app looks for updates (resources/app-update.yml). The builds are published by
 # .github/workflows/release.yml, not by electron-builder (--publish never).

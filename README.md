@@ -70,7 +70,7 @@ npm install
 npm run dev          # 打开 http://localhost:5173
 ```
 
-在首页点「Open folder…」选择 `samples/basic`，再点击 `trees/demo.json` 即可体验。只想要桌面程序：Windows 上双击 `package.bat`，在 `release/` 中取安装包。
+在首页的「示例」区（或顶部的「查看示例」）点击任意一棵示例树即可体验，示例随软件打包，会复制到用户目录后打开。只想要桌面程序：Windows 上双击 `package.bat`，在 `release/` 中取安装包。
 
 ## 目录结构
 

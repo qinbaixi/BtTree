@@ -9,6 +9,7 @@ import ContextMenu, {
 import { FuzzyDialogHost } from '../components/FuzzyDialog/FuzzyDialog';
 import ItemPalette from '../components/ItemPalette/ItemPalette';
 import PluginBanner from '../components/PluginBanner/PluginBanner';
+import UpgradeBanner from '../components/UpgradeBanner/UpgradeBanner';
 import RunLog from '../components/RunMode/RunLog';
 import RunPanel from '../components/RunMode/RunPanel';
 import RunToolbar from '../components/RunMode/RunToolbar';
@@ -200,6 +201,7 @@ function EditorPage({ treePath, select }: { treePath: string; select?: string })
           </li>
         </ol>
         <PluginBanner treePath={treePath} />
+        <UpgradeBanner treePath={treePath} />
         <AlertPanel />
         {runActive && <RunToolbar />}
       </div>

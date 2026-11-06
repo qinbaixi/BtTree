@@ -62,8 +62,12 @@ function mockApi(routes: Record<string, Responder>) {
     const url = new URL(String(input), 'http://localhost');
     const method = (init?.method ?? 'GET').toUpperCase();
     const body = typeof init?.body === 'string' ? (JSON.parse(init.body) as unknown) : undefined;
-    calls.push({ method, url, body });
     const responder = routes[`${method} ${url.pathname}`];
+    // The samples section always asks for the samples; tests that do not care get none.
+    if (!responder && method === 'GET' && url.pathname === '/api/samples') {
+      return json({ samples: [] });
+    }
+    calls.push({ method, url, body });
     if (!responder) {
       throw new Error(`Unexpected request ${method} ${url.pathname}`);
     }
@@ -619,6 +623,72 @@ describe('Home', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Export all' }));
 
       expect((await screen.findByRole('alert')).textContent).toBe('No project found');
+    });
+  });
+
+  describe('samples', () => {
+    const SAMPLES = [
+      { id: 'basic', trees: ['trees/demo.json'] },
+      { id: 'simulation', trees: ['trees/ai/fighter.json', 'trees/guard.json'] },
+    ];
+    const OPENED = {
+      id: 'simulation',
+      dir: '/home/u/.owlbt/samples/simulation',
+      projectPath: '/home/u/.owlbt/samples/simulation/owl-bt.json',
+      trees: [
+        {
+          path: '/home/u/.owlbt/samples/simulation/trees/ai/fighter.json',
+          relPath: 'trees/ai/fighter.json',
+        },
+        { path: '/home/u/.owlbt/samples/simulation/trees/guard.json', relPath: 'trees/guard.json' },
+      ],
+    };
+
+    it('lists the built-in samples without opening any folder', async () => {
+      mockApi({ 'GET /api/samples': () => json({ samples: SAMPLES }) });
+      renderHome();
+      const card = await screen.findByRole('article', { name: 'Run mode and utility AI' });
+      expect(within(card).getByRole('button', { name: /fighter/ })).toBeTruthy();
+      expect(screen.getByRole('article', { name: 'Basic project' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'View samples' })).toBeTruthy();
+    });
+
+    it('copies the sample and opens the clicked tree in the editor', async () => {
+      const calls = mockApi({
+        'GET /api/samples': () => json({ samples: SAMPLES }),
+        'POST /api/samples/open': () => json(OPENED),
+      });
+      renderHome();
+      fireEvent.click(await screen.findByRole('button', { name: /fighter/ }));
+      expect(await screen.findByText('Editor page')).toBeTruthy();
+      expect(calls.find((call) => call.method === 'POST')?.body).toEqual({ id: 'simulation' });
+      expect(screen.getByTestId('location').textContent).toBe(
+        `/tree?path=${encodeURIComponent(OPENED.trees[0].path)}`,
+      );
+    });
+
+    it('lists the copy as the workspace on "Browse"', async () => {
+      mockApi({
+        'GET /api/samples': () => json({ samples: SAMPLES }),
+        'POST /api/samples/open': () => json(OPENED),
+        'GET /api/workspace': () =>
+          json({
+            ...WORKSPACE,
+            dir: OPENED.dir,
+            trees: OPENED.trees,
+            projectPath: OPENED.projectPath,
+          }),
+      });
+      renderHome();
+      const card = await screen.findByRole('article', { name: 'Run mode and utility AI' });
+      fireEvent.click(within(card).getByRole('button', { name: /Browse/ }));
+      expect(await screen.findByText('trees/ai/fighter.json', { selector: 'a *, a' })).toBeTruthy();
+    });
+
+    it('shows no samples section when the server has none', async () => {
+      mockApi({ 'GET /api/samples': () => json({ samples: [] }) });
+      renderHome();
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Samples' })).toBeNull());
     });
   });
 });

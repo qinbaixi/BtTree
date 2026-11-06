@@ -14,6 +14,7 @@ export * from './describe';
 export * from './projectEdit';
 export * from './blackboard';
 export * from './references';
+export * from './projectUpgrade';
 export * from './fuzzy';
 export * from './export';
 export * from './runtime';

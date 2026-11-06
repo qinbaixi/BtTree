@@ -35,6 +35,30 @@ describe('previewScore', () => {
     ]);
   });
 
+  it('draws the curve while the input key is still empty', () => {
+    const empty = compileProject({
+      decorators: [
+        {
+          name: 'Consideration',
+          properties: [
+            { name: 'Input', type: 'string' },
+            { name: 'Min', type: 'number', default: 0 },
+            { name: 'Max', type: 'number', default: 100 },
+          ],
+          simulate: { score: "curve('quadratic', normalize(get({{Input}}), {{Min}}, {{Max}}))" },
+        },
+      ],
+    }).decorators.Consideration;
+    for (const properties of [{}, { Input: '' }]) {
+      const preview = previewScore(empty, properties, 2)!;
+      expect(preview.points).toEqual([
+        [0, 0],
+        [50, 0.25],
+        [100, 1],
+      ]);
+    }
+  });
+
   it('uses 0..1 without a Min / Max range', () => {
     const preview = previewScore(project.decorators.Raw, {}, 2)!;
     expect(preview.points).toEqual([

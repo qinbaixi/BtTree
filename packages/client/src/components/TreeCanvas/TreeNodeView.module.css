@@ -1,5 +1,5 @@
 /*
- * Tree node card: a header item (the node) followed by its decorators and services.
+ * Tree node card: the decorators, then the services, then the header item (the node itself).
  * The type color reaches the rules through the --item-color custom property (set inline).
  */
 
@@ -73,7 +73,7 @@
   padding: 6px 10px 6px 10px;
   color: var(--node-text-secondary);
   background: color-mix(in srgb, var(--item-color, var(--item-color-default)) 8%, var(--node-bg));
-  border-top: 1px solid var(--node-border);
+  border-bottom: 1px solid var(--node-border);
   border-left: 3px solid var(--item-color, var(--item-color-default));
 }
 
@@ -394,7 +394,7 @@
 :global([data-theme='classic']) .service {
   color: #333;
   background: #ececec;
-  border-top: 1px solid #d6d6d6;
+  border-bottom: 1px solid #d6d6d6;
   border-left: 5px solid var(--item-color, var(--item-color-default));
 }
 
