@@ -1,6 +1,6 @@
 {
   "name": "@owlbt/desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "owl-bt desktop app: the editor in an Electron window",
   "author": "owl-bt",
