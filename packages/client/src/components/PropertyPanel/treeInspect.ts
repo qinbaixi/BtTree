@@ -2,7 +2,9 @@ import {
   getEffectiveValue,
   getItemType,
   isItemValid,
+  isScoreDecorator,
   isUndeclaredBlackboardKey,
+  isUtilityComposite,
   validateItem,
   type CompiledItemType,
   type CompiledProject,
@@ -208,6 +210,32 @@ export function summarizeTree(
     });
   };
 
+  // Children of utility composites: they need a score decorator, and only they use one.
+  const utilityChildren = new Set<string>();
+  walk(root, (node) => {
+    if (isUtilityComposite(getItemType(project, 'node', node.type))) {
+      for (const child of node.childNodes) utilityChildren.add(child.id);
+    }
+  });
+  const warn = (
+    kind: ItemKind,
+    node: TreeNode,
+    ancestors: readonly string[],
+    type: string,
+    message: string,
+    itemId?: string,
+  ) => {
+    summary.problems.push({
+      kind,
+      nodeId: node.id,
+      itemId,
+      type,
+      path: formatPath([...ancestors, itemName(node)]),
+      message,
+      severity: 'warning',
+    });
+  };
+
   walk(root, (node, ancestors) => {
     summary.nodes += 1;
     summary.maxDepth = Math.max(summary.maxDepth, ancestors.length + 1);
@@ -233,14 +261,35 @@ export function summarizeTree(
       });
     }
 
+    const isUtilityChild = utilityChildren.has(node.id);
+    let scored = false;
     for (const decorator of node.decorators) {
       summary.decorators += 1;
-      countType(
-        'decorator',
-        decorator.type,
-        getItemType(project, 'decorator', decorator.type).isInvalid,
-      );
+      const decoratorType = getItemType(project, 'decorator', decorator.type);
+      countType('decorator', decorator.type, decoratorType.isInvalid);
       addProblem('decorator', node, ancestors, decorator, decorator.id);
+      if (isScoreDecorator(decoratorType)) {
+        scored = true;
+        if (!isUtilityChild) {
+          warn(
+            'decorator',
+            node,
+            ancestors,
+            decorator.type,
+            t('Score decorator outside a utility composite: the score is not used'),
+            decorator.id,
+          );
+        }
+      }
+    }
+    if (isUtilityChild && !scored) {
+      warn(
+        'node',
+        node,
+        ancestors,
+        node.type,
+        t('No score decorator: a utility composite never runs this child'),
+      );
     }
     for (const service of node.services) {
       summary.services += 1;

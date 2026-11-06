@@ -144,3 +144,56 @@ describe('assignments', () => {
     expect(() => parseAssignment('A = (1')).toThrow(ExprError);
   });
 });
+
+describe('functions', () => {
+  const ctx = {
+    get: (key: string) => ({ Health: 25, Name: 'x' })[key] ?? null,
+    prop: (name: string) => ({ Key: 'Health', Curve: 'InverseLinear' })[name] ?? null,
+  };
+  const run = (src: string) => evaluateText(src, ctx);
+
+  it('evaluates math functions', () => {
+    expect(run('min(3, 1, 2)')).toBe(1);
+    expect(run('max(3, Health)')).toBe(25);
+    expect(run('clamp(5, 0, 1)')).toBe(1);
+    expect(run('abs(-2) + pow(2, 3) + sqrt(9)')).toBe(13);
+    expect(run('floor(1.7) + ceil(1.2) + round(1.5)')).toBe(5);
+    expect(run('exp(0) + log(1)')).toBe(1);
+  });
+
+  it('reads the blackboard by a computed key and normalizes', () => {
+    expect(run('get({{Key}})')).toBe(25);
+    expect(run("get('Missing')")).toBe(null);
+    expect(run('normalize(get({{Key}}), 0, 100)')).toBe(0.25);
+    expect(run('normalize(200, 0, 100)')).toBe(1);
+  });
+
+  it('evaluates response curves', () => {
+    expect(run("curve('linear', 0.25)")).toBe(0.25);
+    expect(run('curve({{Curve}}, 0.25)')).toBe(0.75);
+    expect(run("curve('Quadratic', 0.5)")).toBe(0.25);
+    expect(run("curve('logistic', 0)")).toBeCloseTo(0);
+    expect(run("curve('logistic', 1)")).toBeCloseTo(1);
+    expect(run("curve('logistic', 0.5)")).toBeCloseTo(0.5);
+    expect(run("curve('step', 0.6)")).toBe(1);
+    expect(run("curve('linear', 3)")).toBe(1);
+  });
+
+  it('reports unknown functions and wrong argument counts at parse time', () => {
+    expect(() => parseExpression('nope(1)')).toThrow(/Unknown function 'nope'/);
+    expect(() => parseExpression('clamp(1, 2)')).toThrow(/takes 3 arguments, got 2/);
+    expect(() => parseExpression('min(1,')).toThrow(ExprError);
+    expect(() => parseExpression('min(1 2)')).toThrow(/Expected ',' or '\)'/);
+  });
+
+  it('reports bad arguments at run time', () => {
+    expect(() => run("curve('wavy', 0.5)")).toThrow(/Unknown curve 'wavy'/);
+    expect(() => run('normalize(1, 2, 2)')).toThrow(/different min and max/);
+    expect(() => run("abs('a')")).toThrow(/needs numbers/);
+    expect(() => run('get(1)')).toThrow(/needs a key name/);
+  });
+
+  it('keeps identifiers named like functions as blackboard keys', () => {
+    expect(evaluateText('min + 1', { get: () => 2, prop: () => null })).toBe(3);
+  });
+});

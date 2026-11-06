@@ -29,7 +29,7 @@ import type {
 export type RunStatus = 'idle' | 'running' | 'success' | 'failure';
 export type SubStatus = 'pass' | 'fail' | 'ran';
 export type LogKind =
-  'enter' | 'result' | 'blackboard' | 'service' | 'error' | 'decorator' | 'pass';
+  'enter' | 'result' | 'blackboard' | 'service' | 'error' | 'decorator' | 'pass' | 'score';
 export type ManualResult = 'success' | 'failure';
 type Outcome = ManualResult | 'running';
 
@@ -48,6 +48,11 @@ export interface TickResult {
   tick: number;
   statuses: Record<string, RunStatus>;
   subStatuses: Record<string, SubStatus>;
+  /**
+   * Utility scores of the children of utility composites, by child node id, as computed when the
+   * composite started. Only set when at least one score is known.
+   */
+  scores?: Record<string, number>;
   blackboard: Record<string, unknown>;
   /** Entries produced by this tick. */
   log: LogEntry[];
@@ -66,7 +71,7 @@ export interface TickResult {
 export interface RunOptions {
   /** Initial blackboard values. */
   blackboard: Record<string, unknown>;
-  /** Seed of the pseudo random generator (RandomSelector). Default 1. */
+  /** Seed of the pseudo random generator (RandomSelector, weighted random utility). Default 1. */
   seed?: number;
   /** Property overrides by node / decorator / service id. */
   overrides?: Record<string, Record<string, unknown>>;
@@ -125,6 +130,7 @@ interface CheckpointData {
   blackboard: Record<string, unknown>;
   statuses: Record<string, RunStatus>;
   subStatuses: Record<string, SubStatus>;
+  scores: Record<string, number>;
   states: Array<[string, NodeState]>;
   cooldownStart: Array<[string, number]>;
   resolutions: Array<[string, ManualResult]>;
@@ -145,6 +151,7 @@ const COMPOSITE_BY_NAME: Record<string, SimulateComposite> = {
   sequence: 'sequence',
   parallel: 'parallel',
   randomselector: 'randomSelector',
+  utilityselector: 'utility',
 };
 
 /** Composite kind of a node type: simulate.composite, else the (base) type name, else sequence. */
@@ -159,6 +166,38 @@ export function resolveCompositeKind(type: CompiledItemType): SimulateComposite 
     }
   }
   return 'sequence';
+}
+
+/** True for composite node types that run as utility composites. */
+export function isUtilityComposite(type: CompiledItemType): boolean {
+  return type.isComposite && !type.isInvalid && resolveCompositeKind(type) === 'utility';
+}
+
+/** True for decorator types that give a utility score (`simulate.score`). */
+export function isScoreDecorator(type: CompiledItemType): boolean {
+  return type.simulate?.score !== undefined;
+}
+
+/** Utility composite settings (properties of the composite node, by convention like `Policy`). */
+export type UtilityFailurePolicy = 'trynext' | 'fail';
+export type UtilitySelection = 'highest' | 'weightedrandom';
+
+/**
+ * Combines the scores of the score decorators of one child: the product of all scores. With more
+ * than one score, factors in 0..1 are compensated (Dave Mark's IAUS make-up value) so that a child
+ * with many considerations is not punished only for having many: s + (1 - s) * (1 - 1/n) * s.
+ * Factors outside 0..1 (weights) are multiplied as they are. No scores = 0.
+ */
+export function combineScores(scores: readonly number[]): number {
+  if (scores.length === 0) return 0;
+  const n = scores.length;
+  const modification = 1 - 1 / n;
+  let total = 1;
+  for (const s of scores) {
+    const factor = n > 1 && s >= 0 && s <= 1 ? s + (1 - s) * modification * s : s;
+    total *= factor;
+  }
+  return total;
 }
 
 /** Effective action mode: explicit mode, else 'rule' when condition / duration / effects exist, else 'manual'. */
@@ -251,6 +290,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
 
   const statuses: Record<string, RunStatus> = {};
   const subStatuses: Record<string, SubStatus> = {};
+  const scores: Record<string, number> = {};
   const states = new Map<string, NodeState>();
   const cooldownStart = new Map<string, number>();
   const resolutions = new Map<string, ManualResult>();
@@ -375,6 +415,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     for (const child of node.childNodes) {
       states.delete(child.id);
       statuses[child.id] = 'idle';
+      delete scores[child.id];
       clearSubStatuses(child);
       dropManual(child.id);
       resetChildren(child);
@@ -469,7 +510,99 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     }
   };
 
+  /** Score of one child: the combined score decorators; an error in one logs it and gives 0. */
+  const scoreChild = (child: TreeNode): number => {
+    const parts: number[] = [];
+    for (const decorator of child.decorators) {
+      const type = getItemType(project, 'decorator', decorator.type);
+      const src = type.simulate?.score;
+      if (src === undefined) continue;
+      try {
+        parts.push(evalNumber(src, 0, type, decorator, 'score'));
+      } catch (e) {
+        add('error', child.id, e instanceof Error ? e.message : String(e), decorator.id);
+        return 0;
+      }
+    }
+    return combineScores(parts);
+  };
+
+  /** Weighted random permutation of the given candidates (weights > 0). */
+  const weightedOrder = (pool: Array<{ i: number; w: number }>): number[] => {
+    const rest = [...pool];
+    const order: number[] = [];
+    while (rest.length > 0) {
+      const total = rest.reduce((sum, p) => sum + p.w, 0);
+      let r = random.next() * total;
+      let pick = rest.length - 1;
+      for (let k = 0; k < rest.length; k++) {
+        r -= rest[k].w;
+        if (r < 0) {
+          pick = k;
+          break;
+        }
+      }
+      order.push(rest[pick].i);
+      rest.splice(pick, 1);
+    }
+    return order;
+  };
+
+  /**
+   * Utility composite: scores every child once, when the composite starts. Children scoring 0 or
+   * less, or below `MinScore`, are left out. `Selection` = Highest (default; ties keep the child
+   * order) or WeightedRandom (random order weighted by score among the `RandomTop` best, 0 = all;
+   * the others follow, best first). `OnChildFailure` = TryNext (default; the next child in the
+   * order runs) or Fail (only the first one runs). A chosen child runs until it finishes.
+   */
+  const utilityOrder = (node: TreeNode, type: CompiledItemType): number[] => {
+    const minRaw = propValue(type, node, 'MinScore');
+    const minScore = typeof minRaw === 'number' && Number.isFinite(minRaw) ? minRaw : 0;
+    const selection = String(propValue(type, node, 'Selection') ?? '').toLowerCase();
+    const topRaw = propValue(type, node, 'RandomTop');
+    const top = typeof topRaw === 'number' && topRaw > 0 ? Math.floor(topRaw) : 0;
+    const failure = String(propValue(type, node, 'OnChildFailure') ?? '').toLowerCase();
+
+    const scored = node.childNodes.map((child, i) => {
+      const score = scoreChild(child);
+      scores[child.id] = score;
+      return { i, w: score };
+    });
+    const eligible = scored
+      .filter((c) => c.w > 0 && c.w >= minScore)
+      .sort((a, b) => b.w - a.w || a.i - b.i);
+
+    let order: number[];
+    if (selection === 'weightedrandom' && eligible.length > 1) {
+      const count = top > 0 ? Math.min(top, eligible.length) : eligible.length;
+      order = [
+        ...weightedOrder(eligible.slice(0, count)),
+        ...eligible.slice(count).map((c) => c.i),
+      ];
+    } else {
+      order = eligible.map((c) => c.i);
+    }
+    if (failure === 'fail') {
+      order = order.slice(0, 1);
+    }
+
+    const fmt = (score: number) => String(Math.round(score * 1000) / 1000);
+    const list = scored
+      .map((c) => `${node.childNodes[c.i].label || node.childNodes[c.i].type} ${fmt(c.w)}`)
+      .join(', ');
+    const chosen = order.length > 0 ? node.childNodes[order[0]] : undefined;
+    add(
+      'score',
+      node.id,
+      `scores: ${list || '(no children)'} → ${chosen ? chosen.label || chosen.type : 'none'}`,
+    );
+    return order;
+  };
+
   const orderChildren = (node: TreeNode, kind: SimulateComposite, type: CompiledItemType) => {
+    if (kind === 'utility') {
+      return utilityOrder(node, type);
+    }
     const indices = node.childNodes.map((_, i) => i);
     if (kind !== 'randomSelector') {
       return indices;
@@ -770,6 +903,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     pending = [];
     for (const key of Object.keys(statuses)) statuses[key] = 'idle';
     for (const key of Object.keys(subStatuses)) delete subStatuses[key];
+    for (const key of Object.keys(scores)) delete scores[key];
   };
 
   // ----- public API -----
@@ -784,6 +918,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       blackboard: deepClone(blackboard),
       log: [...entries],
     };
+    if (Object.keys(scores).length > 0) result.scores = { ...scores };
     if (finished) result.finished = finished;
     if (passResult !== undefined && (loops !== 1 || pass > 1)) result.passResult = passResult;
     if (pending.length > 0) result.pendingManual = pending[0];
@@ -854,6 +989,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
         blackboard: deepClone(blackboard),
         statuses: { ...statuses },
         subStatuses: { ...subStatuses },
+        scores: { ...scores },
         states: [...states].map(([id, state]) => [id, deepClone(state)]),
         cooldownStart: [...cooldownStart],
         resolutions: [...resolutions],
@@ -876,6 +1012,8 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       Object.assign(statuses, data.statuses);
       for (const key of Object.keys(subStatuses)) delete subStatuses[key];
       Object.assign(subStatuses, data.subStatuses);
+      for (const key of Object.keys(scores)) delete scores[key];
+      Object.assign(scores, data.scores);
       states.clear();
       for (const [id, state] of data.states) states.set(id, deepClone(state));
       cooldownStart.clear();

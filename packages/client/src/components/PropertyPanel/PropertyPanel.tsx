@@ -25,6 +25,7 @@ import {
   useTreeStore,
   type SelectedItem,
 } from '../../store/treeStore';
+import { ScorePreview } from './ScorePreview';
 import { SubtreeSection } from './SubtreeSection';
 import { TreeOverview } from './TreeOverview';
 import { TypeDetails } from './TypeDetails';
@@ -203,6 +204,10 @@ function ItemDetails({ selected, project }: ItemDetailsProps) {
             />
           ))}
         </fieldset>
+      )}
+
+      {selected.kind === 'decorator' && !type.isInvalid && (
+        <ScorePreview type={type} properties={item.properties} />
       )}
     </div>
   );

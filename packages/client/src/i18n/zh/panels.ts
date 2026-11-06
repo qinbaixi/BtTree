@@ -21,6 +21,10 @@ export const panels: Record<string, string> = {
   'Time Between Ticks': 'tick 间隔',
   'First Tick Time': '首次 tick 时间',
   'Custom properties': '自定义属性',
+  'Score curve': '分数曲线',
+  'Score from {min} to {max} of the blackboard input': '黑板输入从 {min} 到 {max} 时的分数',
+  'Horizontal: blackboard input (range from the Min / Max properties, else 0–1). Vertical: score.':
+    '横轴：黑板输入（范围取 Min / Max 属性，没有时为 0–1）。纵轴：分数。',
   'Reset to default': '恢复默认值',
   'Reset {name}': '重置 {name}',
   "'{key}' is not a declared blackboard key": '「{key}」不是已声明的黑板键',
@@ -53,6 +57,10 @@ export const panels: Record<string, string> = {
   '{name} is missing from the project file': '项目文件中缺少 {name}',
   'Top level': '顶层',
   'Undeclared blackboard key: {keys}': '未声明的黑板键：{keys}',
+  'Score decorator outside a utility composite: the score is not used':
+    '打分装饰器不在效用组合节点下：分数不会被使用',
+  'No score decorator: a utility composite never runs this child':
+    '没有打分装饰器：效用组合节点永远不会执行这个子节点',
   "Missing type '{type}'": '缺少类型「{type}」',
   'Invalid: {properties}': '无效：{properties}',
 
@@ -158,6 +166,7 @@ export const panels: Record<string, string> = {
   Enter: '进入',
   Result: '结果',
   Decorator: '装饰器',
+  Score: '分数',
   Service: '服务',
   Error: '错误',
   'Run {pass}': '第 {pass} 轮',

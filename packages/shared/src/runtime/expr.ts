@@ -6,6 +6,7 @@
  *   identifiers   blackboard keys (a missing key is null)
  *   {{Prop}}      effective property value of the node / decorator / service that owns the expression
  *   operators     unary - !   * / %   + -   < <= > >=   == !=   &&   ||   and parentheses
+ *   functions     name(args): see EXPRESSION_FUNCTIONS (math, get, normalize, curve)
  *   assignment    `Key = expr` (parseAssignment; used by effects only)
  */
 
@@ -28,7 +29,8 @@ export type Expr =
   | { type: 'ident'; name: string; pos: number }
   | { type: 'prop'; name: string; pos: number }
   | { type: 'unary'; op: '-' | '!'; operand: Expr; pos: number }
-  | { type: 'binary'; op: BinaryOp; left: Expr; right: Expr; pos: number };
+  | { type: 'binary'; op: BinaryOp; left: Expr; right: Expr; pos: number }
+  | { type: 'call'; name: string; args: Expr[]; pos: number };
 
 export interface Assignment {
   target: string;
@@ -67,6 +69,7 @@ const OPERATORS = [
   '!',
   '(',
   ')',
+  ',',
   '=',
 ];
 
@@ -217,6 +220,9 @@ class Parser {
         if (token.value === 'true') return { type: 'literal', value: true };
         if (token.value === 'false') return { type: 'literal', value: false };
         if (token.value === 'null') return { type: 'literal', value: null };
+        if (this.peek().type === 'op' && this.peek().value === '(') {
+          return this.parseCall(token);
+        }
         return { type: 'ident', name: token.value, pos: token.pos };
       case 'op': {
         if (token.value === '(') {
@@ -234,6 +240,193 @@ class Parser {
         throw new ExprError('Unexpected end of expression', token.pos);
     }
   }
+
+  /** `name(arg, ...)`; the name token is consumed, the next token is '('. */
+  private parseCall(name: Token): Expr {
+    const fn = findFunction(name.value);
+    if (!fn) {
+      throw new ExprError(`Unknown function '${name.value}'`, name.pos);
+    }
+    this.next();
+    const args: Expr[] = [];
+    if (!(this.peek().type === 'op' && this.peek().value === ')')) {
+      for (;;) {
+        args.push(this.parseLevel(0));
+        const sep = this.peek();
+        if (sep.type === 'op' && sep.value === ',') {
+          this.next();
+          continue;
+        }
+        break;
+      }
+    }
+    const close = this.peek();
+    if (close.type !== 'op' || close.value !== ')') {
+      throw new ExprError("Expected ',' or ')'", close.pos);
+    }
+    this.next();
+    if (args.length < fn.min || args.length > fn.max) {
+      const count = fn.min === fn.max ? `${fn.min}` : `${fn.min} to ${fn.max}`;
+      throw new ExprError(
+        `Function '${fn.name}' takes ${count} argument${fn.max === 1 ? '' : 's'}, got ${args.length}`,
+        name.pos,
+      );
+    }
+    return { type: 'call', name: fn.name, args, pos: name.pos };
+  }
+}
+
+// ---------- functions ----------
+
+/** Response curve names of `curve(name, x)`, lower case. Input and output are in 0..1. */
+export const CURVE_NAMES = [
+  'linear',
+  'inverseLinear',
+  'quadratic',
+  'inverseQuadratic',
+  'sqrt',
+  'inverseSqrt',
+  'logistic',
+  'inverseLogistic',
+  'step',
+  'inverseStep',
+] as const;
+
+const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+const CURVES: Record<string, (x: number) => number> = {
+  linear: (x) => x,
+  inverselinear: (x) => 1 - x,
+  quadratic: (x) => x * x,
+  inversequadratic: (x) => 1 - x * x,
+  sqrt: (x) => Math.sqrt(x),
+  inversesqrt: (x) => 1 - Math.sqrt(x),
+  // Normalized so that curve(0) = 0 and curve(1) = 1.
+  logistic: (x) => logistic01(x),
+  inverselogistic: (x) => 1 - logistic01(x),
+  step: (x) => (x >= 0.5 ? 1 : 0),
+  inversestep: (x) => (x >= 0.5 ? 0 : 1),
+};
+
+function logistic01(x: number): number {
+  const k = 10;
+  const f = (t: number) => 1 / (1 + Math.exp(-k * (t - 0.5)));
+  const lo = f(0);
+  const hi = f(1);
+  return (f(x) - lo) / (hi - lo);
+}
+
+/** Value of response curve `name` (case insensitive) at x (clamped to 0..1). Throws for unknown names. */
+export function curveValue(name: string, x: number): number {
+  const fn = CURVES[name.toLowerCase()];
+  if (!fn) {
+    throw new Error(`Unknown curve '${name}' (expected one of ${CURVE_NAMES.join(', ')})`);
+  }
+  return clamp01(fn(clamp01(x)));
+}
+
+interface ExprFunction {
+  name: string;
+  min: number;
+  max: number;
+  /** Arguments are evaluated before the call. */
+  call(args: unknown[], ctx: EvalContext, pos: number): unknown;
+}
+
+function num(fn: string, value: unknown, pos: number): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return value;
+  throw new ExprError(`Function '${fn}' needs numbers, got ${describeValue(value)}`, pos);
+}
+
+const math1 = (name: string, f: (x: number) => number): ExprFunction => ({
+  name,
+  min: 1,
+  max: 1,
+  call: ([x], _ctx, pos) => f(num(name, x, pos)),
+});
+
+/** Functions of the expression language. Names are matched case sensitively. */
+export const EXPRESSION_FUNCTIONS: readonly ExprFunction[] = [
+  {
+    name: 'min',
+    min: 1,
+    max: Infinity,
+    call: (args, _ctx, pos) => Math.min(...args.map((a) => num('min', a, pos))),
+  },
+  {
+    name: 'max',
+    min: 1,
+    max: Infinity,
+    call: (args, _ctx, pos) => Math.max(...args.map((a) => num('max', a, pos))),
+  },
+  {
+    name: 'clamp',
+    min: 3,
+    max: 3,
+    call: ([x, lo, hi], _ctx, pos) =>
+      Math.min(Math.max(num('clamp', x, pos), num('clamp', lo, pos)), num('clamp', hi, pos)),
+  },
+  math1('abs', Math.abs),
+  math1('sqrt', Math.sqrt),
+  math1('exp', Math.exp),
+  math1('log', Math.log),
+  math1('floor', Math.floor),
+  math1('ceil', Math.ceil),
+  math1('round', Math.round),
+  {
+    name: 'pow',
+    min: 2,
+    max: 2,
+    call: ([x, y], _ctx, pos) => Math.pow(num('pow', x, pos), num('pow', y, pos)),
+  },
+  {
+    // Blackboard value by a key name computed at run time, e.g. get({{Input}}).
+    name: 'get',
+    min: 1,
+    max: 1,
+    call: ([key], ctx, pos) => {
+      if (typeof key !== 'string') {
+        throw new ExprError(`Function 'get' needs a key name, got ${describeValue(key)}`, pos);
+      }
+      const value = ctx.get(key);
+      return value === undefined ? null : value;
+    },
+  },
+  {
+    // (x - lo) / (hi - lo), clamped to 0..1.
+    name: 'normalize',
+    min: 3,
+    max: 3,
+    call: ([x, lo, hi], _ctx, pos) => {
+      const a = num('normalize', lo, pos);
+      const b = num('normalize', hi, pos);
+      if (a === b) {
+        throw new ExprError("Function 'normalize' needs different min and max", pos);
+      }
+      return clamp01((num('normalize', x, pos) - a) / (b - a));
+    },
+  },
+  {
+    name: 'curve',
+    min: 2,
+    max: 2,
+    call: ([name, x], _ctx, pos) => {
+      if (typeof name !== 'string') {
+        throw new ExprError(`Function 'curve' needs a curve name, got ${describeValue(name)}`, pos);
+      }
+      try {
+        return curveValue(name, num('curve', x, pos));
+      } catch (e) {
+        if (e instanceof ExprError) throw e;
+        throw new ExprError(e instanceof Error ? e.message : String(e), pos);
+      }
+    },
+  },
+];
+
+function findFunction(name: string): ExprFunction | undefined {
+  return EXPRESSION_FUNCTIONS.find((fn) => fn.name === name);
 }
 
 /** Parses an expression. Throws ExprError with the position of the problem. */
@@ -375,6 +568,17 @@ export function evaluate(expr: Expr, ctx: EvalContext): unknown {
     }
     case 'binary':
       return evalBinary(expr, ctx);
+    case 'call': {
+      const fn = findFunction(expr.name);
+      if (!fn) {
+        throw new ExprError(`Unknown function '${expr.name}'`, expr.pos);
+      }
+      return fn.call(
+        expr.args.map((arg) => evaluate(arg, ctx)),
+        ctx,
+        expr.pos,
+      );
+    }
   }
 }
 

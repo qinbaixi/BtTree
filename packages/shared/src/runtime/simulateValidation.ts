@@ -2,7 +2,13 @@ import { ExprError, parseAssignment, parseExpression } from './expr';
 import type { SimulateJson } from '../types';
 
 const MODES: readonly string[] = ['success', 'failure', 'manual', 'rule'];
-const COMPOSITES: readonly string[] = ['selector', 'sequence', 'parallel', 'randomSelector'];
+const COMPOSITES: readonly string[] = [
+  'selector',
+  'sequence',
+  'parallel',
+  'randomSelector',
+  'utility',
+];
 const DECORATORS: readonly string[] = [
   'invert',
   'forceSuccess',
@@ -56,7 +62,7 @@ export function validateSimulate(sim: SimulateJson | undefined): SimulateIssue[]
   if (sim.decorator !== undefined && !DECORATORS.includes(sim.decorator)) {
     issues.push({ field: 'decorator', message: `Unknown decorator '${String(sim.decorator)}'` });
   }
-  for (const field of ['duration', 'count', 'ticks'] as const) {
+  for (const field of ['duration', 'count', 'ticks', 'score'] as const) {
     const value = sim[field];
     if (value === undefined) continue;
     if (typeof value === 'string') {

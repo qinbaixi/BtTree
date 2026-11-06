@@ -130,6 +130,7 @@ export const editor: Record<string, string> = {
   'No tree referenced': '未引用行为树',
   'Project not loaded: {error}': '项目未加载：{error}',
   Passed: '通过',
+  'Utility score: {score}': '效用分数：{score}',
   Failed: '失败',
   'Ran in this tick': '在本次 tick 中运行',
   'Remove breakpoint': '移除断点',

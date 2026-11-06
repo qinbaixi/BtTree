@@ -1,0 +1,130 @@
+{
+	"type": "UtilitySelector",
+	"label": "选择行动",
+	"comment": "每次进入时给子节点打分，执行最高分的子节点直到结束",
+	"childNodes": [
+		{
+			"type": "Attack",
+			"label": "攻击",
+			"decorators": [
+				{
+					"type": "Consideration",
+					"properties": [
+						{
+							"name": "Input",
+							"value": "Health"
+						},
+						{
+							"name": "Min",
+							"value": 0
+						},
+						{
+							"name": "Max",
+							"value": 100
+						},
+						{
+							"name": "Curve",
+							"value": "Linear"
+						}
+					]
+				},
+				{
+					"type": "Consideration",
+					"properties": [
+						{
+							"name": "Input",
+							"value": "Ammo"
+						},
+						{
+							"name": "Min",
+							"value": 0
+						},
+						{
+							"name": "Max",
+							"value": 3
+						},
+						{
+							"name": "Curve",
+							"value": "Linear"
+						}
+					]
+				}
+			]
+		},
+		{
+			"type": "Reload",
+			"label": "装填",
+			"decorators": [
+				{
+					"type": "Consideration",
+					"properties": [
+						{
+							"name": "Input",
+							"value": "Ammo"
+						},
+						{
+							"name": "Min",
+							"value": 0
+						},
+						{
+							"name": "Max",
+							"value": 3
+						},
+						{
+							"name": "Curve",
+							"value": "InverseLinear"
+						}
+					]
+				}
+			]
+		},
+		{
+			"type": "MoveTo",
+			"label": "撤退",
+			"properties": [
+				{
+					"name": "Target",
+					"value": "Cover"
+				}
+			],
+			"decorators": [
+				{
+					"type": "Consideration",
+					"properties": [
+						{
+							"name": "Input",
+							"value": "Health"
+						},
+						{
+							"name": "Min",
+							"value": 0
+						},
+						{
+							"name": "Max",
+							"value": 100
+						},
+						{
+							"name": "Curve",
+							"value": "InverseLinear"
+						}
+					]
+				}
+			]
+		},
+		{
+			"type": "Wait",
+			"label": "待命",
+			"decorators": [
+				{
+					"type": "Utility",
+					"properties": [
+						{
+							"name": "Score",
+							"value": 0.1
+						}
+					]
+				}
+			]
+		}
+	]
+}

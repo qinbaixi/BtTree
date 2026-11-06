@@ -214,6 +214,52 @@ describe('treeInspect', () => {
     ]);
   });
 
+  it('warns about utility children without score and scores outside utility composites', () => {
+    const project = parseAndCompileProject(
+      JSON.stringify({
+        nodes: [
+          { name: 'UtilitySelector', isComposite: true },
+          { name: 'Sequence', isComposite: true },
+          { name: 'Act' },
+        ],
+        decorators: [{ name: 'Utility', simulate: { score: 0.5 } }],
+      }),
+    ).project!;
+    const root = nodeFromJson(
+      {
+        type: 'Sequence',
+        label: 'Root',
+        childNodes: [
+          {
+            type: 'UtilitySelector',
+            label: 'Pick',
+            childNodes: [
+              { type: 'Act', label: 'scored', decorators: [{ type: 'Utility' }] },
+              { type: 'Act', label: 'unscored' },
+            ],
+          },
+          { type: 'Act', label: 'stray', decorators: [{ type: 'Utility' }] },
+        ],
+      },
+      createIdGen('tw'),
+    );
+    const problems = summarizeTree(root, project).problems;
+    expect(problems.map((p) => [p.kind, p.path, p.severity, p.message])).toEqual([
+      [
+        'node',
+        'Root › Pick › unscored',
+        'warning',
+        'No score decorator: a utility composite never runs this child',
+      ],
+      [
+        'decorator',
+        'Root › stray',
+        'warning',
+        'Score decorator outside a utility composite: the score is not used',
+      ],
+    ]);
+  });
+
   it('finds usages with their location, in tree order', () => {
     const root = nodeFromJson(structuredClone(TREE_JSON), createIdGen('tu'));
     expect(findTypeUsages(root, 'service', 'Logger')).toEqual([

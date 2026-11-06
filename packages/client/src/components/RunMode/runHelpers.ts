@@ -20,6 +20,7 @@ export const LOG_KINDS: readonly LogKind[] = [
   'enter',
   'result',
   'decorator',
+  'score',
   'service',
   'blackboard',
   'error',

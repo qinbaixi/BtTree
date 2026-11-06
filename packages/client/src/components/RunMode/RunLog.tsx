@@ -55,6 +55,7 @@ const KIND_LABEL: Record<LogKind, string> = {
   blackboard: t('Blackboard'),
   error: t('Error'),
   pass: t('Run'),
+  score: t('Score'),
 };
 
 /** Ticks rendered at most (older ones are behind a "show earlier" button). */
@@ -302,6 +303,8 @@ function iconFor(entry: LogEntry): { icon: string; tone: string } {
       return { icon: 'fa-table', tone: 'blackboard' };
     case 'error':
       return { icon: 'fa-triangle-exclamation', tone: 'error' };
+    case 'score':
+      return { icon: 'fa-scale-balanced', tone: 'neutral' };
     case 'pass':
       return {
         icon: 'fa-repeat',

@@ -19,6 +19,7 @@ const COMPOSITES: readonly SimulateComposite[] = [
   'sequence',
   'parallel',
   'randomSelector',
+  'utility',
 ];
 const DECORATORS: readonly SimulateDecorator[] = [
   'invert',
@@ -66,7 +67,7 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
   };
 
   const expressionField = (
-    field: 'duration' | 'count' | 'ticks',
+    field: 'duration' | 'count' | 'ticks' | 'score',
     label: string,
     placeholder: string,
   ) => (
@@ -116,8 +117,10 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
         )}{' '}
         <code>{'{{Property}}'}</code> {t('for a property of this item, numbers, strings,')}{' '}
         <code>true/false/null</code>, <code>+ - * / %</code>,{' '}
-        <code>== != &lt; &lt;= &gt; &gt;=</code>, <code>&amp;&amp; || !</code>{' '}
-        {t('and parentheses. Empty fields are inherited from the base types.')}
+        <code>== != &lt; &lt;= &gt; &gt;=</code>, <code>&amp;&amp; || !</code>,{' '}
+        {t('parentheses and functions such as')}{' '}
+        <code>min max clamp abs pow sqrt get normalize curve</code>.{' '}
+        {t('Empty fields are inherited from the base types.')}
       </p>
 
       {kind === 'node' && isComposite && (
@@ -145,6 +148,16 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
             {t('with the value')} <code>RequireOne</code>{' '}
             {t('makes it succeed when one child succeeds.')}
           </p>
+          {(sim.composite === 'utility' ||
+            (sim.composite === undefined && name.toLowerCase() === 'utilityselector')) && (
+            <p className={styles.muted} data-utility-help>
+              {t(
+                'Utility scores each child once with its score decorators and runs the best one until it finishes. Optional properties:',
+              )}{' '}
+              <code>OnChildFailure</code> (TryNext / Fail), <code>Selection</code> (Highest /
+              WeightedRandom), <code>RandomTop</code>, <code>MinScore</code>.
+            </p>
+          )}
         </div>
       )}
 
@@ -208,6 +221,13 @@ export function SimulationSection({ kind, name, desc, isComposite }: SimulationS
             expressionField('ticks', t('Ticks'), t('e.g. 5 or {{Seconds}}'))}
           {conditionField(
             t('checked when the node starts (and every tick if periodic), e.g. Enemy == true'),
+          )}
+          {expressionField(
+            'score',
+            t('Utility score'),
+            t(
+              'used by a utility composite parent, e.g. curve({{Curve}}, normalize(get({{Input}}), 0, 100))',
+            ),
           )}
         </>
       )}
