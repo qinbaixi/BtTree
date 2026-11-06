@@ -47,7 +47,7 @@ export interface ItemTypeDescJson {
 }
 
 export type SimulateMode = 'success' | 'failure' | 'manual' | 'rule';
-export type SimulateComposite = 'selector' | 'sequence' | 'parallel' | 'randomSelector';
+export type SimulateComposite = 'selector' | 'sequence' | 'parallel' | 'randomSelector' | 'utility';
 export type SimulateDecorator =
   'invert' | 'forceSuccess' | 'forceFailure' | 'loop' | 'cooldown' | 'timeLimit';
 
@@ -61,6 +61,11 @@ export interface SimulateJson {
   condition?: string;
   /** Blackboard assignments: on success (actions) or on every service tick (services). */
   effects?: string[];
+  /**
+   * Decorators: utility score (number or expression) used by a `utility` composite parent to pick
+   * the child to run. Several score decorators on one child are multiplied.
+   */
+  score?: number | string;
   /** Composite nodes. Default: inferred from the type name, else sequence. */
   composite?: SimulateComposite;
   /** Built-in decorator behaviour. */

@@ -4,6 +4,20 @@
 
 ## [未发布]
 
+新增效用 AI：`UtilitySelector` 组合节点先给所有子节点打分，再执行分数最高的子节点。
+
+### 新增
+
+- 效用 AI 组合节点：`simulate.composite` 新增 `utility`（类型名为 `UtilitySelector` 时自动识别）。组合节点进入时用子节点上的打分装饰器给每个子节点打一次分，执行分数最高的子节点直到结束，中途不重新打分。可选属性 `OnChildFailure`（`TryNext` / `Fail`）、`Selection`（`Highest` / `WeightedRandom`，加权随机时可用 `RandomTop` 限定前几名）和 `MinScore`。
+- 打分装饰器：装饰器类型新增 `simulate.score`（数字或表达式）。同一子节点上有多个打分装饰器时分数相乘，并对 0–1 的分数做 Considerations 补偿；打分装饰器不会让节点失败。
+- 表达式新增函数：`min`、`max`、`clamp`、`abs`、`pow`、`sqrt`、`exp`、`log`、`floor`、`ceil`、`round`，按键名读黑板的 `get(key)`，归一化的 `normalize(x, min, max)`，以及响应曲线 `curve(name, x)`（linear、quadratic、sqrt、logistic、step 及各自的 inverse 版本）。所有 simulate 表达式都可以使用。
+- 运行模式：效用组合节点的子节点卡片显示本次打分的分数，日志新增「分数」类条目列出每个子节点的分数和选中的子节点；分数随回放和后退恢复。
+- 属性面板：选中读取黑板的打分装饰器时显示分数曲线（横轴为黑板输入，范围取 `Min` / `Max` 属性）。
+- 树概览提示两类警告：效用组合节点下没有打分装饰器的子节点，以及不在效用组合节点下的打分装饰器。
+- 项目编辑器的「Simulation」区新增 `utility` 组合类型和装饰器的「Utility score」字段。
+- 默认模板新增 `UtilitySelector` 节点和 `Utility`、`Consideration` 装饰器；`samples/simulation` 新增效用 AI 示例树 `trees/ai/fighter.json`、`Health` 黑板键和三个带期望的场景（Healthy / Wounded / Empty fighter）。
+- 导出格式不变：效用组合节点和打分装饰器按普通组合节点和装饰器导出，游戏端的实现由使用方决定。
+
 ## [0.3.1] - 2026-11-03
 
 新增自定义导出格式：在项目的 `exporters/` 文件夹中为每种格式写一个 JS 文件，即可在编辑器和命令行中导出为需求方需要的任意格式。

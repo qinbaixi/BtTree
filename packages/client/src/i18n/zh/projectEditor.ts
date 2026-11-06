@@ -236,8 +236,13 @@ export const projectEditor: Record<string, string> = {
   'Rules for the run mode simulator. One tick is one second. Numbers and conditions are expressions: blackboard keys,':
     '运行模式模拟器的规则。一个 tick 为一秒。数字和条件均为表达式：黑板键、',
   'for a property of this item, numbers, strings,': '（该项的属性）、数字、字符串、',
-  'and parentheses. Empty fields are inherited from the base types.':
-    '以及括号。留空的字段从基类型继承。',
+  'parentheses and functions such as': '括号，以及函数，例如',
+  'Empty fields are inherited from the base types.': '留空的字段从基类型继承。',
+  'Utility scores each child once with its score decorators and runs the best one until it finishes. Optional properties:':
+    'utility 在开始时用子节点上的打分装饰器给每个子节点打一次分，执行分数最高的子节点直到它结束。可选属性：',
+  'Utility score': '效用分数',
+  'used by a utility composite parent, e.g. curve({{Curve}}, normalize(get({{Input}}), 0, 100))':
+    '供父节点为效用组合节点时使用，例如 curve({{Curve}}, normalize(get({{Input}}), 0, 100))',
   'Composite kind': '组合类型',
   'Infer from the type name (default: sequence)': '根据类型名推断（默认：sequence）',
   'Parallel succeeds when all children succeed; a property named':

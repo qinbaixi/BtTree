@@ -54,6 +54,9 @@ describe('samples/simulation', () => {
       'Enemy in sight',
       'No enemy',
       'Out of ammo',
+      'Healthy fighter',
+      'Wounded fighter',
+      'Empty fighter',
     ]);
   });
 
@@ -100,5 +103,27 @@ describe('samples/simulation', () => {
     expect(r.subStatuses[patrol.decorators[0].id]).toBe('fail');
     // The root selector already tried Combat before the patrol started, so it has nothing left to try.
     expect(r.finished).toBe('failure');
+  });
+
+  describe('utility AI fighter', () => {
+    const fighter = JSON.parse(
+      readFileSync(join(sampleDir, 'trees', 'ai', 'fighter.json'), 'utf8'),
+    ) as TreeNodeJson;
+    const fight = (scenario: string) => {
+      const blackboard = file.scenarios?.find((s) => s.name === scenario)?.blackboard ?? {};
+      const root = nodeFromJson(fighter, createIdGen());
+      const run = createRun(root, compileProject(file), { blackboard });
+      let r = run.tick();
+      const scoreLog = r.log.find((l) => l.kind === 'score')?.message;
+      while (!r.finished) r = run.tick();
+      return { r, scoreLog };
+    };
+
+    it('attacks when healthy, retreats when wounded and reloads when empty', () => {
+      expect(fight('Healthy fighter').scoreLog).toMatch(/→ 攻击$/);
+      expect(fight('Wounded fighter').scoreLog).toMatch(/→ 撤退$/);
+      expect(fight('Empty fighter').scoreLog).toMatch(/攻击 0, .* → 装填$/);
+      expect(fight('Wounded fighter').r.blackboard.Position).toBe('Cover');
+    });
   });
 });

@@ -41,6 +41,8 @@ export interface TreeNodeViewProps {
   runStatus?: RunStatus;
   /** Run mode: statuses of decorators / services in the viewed tick (by item id). */
   subStatuses?: Record<string, SubStatus>;
+  /** Run mode: utility score of the node (child of a utility composite) in the viewed tick. */
+  runScore?: number;
   /** Run mode: a breakpoint is set on the node. */
   breakpoint?: boolean;
   /** Run mode: export number (#N) by node / decorator / service id; set to show the id badges. */
@@ -74,6 +76,11 @@ interface ItemViewProps {
   /** Search: the item matches / is the current result (sub items only; nodes mark the card). */
   searchHit?: boolean;
   searchCurrent?: boolean;
+}
+
+/** Scores are shown with at most 3 decimals. */
+function formatScore(score: number): string {
+  return String(Math.round(score * 1000) / 1000);
 }
 
 const SUB_STATUS_ICON: Record<SubStatus, { icon: string; label: string }> = {
@@ -216,6 +223,7 @@ export const TreeNodeView = memo(function TreeNodeView({
   runActive = false,
   runStatus,
   subStatuses,
+  runScore,
   breakpoint = false,
   exportIds,
   childCount = 0,
@@ -294,6 +302,16 @@ export const TreeNodeView = memo(function TreeNodeView({
       {nodeExportId !== undefined && (
         <span className={styles.exportId} data-export-id={nodeExportId} title={t('Export node id')}>
           #{nodeExportId}
+        </span>
+      )}
+      {runActive && runScore !== undefined && (
+        <span
+          className={styles.scoreBadge}
+          data-run-score={runScore}
+          title={t('Utility score: {score}', { score: formatScore(runScore) })}
+        >
+          <i className="fa-solid fa-scale-balanced" aria-hidden="true" />
+          {formatScore(runScore)}
         </span>
       )}
       {runActive && (runStatus === 'success' || runStatus === 'failure') && (

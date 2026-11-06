@@ -27,6 +27,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - [运行模式（模拟执行行为树）](#运行模式模拟执行行为树)
 - [树文件（tree）格式](#树文件tree格式)
 - [子树引用](#子树引用)
+- [效用 AI（UtilitySelector）](#效用-aiutilityselector)
 - [导出 Erlang / Lua / TypeScript / C# / Go](#导出-erlang--lua--typescript--c--go)
 - [桌面版（Electron）](#桌面版electron)
 - [键盘快捷键](#键盘快捷键)
@@ -53,6 +54,7 @@ owl-bt 是一个行为树编辑器，灵感来自 Unreal Engine 的行为树。�
 - **黑板键声明**：在 `owl-bt.json` 中声明黑板键，属性面板提供键名补全，并对未声明的键给出警告。
 - **运行模式**：在编辑器里按 tick 模拟执行行为树，带黑板、场景、断点、回放和日志，无需游戏引擎。
 - **场景测试**：`owlbt test` 在命令行批量运行「树 × 场景」的模拟并检查期望结果，可输出 JSON 和 JUnit XML，适合放进 CI。
+- **效用 AI**：`UtilitySelector` 组合节点在进入时用子节点上的打分装饰器（`Utility`、`Consideration` + 响应曲线）给每个子节点打分，执行分数最高的子节点直到结束；运行模式在卡片上显示分数，属性面板画出分数曲线。
 - **子树引用**：节点可以引用项目中的另一棵树（`SubTree`），公共逻辑只写一次；编辑器显示引用的树并可一键打开，自动检查缺失文件和循环引用，运行模式会执行被引用的树，导出可选择保留引用或展开内联。
 - **多格式导出**：单个或批量导出为 Erlang / Lua / TypeScript / C# / Go 配置。
 - **桌面版**：可一键打包为 Electron 应用（安装版和便携版），使用者无需安装 Node.js。
@@ -410,8 +412,8 @@ owlbt create ./my-project/trees/patrol.json --no-open
 
 - **自定义类型**：`blackboardKey`（以字母或下划线开头的标识符，用于黑板键名）、`probability`（0 到 1 之间的小数）。
 - **黑板键**：`Target`、`Enemy`、`Waypoint`、`PatrolPoints`、`PatrolIndex`（示例树用到的全部键）。
-- **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`；子树引用节点 `SubTree`（属性 `Tree`，见「子树引用」）。
-- **装饰器**：`Failure`、`Invert`、`Success`、`IsBlackboardValueSet`、`Cooldown`、`Loop`、`TimeLimit`。
+- **节点**：`Selector`、`Sequence`、`Parallel`（`Policy`：`RequireOne` / `RequireAll`）、`RandomSelector`（`Weights`）、`UtilitySelector`（`OnChildFailure`、`Selection`、`RandomTop`、`MinScore`，见「效用 AI」），以及继承自抽象基类 `ActionBase`（属性 `Async`）的动作节点：`Wait`、`Log`、`MoveTo`、`SetBlackboardValue`、`Succeed`、`Fail`、`RandomChance`；子树引用节点 `SubTree`（属性 `Tree`，见「子树引用」）。
+- **装饰器**：`Failure`、`Invert`、`Success`、`IsBlackboardValueSet`、`Cooldown`、`Loop`、`TimeLimit`，以及效用 AI 的打分装饰器 `Utility`（固定分数）和 `Consideration`（黑板输入 + 响应曲线）。
 - **服务**：`Sample service`、`UpdateTarget`、`LogTick`。
 
 图标全部使用 Font Awesome 6 Free Solid 的图标名。`RandomSelector` 与 `Loop` 设置了自定义颜色，其余类型使用默认颜色。
@@ -528,7 +530,8 @@ Initialize project 还会写入 `trees/example.json`，它是一棵约 14 个节
 | `duration` | 行为节点 | 节点保持 RUNNING 的 tick 数，数字或表达式（如 `"{{Duration}}"`、`"{{Distance}} / {{Speed}}"`）。默认 0：在进入的同一拍就结束 |
 | `condition` | 行为节点、装饰器 | 表达式。行为节点（`rule`）结束时结果为 `condition ? success : failure`，不写则成功；装饰器见下 |
 | `effects` | 行为节点、服务 | 黑板赋值列表，如 `["Ammo = Ammo - 1", "Target = {{Key}}"]`。行为节点成功时依次执行；服务在每次触发时执行 |
-| `composite` | 组合节点 | `selector` / `sequence` / `parallel` / `randomSelector`。省略时按类型名（不区分大小写，也看直接基类）匹配 Selector、Sequence、Parallel、RandomSelector，都不匹配则为 sequence |
+| `composite` | 组合节点 | `selector` / `sequence` / `parallel` / `randomSelector` / `utility`。省略时按类型名（不区分大小写，也看直接基类）匹配 Selector、Sequence、Parallel、RandomSelector、UtilitySelector，都不匹配则为 sequence |
+| `score` | 装饰器 | 效用分数，数字或表达式。父节点为 `utility` 组合节点时用来给所属节点打分，见「效用 AI」；有 `score` 的装饰器不会因为分数而失败 |
 | `decorator` | 装饰器 | 内置行为：`invert`（反转结果）、`forceSuccess`、`forceFailure`、`loop`、`cooldown`、`timeLimit` |
 | `count` | `loop` | 重复次数，数字或表达式，默认 1；负数表示无限循环 |
 | `ticks` | `cooldown`、`timeLimit` | 冷却 / 限时的 tick 数，数字或表达式 |
@@ -627,18 +630,19 @@ RAN  trees/patrol.json › Smoke → failure in 3 ticks
 
 ### 表达式语法
 
-用于 `condition`、`effects`、`duration`、`count`、`ticks`。不使用 `eval`，由自带的解析器求值。
+用于 `condition`、`effects`、`duration`、`count`、`ticks`、`score`。不使用 `eval`，由自带的解析器求值。
 
 - 字面量：数字、字符串（`'…'` 或 `"…"`）、`true`、`false`、`null`。
 - 标识符：黑板键（不存在时为 `null`）。`{{Prop}}`：当前节点 / 装饰器 / 服务的属性值（先看「Node parameters」的覆盖值，再看树上设置的值，最后是默认值）。
 - 运算符（优先级从低到高）：`||`、`&&`、`== !=`、`< <= > >=`、`+ -`、`* / %`、一元 `- !`，以及括号。`+` 遇到字符串时拼接；缺失的键（`null`）参与数值运算时按 0 处理；`!`、`&&`、`||` 按真值判断（`null`、`false`、`0`、`""` 为假）。
+- 函数：`min(a, b, …)`、`max(a, b, …)`、`clamp(x, lo, hi)`、`abs`、`pow(x, y)`、`sqrt`、`exp`、`log`、`floor`、`ceil`、`round`；`get(key)` 按运行时算出的键名读黑板（如 `get({{Input}})`）；`normalize(x, min, max)` 把 x 线性映射到 0–1 并截断；`curve(name, x)` 计算响应曲线（见「效用 AI」）。函数名区分大小写，未知函数和参数个数不对在解析时报错；不带括号的同名标识符仍是黑板键。
 - 赋值只能出现在 `effects` 中：`Key = 表达式`。
 
 ### tick 语义
 
 1 tick = 1 秒。每个 tick 从根节点开始遍历，RUNNING 的节点从上次的位置继续（Sequence / Selector 记住当前子节点，Parallel 记住各子节点的结果）。节点状态为 idle / running / success / failure；节点重新进入时，其整棵子树先回到 idle。根节点结束后运行即结束。一个 tick 内，Sequence / Selector 会在子节点结束后立刻继续下一个子节点，所以 `duration` 为 0 的行为节点不占用 tick；`loop` 的每一轮在下一个 tick 开始，避免无限循环。
 
-示例见 `samples/simulation`：用 `guard.json` 配合三个场景（Enemy in sight / No enemy / Out of ammo）体验战斗、装填、冷却、巡逻与手动节点；三个场景都带有期望，`owlbt test samples/simulation` 应全部通过。
+示例见 `samples/simulation`：用 `guard.json` 配合三个场景（Enemy in sight / No enemy / Out of ammo）体验战斗、装填、冷却、巡逻与手动节点；`trees/ai/fighter.json` 配合 Healthy / Wounded / Empty fighter 三个场景演示效用 AI。所有场景都带有期望，`owlbt test samples/simulation` 应全部通过。
 
 </details>
 
@@ -750,6 +754,54 @@ RAN  trees/patrol.json › Smoke → failure in 3 ticks
 单个导出、批量导出和命令行导出都遵循这一设置；项目编辑器的「Export settings」中可以切换。
 
 </details>
+
+## 效用 AI（UtilitySelector）
+
+效用 AI 组合节点不按固定顺序执行子节点，而是在进入时给每个子节点打分，执行分数最高的那个。分数挂在子节点的装饰器上，所以拖动、复制或删除子节点时分数跟着走。
+
+### 写法
+
+组合节点的 `simulate.composite` 设为 `utility`（类型名为 `UtilitySelector` 时可省略）。打分装饰器是带 `simulate.score` 的装饰器，分数可以是数字或表达式：
+
+```json
+"decorators": [
+  { "name": "Utility", "properties": [{ "name": "Score", "type": "number", "default": 0.5 }],
+    "simulate": { "score": "{{Score}}" } },
+  { "name": "Consideration",
+    "properties": [
+      { "name": "Input", "type": "blackboardKey" },
+      { "name": "Min", "type": "number", "default": 0 },
+      { "name": "Max", "type": "number", "default": 100 },
+      { "name": "Curve", "type": "enum", "values": ["Linear", "InverseLinear", "Quadratic", "Logistic"] }
+    ],
+    "simulate": { "score": "curve({{Curve}}, normalize(get({{Input}}), {{Min}}, {{Max}}))" } }
+]
+```
+
+默认模板和 `samples/simulation` 已包含 `UtilitySelector`、`Utility` 和 `Consideration`。
+
+### 规则
+
+- 组合节点**进入时**给每个子节点打一次分。选中的子节点一直执行到成功或失败，中途不重新打分、不切换。
+- 子节点的分数 = 它所有打分装饰器的分数相乘。有多个打分装饰器（Considerations）时，0–1 之间的分数先做补偿 `s + (1 - s) × (1 - 1/n) × s`（n 为打分装饰器个数），避免因子越多分数越低；0–1 以外的数（权重）原样相乘。没有打分装饰器的子节点分数为 0。
+- 分数小于等于 0 或低于 `MinScore` 的子节点不会执行。同分时保持子节点原来的顺序。
+- 组合节点的可选属性（按名字识别，和 `Parallel` 的 `Policy` 一样）：
+  - `OnChildFailure`：`TryNext`（默认，选中的子节点失败后按分数试下一个，都失败才失败）或 `Fail`（只执行最高分的子节点，它的结果就是组合节点的结果）。
+  - `Selection`：`Highest`（默认，按分数从高到低）或 `WeightedRandom`（在前 `RandomTop` 名里按分数加权随机排序，`RandomTop` 为 0 表示全部；其余子节点按分数排在后面）。随机数使用运行的种子，同样的输入得到同样的结果。
+  - `MinScore`：最低分数，默认 0。
+- 分数表达式出错时记一条 Error 日志，该子节点按 0 分处理。打分装饰器没有 `condition` 时总是通过，不会让节点失败。
+- 响应曲线 `curve(name, x)`：输入 x 截断到 0–1，输出 0–1。曲线名不区分大小写：`linear`、`inverseLinear`、`quadratic`、`inverseQuadratic`、`sqrt`、`inverseSqrt`、`logistic`、`inverseLogistic`（S 形，0 → 0、0.5 → 0.5、1 → 1）、`step`、`inverseStep`（0.5 处跳变）。
+
+### 编辑器与运行模式
+
+- 运行模式中，效用组合节点的每个子节点卡片左上角显示本次打分的分数，日志新增「分数」类条目，如 `scores: 攻击 0.735, 装填 0.333, 撤退 0.1, 待命 0.1 → 攻击`。分数随回放和后退一起恢复。
+- 选中打分装饰器时，属性面板显示「分数曲线」：横轴为黑板输入（范围取装饰器的 `Min` / `Max` 属性，没有时为 0–1），纵轴为分数。只在分数表达式读取黑板时显示。
+- 树概览的问题列表会提示：效用组合节点下没有打分装饰器的子节点（永远不会执行），以及不在效用组合节点下的打分装饰器（分数不会被使用）。这两条是警告，不影响保存和导出。
+- 项目编辑器的「Simulation」区新增 `utility` 组合类型和装饰器的「Utility score」字段。
+
+### 导出
+
+导出器不需要任何改动：`UtilitySelector` 导出为普通组合节点（`type: composite`），打分装饰器和其他装饰器一样导出为条目，属性（如 `Input`、`Min`、`Max`、`Curve`）照常写入。游戏端如何打分和选择由使用方自行实现。若想让游戏端一眼区分打分装饰器和条件装饰器，可以给打分装饰器类型设置 `"export": { "type": "utility" }`。
 
 ## 导出 Erlang / Lua / TypeScript / C# / Go
 

@@ -84,6 +84,8 @@ describe('owl-bt.json template', () => {
         'Loop',
         'Success',
         'TimeLimit',
+        'Utility',
+        'Consideration',
       ].sort(),
     );
     expect(Object.keys(compiled.services).sort()).toEqual(

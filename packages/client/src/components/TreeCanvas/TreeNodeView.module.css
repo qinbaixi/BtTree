@@ -550,3 +550,28 @@
     4px 4px 0 0 var(--node-border),
     var(--shadow-sm);
 }
+
+/* Run mode: utility score of a child of a utility composite. */
+.scoreBadge {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  padding: 0 5px;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.scoreBadge i {
+  font-size: 9px;
+}

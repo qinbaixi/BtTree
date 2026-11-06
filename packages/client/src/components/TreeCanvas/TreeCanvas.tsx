@@ -417,6 +417,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
                     runActive={runActive}
                     runStatus={viewed?.statuses[node.id]}
                     subStatuses={viewed?.subStatuses}
+                    runScore={viewed?.scores?.[node.id]}
                     breakpoint={breakpoints.has(node.id)}
                     exportIds={exportIds}
                     childCount={node.childNodes.length}

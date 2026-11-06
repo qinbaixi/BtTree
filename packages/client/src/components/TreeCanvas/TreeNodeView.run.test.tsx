@@ -45,6 +45,16 @@ describe('TreeNodeView in run mode', () => {
     expect(container.querySelector('.fa-xmark') !== null).toBe(status === 'failure');
   });
 
+  it('shows the utility score badge only in run mode', () => {
+    const props = { node: wait(), project, x: 0, y: 0, selected: false, runScore: 0.12345 };
+    const { container, rerender } = render(<TreeNodeView {...props} />);
+    expect(container.querySelector('[data-run-score]')).toBeNull();
+    rerender(<TreeNodeView {...props} runActive />);
+    const badge = container.querySelector('[data-run-score]');
+    expect(badge?.textContent).toBe('0.123');
+    expect(badge?.getAttribute('title')).toBe('Utility score: 0.123');
+  });
+
   it('shows pass / fail on decorators and ran on services', () => {
     const node = nodeFromJson(
       {
