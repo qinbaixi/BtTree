@@ -4,6 +4,16 @@
 
 ## [未发布]
 
+### 新增
+
+- 内置示例：示例项目随软件一起打包，首页新增「查看示例」按钮和「示例」区，不用先初始化或打开项目，点一下示例里的树就能直接打开（包括效用 AI 示例 `trees/ai/fighter.json`）。示例以副本形式放在用户目录（桌面版在应用数据目录的 `samples/`，命令行版在 `~/.owlbt/samples/`，可用 `OWLBT_SAMPLES_HOME` 修改），可以随意编辑和运行；应用更新改动了示例时副本会被重置。
+- 老项目升级：打开由旧版本创建、缺少新内置类型（`UtilitySelector`、`Utility`、`Consideration`）的项目时，编辑器顶部会提示，点「添加到 owl-bt.json」把缺少的类型（以及它们用到的 `blackboardKey` 自定义类型）追加到 owl-bt.json，保留原文件的格式，已有的同名类型不会被覆盖。对应接口 `GET` / `POST /api/project/upgrade`。
+
+### 变更
+
+- 节点卡片上的装饰器和服务改为显示在节点顶部，顺序为装饰器 → 服务 → 节点本身。
+- `samples/basic/owl-bt.json` 补上了效用 AI 的内置类型。
+
 ### 修复
 
 - 打分装饰器的 Input 黑板键还没填时（例如默认模板里新加的 `Consideration`），属性面板的分数曲线不显示。现在 Input 为空时也会画出曲线。

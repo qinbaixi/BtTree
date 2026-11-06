@@ -319,17 +319,6 @@ export const TreeNodeView = memo(function TreeNodeView({
           <i className={`fa-solid ${runStatus === 'success' ? 'fa-check' : 'fa-xmark'}`} />
         </span>
       )}
-      <ItemView
-        kind="node"
-        nodeId={node.id}
-        type={nodeType}
-        label={node.label}
-        comment={node.comment}
-        properties={node.properties}
-        selected={selected}
-        interactive={interactive}
-      />
-      {isSubtree && <SubtreeRef node={node} type={nodeType} problem={subtreeProblem} />}
       {node.decorators.map((decorator: SubItem) => (
         <ItemView
           key={decorator.id}
@@ -368,6 +357,17 @@ export const TreeNodeView = memo(function TreeNodeView({
           searchCurrent={searchCurrent === service.id}
         />
       ))}
+      <ItemView
+        kind="node"
+        nodeId={node.id}
+        type={nodeType}
+        label={node.label}
+        comment={node.comment}
+        properties={node.properties}
+        selected={selected}
+        interactive={interactive}
+      />
+      {isSubtree && <SubtreeRef node={node} type={nodeType} problem={subtreeProblem} />}
       {interactive && childCount > 0 && (
         <button
           type="button"

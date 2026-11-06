@@ -30,6 +30,7 @@ import { alerts } from '../store/alertStore';
 import { setTheme, themeLabel, useTheme, type ThemeId } from '../lib/theme';
 import { getLanguage, isLanguage, LANGUAGES, switchLanguage, t } from '../i18n';
 import styles from './Home.module.css';
+import SamplesSection, { SAMPLES_SECTION_ID } from './SamplesSection';
 
 /** Folder restored when the page opens. */
 export const LAST_DIR_STORAGE_KEY = 'owlbt.lastDir';
@@ -626,6 +627,17 @@ export default function Home() {
           >
             <i className="fa-solid fa-sliders" aria-hidden="true" /> {t('Edit project types…')}
           </button>
+          <button
+            type="button"
+            className={styles.action}
+            onClick={() =>
+              document
+                .getElementById(SAMPLES_SECTION_ID)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
+          >
+            <i className="fa-solid fa-book-open" aria-hidden="true" /> {t('View samples')}
+          </button>
           {pending !== null && (
             <span role="status" className={styles.status}>
               {t('Waiting for the file dialog…')}
@@ -732,6 +744,14 @@ export default function Home() {
             </p>
           </div>
         )}
+
+        <SamplesSection
+          onOpenTree={(path) => navigate(editorUrl(path))}
+          onBrowse={(dir) => {
+            loadFolder(dir);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }}
+        />
       </div>
     </div>
   );

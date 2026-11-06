@@ -23,6 +23,19 @@ export const editor: Record<string, string> = {
   'Export: All formats': '导出：所有格式',
   'Save changes before editing project types?': '编辑项目类型前保存更改吗？',
   'Edit project types…': '编辑项目类型…',
+  'View samples': '查看示例',
+  Samples: '示例',
+  'Basic project': '基础项目',
+  'Node, decorator and service types with properties, a project plugin (owl-bt.js) and a custom CSV exporter.':
+    '带属性的节点、装饰器和服务类型，一个项目插件 (owl-bt.js) 和一个自定义 CSV 导出器。',
+  'Run mode and utility AI': '运行模式与效用 AI',
+  'Trees to run in the simulator with scenarios: a guard, a sentry, and a utility AI fighter that scores its options.':
+    '可在模拟器中运行的行为树和场景：守卫、哨兵，以及一个给各个选项打分的效用 AI 战士。',
+  Browse: '浏览',
+  'List the trees of this sample as the workspace': '把这个示例的行为树列为当前工作区',
+  'Could not open the sample: {message}': '无法打开示例：{message}',
+  'Samples open as a copy in your user folder, so you can edit and run them freely. A copy is reset when an app update changes the sample.':
+    '示例会以副本形式打开（存放在你的用户目录下），可以随意编辑和运行。应用更新改动了示例时，副本会被重置。',
   'Run: Toggle run mode': '运行：切换运行模式',
   'Run: Step': '运行：单步',
   'Run: Step back': '运行：后退一步',
@@ -114,6 +127,13 @@ export const editor: Record<string, string> = {
   'Could not trust the plugin: {message}': '无法信任插件：{message}',
   'Trust and run': '信任并运行',
   Dismiss: '忽略',
+
+  // Project upgrade banner
+  'This project was created by an older version and does not have the new built-in types: {names}.':
+    '这个项目由旧版本创建，缺少新的内置类型：{names}。',
+  'Add to owl-bt.json': '添加到 owl-bt.json',
+  'Added {names} to owl-bt.json.': '已将 {names} 添加到 owl-bt.json。',
+  'Could not update owl-bt.json: {message}': '无法更新 owl-bt.json：{message}',
 
   // Tabs
   'Open trees': '已打开的行为树',

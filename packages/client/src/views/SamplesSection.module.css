@@ -1,0 +1,130 @@
+/* Built-in samples on the home page. */
+.section {
+  margin: 24px 0 32px;
+}
+
+.heading {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  align-items: start;
+  gap: 14px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.title {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.browse {
+  height: 26px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.browse:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.summary {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trees {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.trees li + li {
+  border-top: 1px solid var(--border);
+}
+
+.tree {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 12px;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  text-align: left;
+  font-size: 13px;
+}
+
+.tree i {
+  color: var(--text-muted);
+}
+
+.tree:hover:not(:disabled),
+.tree:focus-visible {
+  background: var(--surface-hover);
+}
+
+.tree:disabled,
+.browse:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.treeName {
+  font-weight: 500;
+}
+
+.treePath {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.hint {
+  margin: 10px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}

@@ -33,7 +33,9 @@ import {
   type ProjectOptions,
 } from './project';
 import { revoke, trust } from './pluginTrust';
+import { registerProjectUpgradeRoutes } from './projectUpgradeRoutes';
 import { registerReferenceRoutes } from './referenceRoutes';
+import { registerSampleRoutes } from './samples';
 import { formatTreeText, parseTreeText } from './treeFile';
 import { loadSubtreeLibrary, treeRefOf } from './subtrees';
 import {
@@ -452,6 +454,8 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   });
 
   registerReferenceRoutes(router);
+  registerProjectUpgradeRoutes(router);
+  registerSampleRoutes(router);
 
   router.post('/export/batch', async (req, res) => {
     const body = objectBody(req.body);

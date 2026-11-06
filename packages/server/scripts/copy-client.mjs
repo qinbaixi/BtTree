@@ -9,10 +9,21 @@ const src = resolve(serverDir, '../client/dist');
 const dest = join(serverDir, 'dist', 'public');
 
 if (!existsSync(join(src, 'index.html'))) {
-  console.error(`copy-client: client build not found at ${src}. Run "npm run build -w @owlbt/client" first.`);
+  console.error(
+    `copy-client: client build not found at ${src}. Run "npm run build -w @owlbt/client" first.`,
+  );
   process.exit(1);
 }
 
 rmSync(dest, { recursive: true, force: true });
 cpSync(src, dest, { recursive: true });
 console.log(`copy-client: ${src} -> ${dest}`);
+
+// The built-in samples are served from dist/samples (see src/samples.ts).
+const samplesSrc = resolve(serverDir, '../../samples');
+const samplesDest = join(serverDir, 'dist', 'samples');
+rmSync(samplesDest, { recursive: true, force: true });
+if (existsSync(samplesSrc)) {
+  cpSync(samplesSrc, samplesDest, { recursive: true });
+  console.log(`copy-client: ${samplesSrc} -> ${samplesDest}`);
+}
