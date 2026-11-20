@@ -146,9 +146,35 @@ describe('Host and Origin checks on HTTP routes', () => {
     expect(curl.status).toBe(400);
   });
 
-  it('does not check Origin on safe methods', async () => {
-    const res = await request(app()).get('/api/health').set('Origin', 'http://evil.example');
-    expect(res.status).toBe(200);
+  it('refuses cross-origin GET requests and sets anti-clickjacking headers', async () => {
+    const crossOrigin = await request(app()).get('/api/health').set('Origin', 'http://evil.example');
+    expect(crossOrigin.status).toBe(403);
+    expect(crossOrigin.text).toBe('Forbidden origin');
+
+    const crossSite = await request(app())
+      .get('/api/health')
+      .set('Sec-Fetch-Site', 'cross-site');
+    expect(crossSite.status).toBe(403);
+    expect(crossSite.text).toBe('Forbidden origin');
+
+    const nonHttpOrigin = await request(app())
+      .get('/api/health')
+      .set('Origin', 'file://localhost');
+    expect(nonHttpOrigin.status).toBe(403);
+
+    const ok = await request(app()).get('/api/health');
+    expect(ok.status).toBe(200);
+    expect(ok.headers['x-frame-options']).toBe('DENY');
+    expect(ok.headers['content-security-policy']).toBe("frame-ancestors 'none'");
+    expect(ok.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('canonicalises IPv6 hosts and rejects out-of-range loopback IPv4 octets', () => {
+    expect(normalizeHostname('FE80:0::1')).toBe('[fe80::1]');
+    expect(isLoopbackHost('0:0:0:0:0:0:0:1')).toBe(true);
+    expect(isLoopbackHost('127.999.0.1')).toBe(false);
+    expect(hostnameOf('file://localhost', 'origin')).toBeUndefined();
+    expect(hostnameOf('localhost:9000?a=1', 'host')).toBeUndefined();
   });
 });
 

@@ -9,19 +9,44 @@ import type { RequestHandler } from 'express';
 /** Host names that always pass: the loopback names the editor and the desktop app use. */
 export const LOOPBACK_HOSTS: readonly string[] = ['localhost', '127.0.0.1', '[::1]'];
 
-/** Normalises a host name from options or headers: lower case, IPv6 literals in brackets. */
+/** Normalises a host name from options or headers: lower case, RFC-5952 IPv6 literals in brackets. */
 export function normalizeHostname(host: string): string {
-  const lower = host.trim().toLowerCase();
-  if (lower.includes(':') && !lower.startsWith('[')) {
-    return `[${lower}]`;
+  const trimmed = host.trim();
+  if (trimmed === '') {
+    return '';
   }
-  return lower;
+  const candidate =
+    trimmed.includes(':') && !trimmed.startsWith('[') ? `[${trimmed}]` : trimmed;
+  try {
+    const parsed = new URL(`http://${candidate}`);
+    if (parsed.username === '' && parsed.password === '' && parsed.pathname === '/' && parsed.port === '') {
+      return parsed.hostname.toLowerCase();
+    }
+  } catch {
+    // Fall back to lower-cased text when not a valid URL host.
+  }
+  return candidate.toLowerCase();
 }
 
-/** True for localhost, 127.x.x.x and ::1. Anything else listens beyond this machine. */
+const LOOPBACK_IPV4 = /^127\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+
+/** True for localhost, valid 127.0.0.0/8 and ::1. Anything else listens beyond this machine. */
 export function isLoopbackHost(host: string): boolean {
   const name = normalizeHostname(host);
-  return LOOPBACK_HOSTS.includes(name) || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name);
+  if (LOOPBACK_HOSTS.includes(name)) {
+    return true;
+  }
+  const match = LOOPBACK_IPV4.exec(name);
+  if (!match) {
+    return false;
+  }
+  return Number(match[1]) <= 255 && Number(match[2]) <= 255 && Number(match[3]) <= 255;
+}
+
+/** True for wildcard listen addresses (`0.0.0.0` or `::`). */
+export function isWildcardHost(host: string): boolean {
+  const name = normalizeHostname(host);
+  return name === '0.0.0.0' || name === '[::]';
 }
 
 /**
@@ -31,7 +56,16 @@ export function isLoopbackHost(host: string): boolean {
 export function hostnameOf(value: string, kind: 'host' | 'origin'): string | undefined {
   try {
     const url = kind === 'origin' ? new URL(value) : new URL(`http://${value}`);
-    if (kind === 'host' && (url.username !== '' || url.password !== '' || url.pathname !== '/')) {
+    if (kind === 'origin' && url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return undefined;
+    }
+    if (
+      url.username !== '' ||
+      url.password !== '' ||
+      url.pathname !== '/' ||
+      url.search !== '' ||
+      url.hash !== ''
+    ) {
       return undefined;
     }
     return url.hostname.toLowerCase() || undefined;
@@ -42,7 +76,7 @@ export function hostnameOf(value: string, kind: 'host' | 'origin'): string | und
 
 /** The set of hostnames a request may use: the loopback names plus the configured extra hosts. */
 export function allowedHostnames(extra: readonly string[] = []): Set<string> {
-  return new Set([...LOOPBACK_HOSTS, ...extra.map(normalizeHostname)]);
+  return new Set([...LOOPBACK_HOSTS, ...extra.map(normalizeHostname).filter((h) => h !== '')]);
 }
 
 /** True when the Host header names an allowed host. A missing or malformed header is refused. */
@@ -66,15 +100,22 @@ export function isAllowedOrigin(origin: string | undefined, allowed: ReadonlySet
   return name !== undefined && allowed.has(name);
 }
 
-/** Express middleware for every route: Host must be allowed; unsafe methods also need an allowed Origin. */
+/**
+ * Express middleware for every route: Host must be allowed; any present Origin must be allowed;
+ * cross-site Fetch Metadata requests to `/api` are also refused.
+ */
 export function localGuard(allowed: ReadonlySet<string>): RequestHandler {
   return (req, res, next) => {
     if (!isAllowedHost(req.headers.host, allowed)) {
       res.status(403).type('text/plain').send('Forbidden host');
       return;
     }
-    const safe = req.method === 'GET' || req.method === 'HEAD';
-    if (!safe && !isAllowedOrigin(req.headers.origin, allowed)) {
+    if (!isAllowedOrigin(req.headers.origin, allowed)) {
+      res.status(403).type('text/plain').send('Forbidden origin');
+      return;
+    }
+    const isApi = req.path === '/api' || req.path.startsWith('/api/');
+    if (isApi && req.headers['sec-fetch-site'] === 'cross-site') {
       res.status(403).type('text/plain').send('Forbidden origin');
       return;
     }

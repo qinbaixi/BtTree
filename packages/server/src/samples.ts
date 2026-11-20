@@ -1,17 +1,22 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Router } from 'express';
 import { HttpError } from './errors';
+import { withFileLock } from './fileLock';
 import { loadWorkspace } from './workspace';
 
 /** Samples bundled next to the built server (dist/samples, copied by the build). */
 const BUNDLED_SAMPLES_DIR = fileURLToPath(new URL('./samples/', import.meta.url));
 /** The repository's samples folder, for running from source. Resolves from both src/ and dist/. */
 const REPO_SAMPLES_DIR = fileURLToPath(new URL('../../../samples/', import.meta.url));
+/** Checked once at module load instead of running sync existsSync on every request. */
+const DEFAULT_SAMPLES_DIR = existsSync(BUNDLED_SAMPLES_DIR)
+  ? BUNDLED_SAMPLES_DIR
+  : REPO_SAMPLES_DIR;
 /** File in a sample copy that records which content it was copied from. */
 const MARKER_FILE = '.owlbt-sample';
 const SAMPLE_ID = /^[a-z0-9][a-z0-9_-]*$/i;
@@ -24,7 +29,7 @@ export function samplesDir(env: NodeJS.ProcessEnv = process.env): string {
   if (env.OWLBT_SAMPLES_DIR) {
     return resolve(env.OWLBT_SAMPLES_DIR);
   }
-  return existsSync(BUNDLED_SAMPLES_DIR) ? BUNDLED_SAMPLES_DIR : REPO_SAMPLES_DIR;
+  return DEFAULT_SAMPLES_DIR;
 }
 
 /**
@@ -112,6 +117,21 @@ export interface OpenedSample {
   trees: Array<{ path: string; relPath: string }>;
 }
 
+/** Ensures copied files and directories are writable by the owner (sources in installed apps may be read-only). */
+async function makeTreeWritable(dir: string): Promise<void> {
+  const info = await stat(dir);
+  await chmod(dir, info.mode | 0o700).catch(() => undefined);
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const target = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await makeTreeWritable(target);
+    } else if (entry.isFile()) {
+      const fileInfo = await stat(target);
+      await chmod(target, fileInfo.mode | 0o200).catch(() => undefined);
+    }
+  }
+}
+
 /**
  * Copies a sample to samplesHome()/<id> unless an up-to-date copy is there already, and lists its
  * trees. A copy made from different (older) sample content is replaced, edits included.
@@ -129,19 +149,22 @@ export async function openSample(
     throw new HttpError(404, `Unknown sample: ${id}`);
   }
   const dir = join(home, id);
-  const print = await fingerprint(from);
-  let current: string | undefined;
-  try {
-    current = (await readFile(join(dir, MARKER_FILE), 'utf8')).trim();
-  } catch {
-    current = undefined;
-  }
-  if (current !== print) {
-    await rm(dir, { recursive: true, force: true });
-    await mkdir(home, { recursive: true });
-    await cp(from, dir, { recursive: true });
-    await writeFile(join(dir, MARKER_FILE), `${print}\n`, 'utf8');
-  }
+  await withFileLock(dir, async () => {
+    const print = await fingerprint(from);
+    let current: string | undefined;
+    try {
+      current = (await readFile(join(dir, MARKER_FILE), 'utf8')).trim();
+    } catch {
+      current = undefined;
+    }
+    if (current !== print) {
+      await rm(dir, { recursive: true, force: true });
+      await mkdir(home, { recursive: true });
+      await cp(from, dir, { recursive: true });
+      await makeTreeWritable(dir);
+      await writeFile(join(dir, MARKER_FILE), `${print}\n`, 'utf8');
+    }
+  });
   const workspace = await loadWorkspace(dir);
   return {
     id,

@@ -9,8 +9,8 @@ export function defaultRcPath(): string {
   return join(homedir(), '.owlbtrc');
 }
 
-function parsePort(value: unknown): number | undefined {
-  const n = typeof value === 'string' ? Number(value.trim()) : value;
+export function parsePort(value: unknown): number | undefined {
+  const n = typeof value === 'string' && value.trim() !== '' ? Number(value.trim()) : value;
   return typeof n === 'number' && Number.isInteger(n) && n > 0 && n < 65536 ? n : undefined;
 }
 

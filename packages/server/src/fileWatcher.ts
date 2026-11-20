@@ -1,4 +1,5 @@
 import { promises as fsPromises, watch as fsWatch } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import type { ProjectReloadPayload } from '@owlbt/shared';
 
 export const DEFAULT_DEBOUNCE_MS = 500;
@@ -23,8 +24,32 @@ export interface FileWatcherOptions {
 
 export type ReloadListener = (payload: ProjectReloadPayload) => void;
 
+const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
+
+function watchKey(filePath: string): string {
+  const abs = resolve(filePath);
+  return CASE_INSENSITIVE_FS ? abs.toLowerCase() : abs;
+}
+
+/**
+ * Watches the parent directory and filters on the target file name so atomic rename saves
+ * (which replace the inode on Linux/macOS) continue firing change events.
+ */
 const defaultWatch: WatchFn = (filePath, onChange, onError) => {
-  const watcher = fsWatch(filePath, () => onChange());
+  const dir = dirname(filePath);
+  const name = basename(filePath);
+  const expected = CASE_INSENSITIVE_FS ? name.toLowerCase() : name;
+  const watcher = fsWatch(dir, (_event, filename) => {
+    if (filename === null) {
+      onChange();
+      return;
+    }
+    const text = typeof filename === 'string' ? filename : String(filename);
+    const current = CASE_INSENSITIVE_FS ? text.toLowerCase() : text;
+    if (current === expected) {
+      onChange();
+    }
+  });
   watcher.on('error', onError);
   return watcher;
 };
@@ -50,6 +75,7 @@ class WatchedFile {
   private readonly listeners = new Map<string, ReloadListener>();
   private handle: WatchHandle | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private reloadSeq = 0;
 
   constructor(
     private readonly filePath: string,
@@ -61,14 +87,15 @@ class WatchedFile {
     if (this.listeners.has(id)) {
       throw new Error(`duplicate listener id "${id}"`);
     }
-    this.listeners.set(id, listener);
     if (!this.handle) {
+      // Acquire watcher before registering the listener so a throw leaves no zombie state.
       this.handle = this.opts.watch(
         this.filePath,
         () => this.schedule(),
         () => this.schedule(),
       );
     }
+    this.listeners.set(id, listener);
   }
 
   remove(id: string): void {
@@ -81,7 +108,8 @@ class WatchedFile {
     }
   }
 
-  private stop(): void {
+  stop(): void {
+    this.reloadSeq++;
     this.handle?.close();
     this.handle = undefined;
     if (this.timer !== undefined) {
@@ -101,11 +129,15 @@ class WatchedFile {
   }
 
   private async reload(): Promise<void> {
+    const seq = ++this.reloadSeq;
     let payload: ProjectReloadPayload;
     try {
       payload = toPayload(await this.opts.readFile(this.filePath));
     } catch (e) {
       payload = { error: errorMessage(e) };
+    }
+    if (seq !== this.reloadSeq || this.listeners.size === 0) {
+      return;
     }
     for (const listener of [...this.listeners.values()]) {
       try {
@@ -134,21 +166,38 @@ export class FileWatcherRegistry {
   }
 
   addListener(filePath: string, id: string, callback: ReloadListener): void {
-    let file = this.files.get(filePath);
+    const key = watchKey(filePath);
+    let file = this.files.get(key);
+    const createdNow = !file;
     if (!file) {
       const created: WatchedFile = new WatchedFile(filePath, this.opts, () => {
-        if (this.files.get(filePath) === created) {
-          this.files.delete(filePath);
+        if (this.files.get(key) === created) {
+          this.files.delete(key);
         }
       });
       file = created;
-      this.files.set(filePath, created);
+      this.files.set(key, created);
     }
-    file.add(id, callback);
+    try {
+      file.add(id, callback);
+    } catch (err) {
+      if (createdNow && this.files.get(key) === file) {
+        this.files.delete(key);
+      }
+      throw err;
+    }
   }
 
   removeListener(filePath: string, id: string): void {
-    this.files.get(filePath)?.remove(id);
+    this.files.get(watchKey(filePath))?.remove(id);
+  }
+
+  /** Closes all active watchers and timers. */
+  closeAll(): void {
+    for (const file of this.files.values()) {
+      file.stop();
+    }
+    this.files.clear();
   }
 
   /** Number of files currently watched. */

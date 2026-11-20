@@ -5,7 +5,7 @@ import { VERSION } from '@owlbt/shared';
 import { Command } from 'commander';
 import open from 'open';
 import { exportProject, exportTree, parseExportFormats, type ExportTreeResult } from './export';
-import { run } from './run';
+import { listenOrigin, run } from './run';
 import { findProjectFile, PROJECT_FILE_NAME } from './project';
 import { readTemplate } from './workspace';
 import { runTestCommand, type TestCommandOptions } from './testCommand';
@@ -46,16 +46,18 @@ function shouldTrustPlugins(): boolean {
 
 /** Starts the server (or reuses a running one) and opens the given app path in the browser. */
 async function serveAndOpen(pathAndQuery: string): Promise<void> {
+  const host = program.opts<{ host?: string }>().host;
   const { port, reused } = await run({
-    host: program.opts<{ host?: string }>().host,
+    host,
     trustAllPlugins: shouldTrustPlugins(),
   });
+  const baseUrl = listenOrigin(host, port);
   console.log(
     reused
       ? `owl-bt server already running on port ${port}`
-      : `owl-bt server ${VERSION} listening on http://localhost:${port}`,
+      : `owl-bt server ${VERSION} listening on ${baseUrl}`,
   );
-  const url = `http://localhost:${port}${pathAndQuery}`;
+  const url = `${baseUrl}${pathAndQuery}`;
   if (shouldSkipOpen()) {
     console.log(`Open ${url} in a browser.`);
     return;

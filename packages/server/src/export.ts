@@ -1,13 +1,13 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import {
   buildExportModel,
   collectSubtreeRefsJson,
+  compileProject,
   createIdGen,
   csharpClassName,
   goNamePrefix,
   nodeFromJson,
-  parseAndCompileProject,
   parseCsNamespace,
   parseGoPackage,
   sanitizeModuleName,
@@ -25,6 +25,7 @@ import {
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { HttpError, isErrno } from './errors';
+import { withFileLock, writeFileAtomic } from './fileLock';
 import {
   BUILTIN_EXPORT_FORMATS,
   collectPluginExporters,
@@ -33,8 +34,15 @@ import {
   type BuiltinExportFormat,
   type ResolvedPluginExporter,
 } from './pluginExporters';
-import { findProjectFile, getProject, PROJECT_FILE_NAME } from './project';
+import {
+  findProjectFile,
+  getProject,
+  isPathInDir,
+  isRealPathInDir,
+  PROJECT_FILE_NAME,
+} from './project';
 import { loadSubtreeLibrary, treeRefOf, type SubtreeFileCache } from './subtrees';
+import { parseTreeText } from './treeFile';
 import { loadWorkspace, type WorkspaceTree } from './workspace';
 
 /** Built-in formats. Projects can add more with `exporters` in owl-bt.js. */
@@ -156,25 +164,77 @@ export async function loadPluginExporters(
 }
 
 async function readExportProject(path: string, plugin: PluginLoad): Promise<ExportProject> {
-  const content = await readFile(path, 'utf8');
-  const compiled = parseAndCompileProject(content);
-  const pluginPart = plugin.load
-    ? await loadPluginExporters(path, plugin.trustAllPlugins)
-    : { exporters: new Map<string, ResolvedPluginExporter>(), pluginWarnings: [] };
-  if (!compiled.project) {
+  let content: string;
+  let pluginPart: Pick<ExportProject, 'exporters' | 'pluginWarnings' | 'pluginError'>;
+  if (plugin.load) {
+    let loaded: Awaited<ReturnType<typeof getProject>>;
+    try {
+      loaded = await getProject(path, { trustAllPlugins: plugin.trustAllPlugins });
+    } catch (err) {
+      content = await readFile(path, 'utf8');
+      pluginPart = {
+        exporters: new Map(),
+        pluginWarnings: [],
+        pluginError: `owl-bt.js failed to load: ${messageOf(err)}`,
+      };
+      loaded = undefined;
+    }
+    if (loaded) {
+      content = loaded.content;
+      if (loaded.pluginStatus && !loaded.pluginStatus.trusted) {
+        pluginPart = {
+          exporters: new Map(),
+          pluginWarnings: [],
+          pluginError:
+            'the project plugin (owl-bt.js, exporters/) is not trusted; trust it in the editor or pass --trust-plugins to use its exporters',
+        };
+      } else {
+        const { exporters, warnings } = collectPluginExporters(loaded.plugin);
+        pluginPart = {
+          exporters,
+          pluginWarnings: [...(loaded.pluginWarnings ?? []), ...warnings],
+        };
+      }
+    } else {
+      content ??= await readFile(path, 'utf8');
+      pluginPart ??= { exporters: new Map(), pluginWarnings: [] };
+    }
+  } else {
+    content = await readFile(path, 'utf8');
+    pluginPart = { exporters: new Map<string, ResolvedPluginExporter>(), pluginWarnings: [] };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      throw new Error('Project file must contain a JSON object');
+    }
+  } catch (err) {
     return {
       dir: dirname(path),
       file: {},
-      error: compiled.error ?? 'unknown error',
+      error: messageOf(err),
       ...pluginPart,
     };
   }
-  return {
-    dir: dirname(path),
-    file: JSON.parse(content) as ProjectFile,
-    compiled: compiled.project,
-    ...pluginPart,
-  };
+  const file = parsed as ProjectFile;
+  try {
+    const compiled = compileProject(file);
+    return {
+      dir: dirname(path),
+      file,
+      compiled,
+      ...pluginPart,
+    };
+  } catch (err) {
+    return {
+      dir: dirname(path),
+      file,
+      error: messageOf(err),
+      ...pluginPart,
+    };
+  }
 }
 
 /** The project that applies to a tree, or undefined when there is none. */
@@ -214,7 +274,7 @@ function outputFile(
   treePath: string,
   format: ExportFormat,
   options: ExportOptions,
-): { path: string; baseName: string } | undefined {
+): { path: string; baseName: string } | { error: string } | undefined {
   const defaults = isBuiltinExportFormat(format)
     ? FORMAT_DEFAULTS[format]
     : project.exporters.get(format);
@@ -222,15 +282,37 @@ function outputFile(
     return undefined;
   }
   const config = formatConfig(project.file, format);
+  if (config.outDir !== undefined && typeof config.outDir !== 'string') {
+    return { error: `Invalid export.${format}.outDir: must be a string` };
+  }
+  if (config.fileName !== undefined && typeof config.fileName !== 'string') {
+    return { error: `Invalid export.${format}.fileName: must be a string` };
+  }
   const treeName = basename(treePath).replace(/\.json$/i, '');
   const outDir = resolve(project.dir, options.outDir ?? config.outDir ?? defaults.outDir);
-  const fileName = (config.fileName ?? '{name}').replace(/\{name\}/g, treeName);
-  const withExtension = fileName.toLowerCase().endsWith(defaults.extension)
+  if (options.outDir === undefined && !isPathInDir(outDir, project.dir)) {
+    return { error: `Export outDir must stay inside the project folder: ${outDir}` };
+  }
+  const fileName = (config.fileName ?? '{name}').replace(/\{name\}/g, () => treeName);
+  if (
+    fileName === '' ||
+    fileName === '.' ||
+    fileName === '..' ||
+    /[\\/\0]/.test(fileName)
+  ) {
+    return { error: `Invalid export.${format}.fileName: ${JSON.stringify(fileName)}` };
+  }
+  const extLower = defaults.extension.toLowerCase();
+  const withExtension = fileName.toLowerCase().endsWith(extLower)
     ? fileName
     : `${fileName}${defaults.extension}`;
+  const targetPath = resolve(outDir, withExtension);
+  if (!isPathInDir(targetPath, outDir)) {
+    return { error: `Export file path escapes output folder: ${targetPath}` };
+  }
   return {
-    path: resolve(outDir, withExtension),
-    baseName: basename(withExtension, defaults.extension),
+    path: targetPath,
+    baseName: withExtension.slice(0, -defaults.extension.length),
   };
 }
 
@@ -273,8 +355,8 @@ async function writeGroups(
     }
     for (const format of formats) {
       const output = outputFile(project, tree.path, format, options);
-      if (!output) {
-        continue; // Unknown format: reported by the tree's own export.
+      if (!output || 'error' in output) {
+        continue; // Unknown format or invalid config: reported by the tree's own export.
       }
       const { path } = output;
       const key = process.platform === 'win32' ? path.toLowerCase() : path;
@@ -399,7 +481,7 @@ async function exportTreeIn(
 
   let json: TreeNodeJson;
   try {
-    json = JSON.parse(raw) as TreeNodeJson;
+    json = parseTreeText(raw);
   } catch (err) {
     return { ...result, error: `Invalid tree file: ${messageOf(err)}` };
   }
@@ -438,7 +520,14 @@ async function exportTreeIn(
     if (!output) {
       continue; // Checked above.
     }
+    if ('error' in output) {
+      return { ...result, error: output.error };
+    }
     const { path, baseName } = output;
+    const allowedRoot = options.outDir !== undefined ? resolve(options.outDir) : project.dir;
+    if (!(await isRealPathInDir(path, allowedRoot))) {
+      return { ...result, error: `Export path escapes allowed directory: ${path}` };
+    }
     let content: string | Uint8Array;
     const exporter = project.exporters.get(format);
     if (!isBuiltinExportFormat(format) && exporter) {
@@ -487,8 +576,10 @@ async function exportTreeIn(
     }
 
     try {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(path, content, 'utf8');
+      await withFileLock(path, async () => {
+        await mkdir(dirname(path), { recursive: true });
+        await writeFileAtomic(path, content);
+      });
     } catch (err) {
       return { ...result, error: `Cannot write ${path}: ${messageOf(err)}` };
     }

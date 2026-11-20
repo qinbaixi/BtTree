@@ -124,11 +124,25 @@ function openExternal(url: string): void {
   try {
     const parsed = new URL(url);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      void shell.openExternal(parsed.toString());
+      shell.openExternal(parsed.toString()).catch((err) => {
+        console.error('owl-bt: could not open external URL', err);
+      });
     }
   } catch {
     // Not a URL: nothing to open.
   }
+}
+
+/** Navigates the window safely, ignoring ERR_ABORTED (-3) when cancelled by unsaved-changes prompts. */
+function loadUrlSafe(win: BrowserWindow, url: string): void {
+  win.loadURL(url).catch((err: unknown) => {
+    const code = (err as { errno?: number; code?: string } | undefined)?.errno;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (code === -3 || msg.includes('ERR_ABORTED')) {
+      return;
+    }
+    console.error('owl-bt: navigation failed', err);
+  });
 }
 
 /** Native open dialog for the server's POST /api/dialog/pick. One dialog at a time. */
@@ -153,7 +167,7 @@ const picker: Picker = {
       if (initialDir !== undefined) {
         options.defaultPath = initialDir;
       }
-      const owner = mainWindow;
+      const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
       const result = owner
         ? await dialog.showOpenDialog(owner, options)
         : await dialog.showOpenDialog(options);
@@ -193,11 +207,13 @@ function createMainWindow(route: string): BrowserWindow {
     },
   });
   mainWindow = win;
-  if (state.maximized) {
-    win.maximize();
-  }
 
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    if (state.maximized) {
+      win.maximize();
+    }
+    win.show();
+  });
   // The window shows the page title, e.g. "*tree.json - owl-bt" while a tab has unsaved changes.
   win.on('page-title-updated', (event, title) => {
     event.preventDefault();
@@ -217,10 +233,18 @@ function createMainWindow(route: string): BrowserWindow {
     openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (event, url) => {
+  const guardNavigation = (event: Electron.Event, url: string): void => {
     if (!isLocalUrl(url)) {
       event.preventDefault();
       openExternal(url);
+    }
+  };
+  win.webContents.on('will-navigate', guardNavigation);
+  win.webContents.on('will-redirect', guardNavigation);
+  win.webContents.on('will-frame-navigate', (details) => {
+    if (!isLocalUrl(details.url)) {
+      details.preventDefault();
+      openExternal(details.url);
     }
   });
   // Electron ignores the returnValue of beforeunload, so the unsaved-changes prompt is native.
@@ -257,7 +281,7 @@ function createMainWindow(route: string): BrowserWindow {
   }
 
   const loaded = smokeMode ? waitForLoad(win) : undefined;
-  void win.loadURL(`${origin}${route}`);
+  loadUrlSafe(win, `${origin}${route}`);
   if (loaded !== undefined) {
     void runSmoke(win, loaded);
   }
@@ -404,26 +428,34 @@ function start(): void {
     }
     win.focus();
     if (route !== '/') {
-      void win.loadURL(`${origin}${route}`);
+      loadUrlSafe(win, `${origin}${route}`);
     }
   });
 
   // macOS: a .json file dropped on the app icon or opened from Finder.
   app.on('open-file', (event, path) => {
     event.preventDefault();
-    if (serverResult !== undefined) {
-      if (mainWindow) {
-        void mainWindow.loadURL(`${origin}${routeFor(path)}`);
-      } else {
-        mainWindow = createMainWindow(routeFor(path));
+    const route = routeFor(path);
+    if (serverResult === undefined) {
+      pendingRoute = nextPendingRoute(pendingRoute, route);
+      return;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
       }
+      mainWindow.focus();
+      loadUrlSafe(mainWindow, `${origin}${route}`);
+    } else {
+      mainWindow = createMainWindow(route);
     }
   });
 
   app.on('window-all-closed', () => {
-    if (updater.restartRequested) {
-      updater.finishRestart();
-    } else if (process.platform !== 'darwin') {
+    if (updater.restartRequested && updater.finishRestart()) {
+      return;
+    }
+    if (process.platform !== 'darwin') {
       app.quit();
     }
   });
@@ -435,6 +467,7 @@ function start(): void {
   });
 
   app.on('will-quit', () => {
+    serverResult?.server?.registry.closeAll();
     serverResult?.server?.io.close();
   });
 

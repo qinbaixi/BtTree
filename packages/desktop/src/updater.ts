@@ -136,6 +136,10 @@ export class Updater {
     // A downloaded update is installed the next time the app quits, even without "Restart now".
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.logger = null;
+    autoUpdater.on('error', (err) => {
+      // Prevent unhandled EventEmitter 'error' crashes; the awaiting check/download catches rejections.
+      console.error('owl-bt: autoUpdater error', err);
+    });
     autoUpdater.on('download-progress', (progress: { percent: number }) => {
       if (this.state.status === 'downloading') {
         this.set({ percent: Math.max(0, Math.min(100, Math.round(progress.percent))) });
@@ -162,9 +166,16 @@ export class Updater {
     this.restartRequested = false;
   }
 
-  /** Quits, installs the downloaded update silently and starts the new version. */
-  finishRestart(): void {
-    autoUpdater.quitAndInstall(true, true);
+  /** Quits, installs the downloaded update silently and starts the new version. Returns false on failure. */
+  finishRestart(): boolean {
+    try {
+      autoUpdater.quitAndInstall(true, true);
+      return true;
+    } catch (err) {
+      this.restartRequested = false;
+      console.error('owl-bt: quitAndInstall failed', err);
+      return false;
+    }
   }
 
   registerIpc(): void {

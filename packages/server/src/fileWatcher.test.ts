@@ -237,4 +237,20 @@ describe('FileWatcherRegistry with the real file system', () => {
     expect(payload).toEqual({ content: '{"nodes":[{"name":"changed"}]}' });
     expect(registry.watchedCount).toBe(0);
   });
+
+  it('rolls back registry state when watch() throws and supports closeAll()', () => {
+    const watch = vi.fn<WatchFn>(() => {
+      throw new Error('ENOSPC');
+    });
+    const registry = new FileWatcherRegistry({ watch });
+    expect(() => registry.addListener('/p/owl-bt.json', '1', () => {})).toThrow('ENOSPC');
+    expect(registry.watchedCount).toBe(0);
+
+    const ok = setup();
+    ok.registry.addListener('/a/owl-bt.json', '1', () => {});
+    ok.registry.addListener('/b/owl-bt.json', '2', () => {});
+    ok.registry.closeAll();
+    expect(ok.registry.watchedCount).toBe(0);
+    expect(ok.watches.every((w) => w.closed)).toBe(true);
+  });
 });
