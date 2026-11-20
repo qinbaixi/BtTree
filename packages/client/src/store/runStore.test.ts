@@ -593,4 +593,44 @@ describe('runStore', () => {
       expect(h.store.getState().history).toHaveLength(1);
     });
   });
+
+  it('resets stale blackboard, scenario, overrides and breakpoints when entering a different tree', () => {
+    let currentTreePath = '/projA/trees/a.json';
+    let currentScenarios: ScenarioJson[] = [{ name: 'A1', blackboard: { Ammo: 5 } }];
+    const h = setup(SIMPLE, {
+      getTree: () => ({ root: h.root, treePath: currentTreePath }),
+      getScenarios: () => currentScenarios,
+    });
+    h.store.getState().enter();
+    h.store.getState().toggleBreakpoint(h.id('attack'));
+    h.store.getState().setOverride(h.id('wait'), 'Duration', 9);
+    expect(h.store.getState().selectedScenario).toBe('A1');
+    h.store.getState().exit();
+
+    currentTreePath = '/projB/trees/b.json';
+    currentScenarios = [{ name: 'B1', blackboard: { Energy: 10 } }];
+    h.store.getState().enter();
+    expect(h.store.getState().selectedScenario).toBe('B1');
+    expect(entriesToRecord(h.store.getState().blackboard)).toEqual({ Energy: 10 });
+    expect(h.store.getState().breakpoints.size).toBe(0);
+    expect(h.store.getState().overrides).toEqual({});
+  });
+
+  it('does not throw in play() if the tree disappeared before restarting a finished run', () => {
+    let available = true;
+    const h = setup(
+      { type: 'Succeed', label: 's' },
+      {
+        getProject: () => (available ? project : undefined),
+      },
+    );
+    h.store.getState().setLoops(1);
+    h.store.getState().enter();
+    h.store.getState().step();
+    expect(h.store.getState().history.at(-1)?.finished).toBe('success');
+
+    available = false;
+    expect(() => h.store.getState().play()).not.toThrow();
+    expect(h.store.getState().playing).toBe(false);
+  });
 });

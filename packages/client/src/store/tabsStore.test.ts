@@ -287,8 +287,101 @@ describe('tabsStore', () => {
     expect(readPersistedTabs()).toEqual({ paths: [] });
   });
 
-  it('compares paths with either slash', () => {
+  it('compares paths with either slash and Windows drive casing', () => {
     expect(samePath('C:\\p\\a.json', 'C:/p/a.json')).toBe(true);
+    expect(samePath('C:\\P\\A.json', 'c:/p/a.json')).toBe(true);
+    expect(samePath('/p/A.json', '/p/a.json')).toBe(false);
     expect(samePath('/p/a.json', '/p/b.json')).toBe(false);
+  });
+
+  it('clears treeStore when the last tab is closed and skips persist on dirty-only toggles', async () => {
+    const ctx = setup();
+    ctx.tabs.getState().open(A);
+    await ctx.settle();
+    const callsAfterOpen = ctx.persist.mock.calls.length;
+    ctx.editLabel('dirty');
+    expect(ctx.persist.mock.calls.length).toBe(callsAfterOpen);
+
+    const closing = ctx.tabs.getState().close(ctx.tabId(A));
+    ctx.tabs.getState().answerClose('discard');
+    await expect(closing).resolves.toBe(true);
+    expect(ctx.tree.getState().root).toBeUndefined();
+    expect(ctx.tree.getState().dirty).toBe(false);
+  });
+
+  it('cancels a pending close prompt on detach and refuses to close if edited mid-save', async () => {
+    let resolveSave: (() => void) | undefined;
+    const ctx = setup();
+    ctx.saveTreeApi.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSave = () => resolve(undefined);
+        }),
+    );
+    ctx.tabs.getState().open(A);
+    await ctx.settle();
+    ctx.editLabel('v1');
+
+    const promptPromise = ctx.tabs.getState().close(ctx.tabId(A));
+    ctx.tabs.getState().detach();
+    await expect(promptPromise).resolves.toBe(false);
+    expect(ctx.tabs.getState().closePrompt).toBeUndefined();
+
+    // Re-open A, choose save, and edit while the save request is still running.
+    ctx.tabs.getState().open(A);
+    const saveClose = ctx.tabs.getState().close(ctx.tabId(A));
+    ctx.tabs.getState().answerClose('save');
+    await Promise.resolve();
+    ctx.editLabel('v2');
+    resolveSave?.();
+    await expect(saveClose).resolves.toBe(false);
+    expect(ctx.tabs.getState().tabs).toHaveLength(1);
+    expect(ctx.tabs.getState().tabs[0]?.dirty).toBe(true);
+  });
+
+  it('updates live treeStore if an inactive tab is activated while saveAll is saving it', async () => {
+    let resolveInactive: (() => void) | undefined;
+    const ctx = setup();
+    ctx.saveTree.mockImplementationOnce(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveInactive = () => resolve(undefined);
+        }),
+    );
+    ctx.tabs.getState().open(A);
+    await ctx.settle();
+    ctx.editLabel('a edited');
+    ctx.tabs.getState().open(B);
+    await ctx.settle();
+
+    const saving = ctx.tabs.getState().saveAll();
+    // Activate A while its snapshot is being saved in the background.
+    ctx.tabs.getState().activate(ctx.tabId(A));
+    resolveInactive?.();
+    await expect(saving).resolves.toBe(true);
+    expect(ctx.tree.getState().dirty).toBe(false);
+    expect(ctx.tabs.getState().tabs[0]?.dirty).toBe(false);
+  });
+
+  it('invalidates clean parked snapshots without touching dirty tabs', async () => {
+    const ctx = setup();
+    ctx.tabs.getState().open(A);
+    await ctx.settle();
+    ctx.tabs.getState().open(B);
+    await ctx.settle();
+    ctx.editLabel('b unsaved');
+    ctx.tabs.getState().open(C);
+    await ctx.settle();
+
+    ctx.tabs.getState().invalidate([A, B]);
+    // A was clean and parked: reactivating reloads it from disk instead of restoring old snapshot.
+    ctx.tabs.getState().activate(ctx.tabId(A));
+    expect(ctx.tree.getState().loading).toBe(true);
+    await ctx.settle();
+    expect(ctx.tree.getState().root?.label).toBe(A);
+    // B was dirty: its unsaved edits remain intact.
+    ctx.tabs.getState().activate(ctx.tabId(B));
+    expect(ctx.tree.getState().root?.label).toBe('b unsaved');
+    expect(ctx.tree.getState().dirty).toBe(true);
   });
 });

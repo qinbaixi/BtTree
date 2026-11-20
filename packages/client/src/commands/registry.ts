@@ -19,6 +19,8 @@ export interface Command {
   id: string;
   name: string;
   hotkey?: string;
+  /** Additional hotkeys that trigger the command (not shown as the primary hint). */
+  hotkeyAliases?: readonly string[];
   allowInInput?: boolean;
   contextMenuOrder?: number;
   canExec(ctx: CommandContext): boolean;

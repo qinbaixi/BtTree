@@ -174,4 +174,51 @@ describe('projectStore', () => {
 
     expect(alertStore.getState().alerts.map((a) => a.message)).toEqual(['Saved']);
   });
+
+  it('clears the previous project when loading a different tree fails', async () => {
+    const fetchProject = vi
+      .fn()
+      .mockResolvedValueOnce(PROJECT_JSON)
+      .mockRejectedValueOnce(new Error('No project'));
+    const store = createProjectStore({ fetchProject, createSocket: vi.fn() });
+    await store.getState().load('/projA/t.json');
+    expect(store.getState().project).toBeDefined();
+
+    await store.getState().load('/projB/t.json');
+    expect(store.getState().project).toBeUndefined();
+    expect(store.getState().scenarios).toEqual([]);
+    expect(store.getState().error).toBe('No project');
+  });
+
+  it('cancels an in-flight load on disconnect and lets socket reload supersede slow HTTP load', async () => {
+    let resolveLoad: ((text: string) => void) | undefined;
+    const socket = createFakeSocket();
+    const store = createProjectStore({
+      fetchProject: vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveLoad = resolve;
+          }),
+      ),
+      createSocket: () => socket,
+    });
+
+    const pending = store.getState().load('/trees/a.json');
+    store.getState().disconnect();
+    resolveLoad?.(PROJECT_JSON);
+    await pending;
+    expect(store.getState().project).toBeUndefined();
+
+    // Live socket update supersedes an older slow HTTP load.
+    const slow = store.getState().load('/trees/a.json');
+    store.getState().connect('/trees/a.json');
+    const newerJson = JSON.stringify({ nodes: [{ name: 'Fresh' }] });
+    socket.emit(PROJECT_RELOAD_EVENT, { content: newerJson });
+    expect(store.getState().project?.nodes.Fresh).toBeDefined();
+
+    resolveLoad?.(PROJECT_JSON);
+    await slow;
+    expect(store.getState().project?.nodes.Fresh).toBeDefined();
+    expect(store.getState().project?.nodes.Wait).toBeUndefined();
+  });
 });

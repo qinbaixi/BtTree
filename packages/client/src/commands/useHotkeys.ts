@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { tabsStore } from '../store/tabsStore';
 import { commandContext, commandRegistry, type Command, type CommandContext } from './registry';
 
 /** Key names used in hotkey strings mapped to KeyboardEvent.key values (lower case). */
@@ -61,14 +62,18 @@ export function matchesHotkey(event: KeyEventLike, hotkey: string, mac = isMacPl
   );
 }
 
-/** Human readable hotkey for menus and palettes, e.g. 'mod+shift+p' -> 'ctrl+shift+p'. */
-export function formatHotkey(hotkey: string | undefined): string | undefined {
+/** Human readable hotkey for menus and palettes, e.g. 'mod+shift+p' -> 'ctrl+shift+p' / 'cmd+shift+p'. */
+export function formatHotkey(
+  hotkey: string | undefined,
+  mac = isMacPlatform(),
+): string | undefined {
   if (hotkey === undefined) {
     return undefined;
   }
+  const modLabel = mac ? 'cmd' : 'ctrl';
   return hotkey
     .split('+')
-    .map((token) => (token === 'mod' ? 'ctrl' : token))
+    .map((token) => (token === 'mod' ? modLabel : token))
     .join('+');
 }
 
@@ -85,16 +90,41 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
+ * Blurs the focused editable input so commit-on-blur fields flush their pending value before a
+ * save, export or close command reads the store.
+ */
+export function flushActiveInput(): void {
+  const active = typeof document !== 'undefined' ? document.activeElement : null;
+  if (active instanceof HTMLElement && isEditableTarget(active)) {
+    active.blur();
+  }
+}
+
+function matchesCommandHotkey(event: KeyEventLike, command: Command): boolean {
+  if (command.hotkey !== undefined && matchesHotkey(event, command.hotkey)) {
+    return true;
+  }
+  return command.hotkeyAliases?.some((alias) => matchesHotkey(event, alias)) ?? false;
+}
+
+/**
  * Runs the first command whose hotkey matches the event and can execute.
- * Does nothing while a modal dialog is open (dialogs handle their own keys) or when the focus is in
- * a text field, unless the command allows hotkeys in inputs. Returns true when a command ran.
+ * Does nothing while a modal dialog or tab-close prompt is open, during IME composition, or when
+ * the focus is in a text field unless the command allows hotkeys in inputs. Returns true when a
+ * command ran.
  */
 export function handleHotkey(
   event: KeyboardEvent,
   commands: Iterable<Command>,
   ctx: CommandContext,
 ): boolean {
-  if (ctx.ui.getState().current !== undefined) {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.keyCode === 229 ||
+    ctx.ui.getState().current !== undefined ||
+    tabsStore.getState().closePrompt !== undefined
+  ) {
     return false;
   }
   const inEditable = isEditableTarget(event.target);
@@ -102,8 +132,17 @@ export function handleHotkey(
   if (event.key === ' ' && event.target instanceof Element && event.target.closest('button, a')) {
     return false;
   }
+  // Keep browser text copy working when the user highlighted text in a panel or log.
+  if (
+    !inEditable &&
+    matchesHotkey(event, 'mod+c') &&
+    typeof window !== 'undefined' &&
+    (window.getSelection()?.toString() ?? '') !== ''
+  ) {
+    return false;
+  }
   for (const command of commands) {
-    if (command.hotkey === undefined || !matchesHotkey(event, command.hotkey)) {
+    if (!matchesCommandHotkey(event, command)) {
       continue;
     }
     if (inEditable && !command.allowInInput) {

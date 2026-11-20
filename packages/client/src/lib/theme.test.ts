@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyStoredTheme,
   DEFAULT_THEME,
@@ -55,5 +55,20 @@ describe('theme', () => {
   it('applies the default theme when nothing is stored', () => {
     applyStoredTheme();
     expect(document.documentElement.dataset.theme).toBe('light');
+  });
+
+  it('falls back to in-memory theme when localStorage writes throw', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    try {
+      setTheme('classic');
+      expect(getTheme()).toBe('classic');
+      expect(document.documentElement.dataset.theme).toBe('classic');
+    } finally {
+      spy.mockRestore();
+      // Restore normal persistence state for later tests.
+      setTheme('light');
+    }
   });
 });

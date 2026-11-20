@@ -8,7 +8,7 @@ import {
 import { useStore } from 'zustand';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { viewportStore, type ViewportState } from '../components/TreeCanvas/viewportStore';
-import { getJson, removeStorageItem, setJson } from '../lib/storage';
+import { getJson, getStorageItem, removeStorageItem, setStorageItem } from '../lib/storage';
 import type { TreeState } from './treeStore';
 
 /** localStorage key prefix of the collapsed nodes of a tree (followed by the tree path). */
@@ -96,6 +96,8 @@ export function connectCollapse(
   viewport: Pick<StoreApi<ViewportState>, 'subscribe'> = viewportStore,
 ): () => void {
   let loadedFor: { treePath?: string; loadCount: number } | undefined;
+  let lastPersistedKey: string | undefined;
+  let lastPersistedJson: string | null = null;
 
   const restore = (state: TreeState): void => {
     if (!state.root || !state.treePath) {
@@ -105,7 +107,10 @@ export function connectCollapse(
       return;
     }
     loadedFor = { treePath: state.treePath, loadCount: state.loadCount };
-    const paths = getJson<unknown>(collapseStorageKey(state.treePath), []);
+    const key = collapseStorageKey(state.treePath);
+    lastPersistedKey = key;
+    lastPersistedJson = getStorageItem(key);
+    const paths = getJson<unknown>(key, []);
     collapse.getState().set(pathsToCollapsed(state.root, Array.isArray(paths) ? paths : []));
   };
 
@@ -114,11 +119,28 @@ export function connectCollapse(
     if (!root || !treePath || loadedFor?.treePath !== treePath) {
       return;
     }
-    const paths = collapsedToPaths(root, collapse.getState().collapsed);
+    const key = collapseStorageKey(treePath);
+    const collapsed = collapse.getState().collapsed;
+    if (collapsed.size === 0) {
+      if (lastPersistedKey !== key || lastPersistedJson !== null) {
+        removeStorageItem(key);
+        lastPersistedKey = key;
+        lastPersistedJson = null;
+      }
+      return;
+    }
+    const paths = collapsedToPaths(root, collapsed);
     if (paths.length > 0) {
-      setJson(collapseStorageKey(treePath), paths);
-    } else {
-      removeStorageItem(collapseStorageKey(treePath));
+      const serialized = JSON.stringify(paths);
+      if (lastPersistedKey !== key || serialized !== lastPersistedJson) {
+        setStorageItem(key, serialized);
+        lastPersistedKey = key;
+        lastPersistedJson = serialized;
+      }
+    } else if (lastPersistedKey !== key || lastPersistedJson !== null) {
+      removeStorageItem(key);
+      lastPersistedKey = key;
+      lastPersistedJson = null;
     }
   };
 

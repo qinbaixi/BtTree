@@ -8,6 +8,7 @@ import {
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { fetchProject } from '../lib/api';
+import { samePath } from '../lib/paths';
 import { alertStore, alerts } from './alertStore';
 import { t } from '../i18n';
 
@@ -122,7 +123,13 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
 
       async load(treePath) {
         const token = ++loadToken;
-        set({ treePath, error: undefined });
+        const prevPath = get().treePath;
+        const switched = prevPath !== undefined && !samePath(prevPath, treePath);
+        set(
+          switched
+            ? { treePath, project: undefined, scenarios: [], error: undefined }
+            : { treePath, error: undefined },
+        );
         let text: string;
         try {
           text = await fetchText(treePath);
@@ -148,6 +155,8 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
           if (socket !== current) {
             return; // stale socket after disconnect/reconnect
           }
+          // Supersede any older in-flight HTTP load so it cannot overwrite live socket data.
+          loadToken++;
           if ('error' in payload) {
             fail(payload.error);
             return;
@@ -157,6 +166,7 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
       },
 
       disconnect() {
+        loadToken++;
         if (socket) {
           socket.disconnect();
           socket = undefined;

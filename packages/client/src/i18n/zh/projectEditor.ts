@@ -12,12 +12,8 @@ export const projectEditor: Record<string, string> = {
   'Back to Home': '返回首页',
   'Save (Ctrl+S)': '保存 (Ctrl+S)',
   'Undo (Ctrl+Z)': '撤销 (Ctrl+Z)',
-  Undo: '撤销',
   'Redo (Ctrl+Y)': '重做 (Ctrl+Y)',
-  Redo: '重做',
-  Home: '首页',
   'Project types': '项目类型',
-  Unsaved: '未保存',
   'The project file changed on disk. Your unsaved edits are kept.':
     '项目文件已在磁盘上被修改。你未保存的编辑会被保留。',
   Reload: '重新加载',
@@ -44,8 +40,6 @@ export const projectEditor: Record<string, string> = {
   // Type list
   'Composite nodes': '组合节点',
   'Action nodes': '动作节点',
-  Decorators: '装饰器',
-  Services: '服务',
   'Delete {name}? It is the base of {types}, which will then have a missing base.':
     '删除 {name}？它是 {types} 的基类型，删除后这些类型将缺少基类型。',
   'Delete {name}?': '删除 {name}？',
@@ -54,7 +48,6 @@ export const projectEditor: Record<string, string> = {
   '+ Node': '+ 节点',
   '+ Decorator': '+ 装饰器',
   '+ Service': '+ 服务',
-  abstract: '抽象',
   '{count} error(s)': '{count} 个错误',
   'Has errors': '有错误',
   '{count} warning(s)': '{count} 个警告',
@@ -65,13 +58,11 @@ export const projectEditor: Record<string, string> = {
   'Move {name} down': '下移 {name}',
   Duplicate: '复制',
   'Duplicate {name}': '复制 {name}',
-  Delete: '删除',
   'Delete {name}': '删除 {name}',
   'No matches': '无匹配项',
   'Custom types': '自定义类型',
   'Export settings': '导出设置',
   Scenarios: '场景',
-  Blackboard: '黑板',
 
   // Problems bar
   'No problems': '没有问题',
@@ -86,8 +77,6 @@ export const projectEditor: Record<string, string> = {
 
   // Type form
   Node: '节点',
-  Decorator: '装饰器',
-  Service: '服务',
   "'{name}' is already used by another node": '“{name}”已被另一个节点使用',
   "'{name}' is already used by another decorator": '“{name}”已被另一个装饰器使用',
   "'{name}' is already used by another service": '“{name}”已被另一个服务使用',
@@ -97,7 +86,6 @@ export const projectEditor: Record<string, string> = {
   'Renamed; updated {count} base references': '已重命名；更新了 {count} 处基类型引用',
   'Color must look like #rrggbb': '颜色格式应为 #rrggbb',
   'Type name': '类型名称',
-  Subtree: '子树',
   Action: '动作',
   'Composite (has child nodes)': '组合节点（有子节点）',
   'Runs the tree file named by its {property} property (relative to the project folder)':
@@ -112,16 +100,12 @@ export const projectEditor: Record<string, string> = {
   'No other types can be added': '没有其他可添加的类型',
   '+ Add base…': '+ 添加基类型…',
   'Base of: {types}': '作为以下类型的基类型：{types}',
-  Appearance: '外观',
-  Icon: '图标',
   'Icon name': '图标名称',
   'e.g. arrow-right': '例如 arrow-right',
   'Choose…': '选择…',
-  Color: '颜色',
   'Color hex': '颜色十六进制值',
   Default: '默认',
   'Color {color}': '颜色 {color}',
-  Description: '描述',
   'Description template': '描述模板',
   'Text with {{PropertyName}} placeholders': '可包含 {{PropertyName}} 占位符的文本',
   'Pick a property to insert:': '选择要插入的属性：',
@@ -165,7 +149,6 @@ export const projectEditor: Record<string, string> = {
   'New value': '新取值',
   'New enum value': '新的枚举取值',
   'Add value': '添加取值',
-  Properties: '属性',
   '+ Property': '+ 属性',
   'No properties. Add one with “+ Property”.': '没有属性。点击“+ 属性”添加。',
   'values: {values}': '取值：{values}',
@@ -280,7 +263,6 @@ export const projectEditor: Record<string, string> = {
   '{count} tree files use the old names.': '{count} 个行为树文件使用了旧名称。',
   'Could not check the tree files for renamed names: {error}':
     '无法检查行为树文件中的重命名引用：{error}',
-  Dismiss: '忽略',
   'Updated 1 tree file': '已更新 1 个行为树文件',
   'Updated {count} tree files': '已更新 {count} 个行为树文件',
   'Not updated (unsaved edits in an open editor): {files}':
@@ -372,9 +354,7 @@ export const projectEditor: Record<string, string> = {
   '{name} (expected)': '{name}（预期）',
   '+ Expected value': '+ 预期值',
   Pass: '通过',
-  Fail: '失败',
   Ran: '已运行',
-  Error: '错误',
   'Scenario tests': '场景测试',
   'Running…': '正在运行…',
   'Run scenario tests': '运行场景测试',
@@ -387,9 +367,7 @@ export const projectEditor: Record<string, string> = {
   '{count} without expectations': '{count} 个无预期',
   '1 scenario test: {parts}': '1 个场景测试：{parts}',
   '{count} scenario tests: {parts}': '{count} 个场景测试：{parts}',
-  Scenario: '场景',
   Status: '状态',
-  Result: '结果',
   Details: '详情',
   'engine error: {message}': '引擎错误：{message}',
 

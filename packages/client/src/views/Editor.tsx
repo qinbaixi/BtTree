@@ -29,6 +29,7 @@ import { useHotkeys } from '../commands/useHotkeys';
 import { setNavigator } from '../lib/appNavigation';
 import { getPathLastSegment, registerMru } from '../lib/mru';
 import { alertStore, alerts } from '../store/alertStore';
+import { dialogStore } from '../store/dialogStore';
 import { projectStore, useProjectStore } from '../store/projectStore';
 import { runStore, useRunStore } from '../store/runStore';
 import {
@@ -41,7 +42,7 @@ import {
 import { startSubtreeSync } from '../store/subtreeStore';
 import { treeStore, useTreeStore } from '../store/treeStore';
 import styles from './Editor.module.css';
-import { useDirtyTabsBeacon, useSelectFromUrl } from './useTreeLinks';
+import { useSelectFromUrl } from './useTreeLinks';
 
 function editorUrl(treePath: string): string {
   return `/tree?${new URLSearchParams({ path: treePath }).toString()}`;
@@ -55,10 +56,14 @@ export default function Editor() {
   const live = useTabsStore((state) => state.live);
   const select = searchParams.get('select') ?? undefined;
 
-  useDirtyTabsBeacon();
-
   // While the editor is shown the tree store holds the active tab (see tabsStore).
-  useEffect(() => () => tabsStore.getState().detach(), []);
+  useEffect(
+    () => () => {
+      dialogStore.getState().close();
+      tabsStore.getState().detach();
+    },
+    [],
+  );
 
   // The URL path opens (or activates) its tab; without one the tabs of the last session return.
   useEffect(() => {

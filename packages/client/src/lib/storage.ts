@@ -11,11 +11,13 @@ export function getStorageItem(key: string): string | null {
   }
 }
 
-export function setStorageItem(key: string, value: string): void {
+export function setStorageItem(key: string, value: string): boolean {
   try {
     window.localStorage.setItem(key, value);
+    return true;
   } catch {
     // Ignored: persistence is best effort.
+    return false;
   }
 }
 
@@ -40,6 +42,6 @@ export function getJson<T>(key: string, fallback: T): T {
   }
 }
 
-export function setJson(key: string, value: unknown): void {
-  setStorageItem(key, JSON.stringify(value));
+export function setJson(key: string, value: unknown): boolean {
+  return setStorageItem(key, JSON.stringify(value));
 }

@@ -1,3 +1,4 @@
+import { samePath } from './paths';
 import { getJson, setJson } from './storage';
 
 /**
@@ -36,7 +37,9 @@ function readEntries(now: number): DirtyEntry[] {
 
 /** Records (or clears) that this tab has unsaved edits of the tree. */
 export function markTreeDirty(path: string, dirty: boolean, now = Date.now()): void {
-  const others = readEntries(now).filter((entry) => !(entry.tab === TAB_ID && entry.path === path));
+  const others = readEntries(now).filter(
+    (entry) => !(entry.tab === TAB_ID && samePath(entry.path, path)),
+  );
   setJson(DIRTY_TREES_KEY, dirty ? [...others, { path, tab: TAB_ID, at: now }] : others);
 }
 

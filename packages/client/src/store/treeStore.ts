@@ -24,6 +24,13 @@ enablePatches();
 
 export const UNDO_STACK_LIMIT = 100;
 
+/** Saved marker meaning the state at the bottom of the undo stack (undoStack.length === 0). */
+export const INITIAL_SAVED = Symbol('initial-saved');
+/** Saved marker meaning the saved state was trimmed out of history and cannot be reached by undo. */
+export const UNREACHABLE_SAVED = Symbol('unreachable-saved');
+
+export type SavedMarker = HistoryEntry | typeof INITIAL_SAVED | typeof UNREACHABLE_SAVED;
+
 export interface HistoryEntry {
   label: string;
   patches: Patch[];
@@ -47,8 +54,10 @@ export type TreeStateData = {
  */
 export interface TreeSnapshot {
   data: TreeStateData;
-  /** Undo-stack top when the tree was loaded or last saved (see `dirty`). */
-  savedTop?: HistoryEntry;
+  /** Undo-stack marker when the tree was loaded or last saved (see `dirty`). */
+  savedTop: SavedMarker;
+  /** Number of undo trims observed for this tree (guards `INITIAL_SAVED` across async saves). */
+  trimCount: number;
 }
 
 export interface TreeState {
@@ -77,6 +86,10 @@ export interface TreeState {
   select(selection?: Selection): void;
   /** Saves the tree. Returns true on success; errors are reported through the alert store. */
   save(): Promise<boolean>;
+  /** Updates the saved marker (e.g. after an external or background tab save completes). */
+  markSaved(savedAt: SavedMarker, savedTrimCount?: number): void;
+  /** Resets the store to an empty unloaded state (e.g. after closing the last tab). */
+  clear(): void;
   /** True when no item of the tree is invalid for the project (always true without a tree). */
   isValid(project: CompiledProject): boolean;
   getIdGen(): IdGen;
@@ -101,6 +114,17 @@ function topOf(stack: HistoryEntry[]): HistoryEntry | undefined {
   return stack[stack.length - 1];
 }
 
+/** True when the undo stack position matches the saved marker. */
+export function isCleanHistory(undoStack: HistoryEntry[], marker: SavedMarker): boolean {
+  if (marker === UNREACHABLE_SAVED) {
+    return false;
+  }
+  if (marker === INITIAL_SAVED) {
+    return undoStack.length === 0;
+  }
+  return topOf(undoStack) === marker;
+}
+
 export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
   const deps: TreeStoreDeps = {
     fetchTree,
@@ -111,11 +135,27 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
   return createStore<TreeState>()((set, get) => {
     let loadToken = 0;
+    let saveSeq = 0;
+    let completedSaveSeq = 0;
+    let trimCount = 0;
     /**
-     * Undo-stack top when the tree was loaded or last saved. The tree is clean while the top is this
-     * entry again, so undo back to the saved state is clean, and a new edit after an undo is not.
+     * Undo-stack marker when the tree was loaded or last saved. The tree is clean while the top
+     * matches this marker again, so undo back to the saved state is clean, and a new edit after
+     * an undo (or overflowing the history limit) is not.
      */
-    let savedTop: HistoryEntry | undefined;
+    let savedTop: SavedMarker = INITIAL_SAVED;
+
+    const pushUndo = (stack: HistoryEntry[], entry: HistoryEntry): HistoryEntry[] => {
+      if (stack.length >= UNDO_STACK_LIMIT) {
+        const dropped = stack[0];
+        trimCount++;
+        if (savedTop === INITIAL_SAVED || savedTop === dropped) {
+          savedTop = UNREACHABLE_SAVED;
+        }
+        return [...stack.slice(stack.length - UNDO_STACK_LIMIT + 1), entry];
+      }
+      return [...stack, entry];
+    };
 
     return {
       dirty: false,
@@ -127,7 +167,9 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
 
       async load(treePath) {
         const token = ++loadToken;
-        savedTop = undefined;
+        completedSaveSeq = saveSeq;
+        trimCount = 0;
+        savedTop = INITIAL_SAVED;
         set({
           treePath,
           root: undefined,
@@ -144,7 +186,8 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
             return;
           }
           const root = nodeFromJson(json, deps.idGen);
-          savedTop = undefined;
+          trimCount = 0;
+          savedTop = INITIAL_SAVED;
           set((state) => ({
             root,
             loading: false,
@@ -193,11 +236,11 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
           selectionBefore: state.selection,
           selectionAfter,
         };
-        const undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
+        const undoStack = pushUndo(state.undoStack, entry);
         set({
           root: nextRoot,
           selection: selectionAfter,
-          dirty: topOf(undoStack) !== savedTop,
+          dirty: !isCleanHistory(undoStack, savedTop),
           version: state.version + 1,
           undoStack,
           redoStack: [],
@@ -215,7 +258,7 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         set({
           root: applyPatches(state.root, entry.inversePatches),
           selection: entry.selectionBefore,
-          dirty: topOf(undoStack) !== savedTop,
+          dirty: !isCleanHistory(undoStack, savedTop),
           version: state.version + 1,
           undoStack,
           redoStack: [...state.redoStack, entry],
@@ -228,11 +271,11 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         if (!entry || !state.root) {
           return;
         }
-        const undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
+        const undoStack = pushUndo(state.undoStack, entry);
         set({
           root: applyPatches(state.root, entry.patches),
           selection: entry.selectionAfter,
-          dirty: topOf(undoStack) !== savedTop,
+          dirty: !isCleanHistory(undoStack, savedTop),
           version: state.version + 1,
           undoStack,
           redoStack: state.redoStack.slice(0, -1),
@@ -243,24 +286,62 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
         set({ selection });
       },
 
+      markSaved(savedAt, savedTrimCount = trimCount) {
+        const state = get();
+        if (savedAt === UNREACHABLE_SAVED) {
+          savedTop = UNREACHABLE_SAVED;
+        } else if (savedAt === INITIAL_SAVED) {
+          savedTop = trimCount === savedTrimCount ? INITIAL_SAVED : UNREACHABLE_SAVED;
+        } else {
+          const reachable =
+            state.undoStack.includes(savedAt) || state.redoStack.includes(savedAt);
+          savedTop = reachable ? savedAt : UNREACHABLE_SAVED;
+        }
+        set({ dirty: !isCleanHistory(state.undoStack, savedTop) });
+      },
+
       async save() {
-        const { treePath, root } = get();
+        const state = get();
+        const { treePath, root } = state;
         if (!treePath || !root) {
           alerts.error(t('Unable to save before the tree is loaded'));
           return false;
         }
-        const savedAt = topOf(get().undoStack);
+        const token = loadToken;
+        const seq = ++saveSeq;
+        const savedAt: SavedMarker = topOf(state.undoStack) ?? INITIAL_SAVED;
+        const savedTrimCount = trimCount;
         try {
           await deps.saveTree(treePath, nodeToJson(root));
         } catch (err) {
           alerts.error(errorText(err));
           return false;
         }
-        savedTop = savedAt;
-        // Edits made while the request ran stay unsaved.
-        set({ dirty: topOf(get().undoStack) !== savedTop });
+        if (token === loadToken && seq > completedSaveSeq) {
+          completedSaveSeq = seq;
+          // Edits made while the request ran stay unsaved.
+          get().markSaved(savedAt, savedTrimCount);
+        }
         alerts.success(t('Done'));
         return true;
+      },
+
+      clear() {
+        loadToken++;
+        completedSaveSeq = saveSeq;
+        trimCount = 0;
+        savedTop = INITIAL_SAVED;
+        set((state) => ({
+          treePath: undefined,
+          root: undefined,
+          selection: undefined,
+          dirty: false,
+          version: state.version + 1,
+          undoStack: [],
+          redoStack: [],
+          loading: false,
+          error: undefined,
+        }));
       },
 
       isValid(project) {
@@ -279,12 +360,14 @@ export function createTreeStore(overrides: Partial<TreeStoreDeps> = {}) {
             data[key] = value;
           }
         }
-        return { data: data as TreeStateData, savedTop };
+        return { data: data as TreeStateData, savedTop, trimCount };
       },
 
       restore(snapshot) {
         loadToken++;
+        completedSaveSeq = saveSeq;
         savedTop = snapshot.savedTop;
+        trimCount = snapshot.trimCount;
         // version keeps increasing so that views see a change; loadCount is not a new load.
         set((state) => ({
           ...snapshot.data,

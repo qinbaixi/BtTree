@@ -27,8 +27,14 @@ export function themeLabel(id: ThemeId): string {
   return label !== undefined ? t(label) : id;
 }
 
+/** In-memory fallback used only when localStorage writes fail (e.g. private mode / quota). */
+let memoryTheme: ThemeId | undefined;
+
 /** Stored theme, or the default when nothing (or an unknown value) is stored. */
 export function getTheme(): ThemeId {
+  if (memoryTheme !== undefined) {
+    return memoryTheme;
+  }
   const stored = getStorageItem(THEME_STORAGE_KEY);
   return isThemeId(stored) ? stored : DEFAULT_THEME;
 }
@@ -51,7 +57,7 @@ function applyToDocument(id: ThemeId): void {
 
 /** Persists the theme, applies it to the document and notifies subscribers. */
 export function setTheme(id: ThemeId): void {
-  setStorageItem(THEME_STORAGE_KEY, id);
+  memoryTheme = setStorageItem(THEME_STORAGE_KEY, id) ? undefined : id;
   applyToDocument(id);
   for (const listener of listeners) {
     listener();

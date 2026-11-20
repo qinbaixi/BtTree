@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAlertStore } from '../store/alertStore';
 import { createDialogStore } from '../store/dialogStore';
 import { createProjectStore } from '../store/projectStore';
+import { tabsStore } from '../store/tabsStore';
 import { createTreeStore } from '../store/treeStore';
 import { commandRegistry, type Command, type CommandContext } from './registry';
 import { formatHotkey, handleHotkey, matchesHotkey, useHotkeys } from './useHotkeys';
@@ -45,8 +46,9 @@ describe('matchesHotkey', () => {
 });
 
 describe('formatHotkey', () => {
-  it('shows mod as ctrl', () => {
-    expect(formatHotkey('mod+shift+p')).toBe('ctrl+shift+p');
+  it('shows mod as ctrl on non-mac and cmd on macOS', () => {
+    expect(formatHotkey('mod+shift+p', false)).toBe('ctrl+shift+p');
+    expect(formatHotkey('mod+shift+p', true)).toBe('cmd+shift+p');
     expect(formatHotkey('ins')).toBe('ins');
     expect(formatHotkey(undefined)).toBeUndefined();
   });
@@ -142,6 +144,35 @@ describe('handleHotkey', () => {
     ctx.ui.getState().open([], () => undefined);
     expect(dispatchOn(window, key({ key: 'Delete' }))).toBe(false);
     expect(ran).toEqual([]);
+  });
+
+  it('ignores events during IME composition, defaultPrevented, or an open tab close prompt', () => {
+    expect(dispatchOn(window, key({ key: 'Delete', isComposing: true }))).toBe(false);
+
+    const prevented = key({ key: 'Delete' });
+    prevented.preventDefault();
+    expect(dispatchOn(window, prevented)).toBe(false);
+
+    tabsStore.setState({ closePrompt: { tabId: 'tab1' } });
+    try {
+      expect(dispatchOn(window, key({ key: 'Delete' }))).toBe(false);
+    } finally {
+      tabsStore.setState({ closePrompt: undefined });
+    }
+    expect(ran).toEqual([]);
+  });
+
+  it('matches hotkeyAliases and yields mod+c when text is selected on the page', () => {
+    commands.push(
+      command({ id: 'test:redo', hotkey: 'mod+y', hotkeyAliases: ['mod+shift+z'] }),
+      command({ id: 'test:copy', hotkey: 'mod+c' }),
+    );
+    expect(dispatchOn(window, key({ key: 'z', ctrlKey: true, shiftKey: true }))).toBe(true);
+    expect(ran).toEqual(['test:redo']);
+
+    vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'selected text' } as Selection);
+    expect(dispatchOn(window, key({ key: 'c', ctrlKey: true }))).toBe(false);
+    expect(ran).toEqual(['test:redo']);
   });
 
   it('registers one window keydown listener through useHotkeys', () => {

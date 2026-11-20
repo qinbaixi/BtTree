@@ -1,3 +1,17 @@
+/**
+ * Normalizes a path for equality checks across slash styles and Windows drive-letter casing
+ * (`C:\A\b.json` and `c:/a/b.json` produce the same key; POSIX paths remain case-sensitive).
+ */
+export function normalizePathKey(path: string): string {
+  const unified = path.replace(/\\/g, '/');
+  return /^[A-Za-z]:\//.test(unified) ? unified.toLowerCase() : unified;
+}
+
+/** Same file path, tolerating slash style and Windows drive-letter casing differences. */
+export function samePath(a: string, b: string): boolean {
+  return normalizePathKey(a) === normalizePathKey(b);
+}
+
 /** True when the path names a .json file (case-insensitive). */
 export function isJsonPath(path: string): boolean {
   return /\.json$/i.test(path.trim());

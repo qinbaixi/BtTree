@@ -401,6 +401,25 @@ describe('Set Node Type', () => {
     cmd('core:SetNodeType').exec(ctx);
     expect(openItemIds(ctx)).toEqual(['node:Selector']);
   });
+
+  it('allows fixing an invalid node with children into a composite, or an invalid leaf into any type', async () => {
+    const ctx = await setup({
+      type: 'Sequence',
+      childNodes: [
+        { type: 'RemovedComposite', childNodes: [{ type: 'Wait' }] },
+        { type: 'RemovedLeaf' },
+      ],
+    });
+    const [invalidComposite, invalidLeaf] = mustRoot(ctx).childNodes;
+
+    select(ctx, { kind: 'node', nodeId: invalidComposite.id });
+    cmd('core:SetNodeType').exec(ctx);
+    expect(openItemIds(ctx)).toEqual(['node:Selector', 'node:Sequence']);
+
+    select(ctx, { kind: 'node', nodeId: invalidLeaf.id });
+    cmd('core:SetNodeType').exec(ctx);
+    expect(openItemIds(ctx)).toEqual(['node:Selector', 'node:Sequence', 'node:Wait', 'node:Walk']);
+  });
 });
 
 describe('Undo, Redo and Save', () => {

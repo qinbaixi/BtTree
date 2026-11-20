@@ -1,3 +1,4 @@
+import { samePath } from './paths';
 import { getJson, setJson } from './storage';
 
 /** Storage key kept identical to the original app so existing MRU lists survive the rewrite. */
@@ -24,14 +25,17 @@ export function getMruList(): MruItem[] {
 
 /** Moves the path to the front (deduplicated) and trims the list to the max size. */
 export function registerMru(treePath: string): MruItem[] {
-  const items = [{ path: treePath }, ...getMruList().filter((item) => item.path !== treePath)];
+  const items = [
+    { path: treePath },
+    ...getMruList().filter((item) => !samePath(item.path, treePath)),
+  ];
   const trimmed = items.slice(0, MRU_MAX_ITEM_COUNT);
   setJson(MRU_STORAGE_KEY, trimmed);
   return trimmed;
 }
 
 export function removeMru(treePath: string): MruItem[] {
-  const items = getMruList().filter((item) => item.path !== treePath);
+  const items = getMruList().filter((item) => !samePath(item.path, treePath));
   setJson(MRU_STORAGE_KEY, items);
   return items;
 }
