@@ -4,7 +4,9 @@ import { createIdGen, nodeFromJson } from '../treeModel';
 import { forEachNode } from '../treeOps';
 import type { ProjectFile, TreeNodeJson } from '../types';
 import {
+  combineScores,
   createRun,
+  formatValue,
   resolveActionMode,
   resolveCompositeKind,
   type Run,
@@ -968,5 +970,153 @@ describe('checkpoints', () => {
     expect(h.run.snapshot().finished).toBeUndefined();
     h.run.resolveManual(h.id('m'), 'failure');
     expect(h.run.tick().finished).toBe('failure');
+  });
+});
+
+describe('runtime audit regressions', () => {
+  it('runs unknown leaf node types as manual actions instead of empty sequences', () => {
+    const h = make({ type: 'TypoAction', label: 'typo' });
+    const r = h.run.tick();
+    expect(r.finished).toBeUndefined();
+    expect(r.pendingManual).toBe(h.id('typo'));
+  });
+
+  it('enforces TimeLimit when combined with Loop on instant bodies', () => {
+    const json = leaf('Succeed', 'a', {
+      decorators: [
+        { type: 'TimeLimit', label: 'tl', properties: [{ name: 'T', value: 2 }] },
+        { type: 'Loop', properties: [{ name: 'N', value: -1 }] },
+      ],
+    });
+    const h = make(json);
+    expect(h.run.tick().finished).toBeUndefined();
+    expect(h.run.tick().finished).toBeUndefined();
+    const r = h.run.tick();
+    expect(r.finished).toBe('failure');
+    expect(r.subStatuses[h.id('tl')]).toBe('fail');
+  });
+
+  it('respects decorator nesting order for Loop + ForceSuccess and ForceSuccess + TimeLimit/Cond', () => {
+    // [Loop(3), ForceSuccess] on Fail runs 3 times and succeeds
+    const looped = leaf('Fail', 'f', {
+      decorators: [
+        { type: 'Loop', properties: [{ name: 'N', value: 3 }] },
+        { type: 'ForceSuccess' },
+      ],
+    });
+    const h1 = make(looped);
+    expect(h1.run.tick().finished).toBeUndefined();
+    expect(h1.run.tick().finished).toBeUndefined();
+    expect(h1.run.tick().finished).toBe('success');
+
+    // [ForceSuccess, Cond] with Flag = false succeeds
+    const guarded = leaf('Succeed', 'g', {
+      decorators: [{ type: 'ForceSuccess' }, { type: 'Cond', label: 'c' }],
+    });
+    expect(make(guarded, { Flag: false }).run.tick().finished).toBe('success');
+
+    // [ForceSuccess, TimeLimit(1)] on Wait(5) succeeds on timeout
+    const timed = leaf('Wait', 'w', {
+      properties: duration(5),
+      decorators: [
+        { type: 'ForceSuccess' },
+        { type: 'TimeLimit', properties: [{ name: 'T', value: 1 }] },
+      ],
+    });
+    const h2 = make(timed);
+    expect(h2.run.tick().finished).toBeUndefined();
+    expect(h2.run.tick().finished).toBe('success');
+  });
+
+  it('skips body execution when Loop count is 0 and avoids infinite loop with [Loop(0), Loop(-1)]', () => {
+    const zero = leaf('SetFlag', 'z', {
+      decorators: [{ type: 'Loop', properties: [{ name: 'N', value: 0 }] }],
+    });
+    const h1 = make(zero, { Step: 0 });
+    const r1 = h1.run.tick();
+    expect(r1.finished).toBe('success');
+    expect(r1.blackboard.Step).toBe(0);
+
+    const zeroInf = leaf('Succeed', 'zi', {
+      decorators: [
+        { type: 'Loop', properties: [{ name: 'N', value: 0 }] },
+        { type: 'Loop', properties: [{ name: 'N', value: -1 }] },
+      ],
+    });
+    expect(make(zeroInf).run.tick().finished).toBe('success');
+  });
+
+  it('resolves multi-level composite inheritance and ignores prototype names in COMPOSITE_BY_NAME', () => {
+    const multi = compileProject({
+      nodes: [
+        { name: 'Selector', isComposite: true },
+        { name: 'CombatSelector', base: 'Selector', isAbstract: true },
+        { name: 'BossSelector', base: 'CombatSelector' },
+        { name: 'Constructor', isComposite: true },
+        { name: 'Fail', simulate: { mode: 'failure' } },
+        { name: 'Succeed', simulate: { mode: 'success' } },
+      ],
+    });
+    const r1 = createRun(
+      nodeFromJson({ type: 'BossSelector', childNodes: [{ type: 'Fail' }, { type: 'Succeed' }] }, createIdGen()),
+      multi,
+      { blackboard: {} },
+    ).tick();
+    expect(r1.finished).toBe('success');
+
+    // Named `Constructor` must default to sequence, not hit Object.prototype.constructor -> selector
+    const r2 = createRun(
+      nodeFromJson({ type: 'Constructor', childNodes: [{ type: 'Fail' }, { type: 'Succeed' }] }, createIdGen()),
+      multi,
+      { blackboard: {} },
+    ).tick();
+    expect(r2.finished).toBe('failure');
+  });
+
+  it('returns failure for empty Parallel with Policy=RequireOne and clears subStatuses on abort', () => {
+    const emptyReqOne = make({
+      type: 'Parallel',
+      properties: [{ name: 'Policy', value: 'RequireOne' }],
+      childNodes: [],
+    });
+    expect(emptyReqOne.run.tick().finished).toBe('failure');
+
+    const aborted = make(
+      {
+        type: 'Parallel',
+        childNodes: [
+          leaf('Wait', 'w', {
+            properties: duration(5),
+            decorators: [{ type: 'Cond', label: 'c' }],
+          }),
+          leaf('Fail', 'f'),
+        ],
+      },
+      { Flag: true },
+    );
+    const r = aborted.run.tick();
+    expect(r.finished).toBe('failure');
+    expect(r.subStatuses[aborted.id('c')]).toBeUndefined();
+  });
+
+  it('disqualifies negative scores in combineScores, formats NaN/Infinity, and clones setBlackboardValue', () => {
+    expect(combineScores([-1, -0.5])).toBe(0);
+    expect(combineScores([1e200, 1e200, 0])).toBe(0);
+    expect(formatValue(NaN)).toBe('NaN');
+    expect(formatValue(Infinity)).toBe('Infinity');
+
+    const h = make(leaf('Wait', 'w', { properties: duration(2) }), {});
+    const obj = { a: 1 };
+    h.run.setBlackboardValue('Obj', obj);
+    obj.a = 999;
+    expect(h.run.snapshot().blackboard.Obj).toEqual({ a: 1 });
+  });
+
+  it('records itemId and fail status when an entry decorator throws', () => {
+    const h = make(leaf('Succeed', 'a', { decorators: [{ type: 'BadCond', label: 'bad' }] }));
+    const r = h.run.tick();
+    expect(r.finished).toBe('failure');
+    expect(r.subStatuses[h.id('bad')]).toBe('fail');
+    expect(r.log.find((e) => e.kind === 'error')?.itemId).toBe(h.id('bad'));
   });
 });

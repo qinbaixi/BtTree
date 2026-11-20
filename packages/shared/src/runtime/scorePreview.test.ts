@@ -73,4 +73,16 @@ describe('previewScore', () => {
     expect(previewScore(project.decorators.Weight, {})).toBeUndefined();
     expect(previewScore(project.decorators.Broken, {})).toBeUndefined();
   });
+
+  it('handles descending Min > Max bounds and rejects invalid steps <= 0', () => {
+    const preview = previewScore(project.decorators.Consideration, { Min: 100, Max: 0 }, 2)!;
+    expect(preview.min).toBe(0);
+    expect(preview.max).toBe(100);
+    expect(preview.points).toEqual([
+      [0, 1],
+      [50, 0.5],
+      [100, 0],
+    ]);
+    expect(previewScore(project.decorators.Consideration, {}, 0)).toBeUndefined();
+  });
 });

@@ -1,5 +1,6 @@
 import { getItemType } from '../compileProject';
 import { expandSubtrees, isSubtreeType, type SubtreeLibrary } from '../subtree';
+import { setOwnProperty } from '../treeModel';
 import { findNode, forEachNode } from '../treeOps';
 import { getEffectiveValue } from '../validation';
 import {
@@ -14,6 +15,7 @@ import {
 import type {
   CompiledItemType,
   CompiledProject,
+  CompiledProperty,
   SimulateComposite,
   SimulateJson,
   SimulateMode,
@@ -93,6 +95,17 @@ export function normalizeLoops(value: number | undefined): number {
   return Math.max(0, Math.floor(value));
 }
 
+export interface StepResult {
+  /** Number of the last executed tick (0 before the first tick). */
+  tick: number;
+  /** Entries produced by this tick. */
+  log: LogEntry[];
+  /** Set once the root node has finished (in the last pass). */
+  finished?: ManualResult;
+  /** First node waiting for resolveManual(). */
+  pendingManual?: string;
+}
+
 export interface Run {
   /**
    * The tree that runs: the given tree with the referenced trees of subtree nodes attached as their
@@ -101,6 +114,8 @@ export interface Run {
   readonly root: TreeNode;
   /** Executes one tick. Does nothing (returns the current state) while finished or waiting for a manual result. */
   tick(): TickResult;
+  /** Lightweight tick that skips cloning statuses and blackboard; use snapshot() when full state is needed. */
+  step(): StepResult;
   /** Resolves a pending manual action; the node finishes in the next tick. */
   resolveManual(nodeId: string, result: ManualResult): void;
   /** First node waiting for a manual result. */
@@ -146,21 +161,22 @@ interface CheckpointData {
 
 // ---------- helpers shared with the UI ----------
 
-const COMPOSITE_BY_NAME: Record<string, SimulateComposite> = {
-  selector: 'selector',
-  sequence: 'sequence',
-  parallel: 'parallel',
-  randomselector: 'randomSelector',
-  utilityselector: 'utility',
-};
+const COMPOSITE_BY_NAME: ReadonlyMap<string, SimulateComposite> = new Map([
+  ['selector', 'selector'],
+  ['sequence', 'sequence'],
+  ['parallel', 'parallel'],
+  ['randomselector', 'randomSelector'],
+  ['utilityselector', 'utility'],
+]);
 
-/** Composite kind of a node type: simulate.composite, else the (base) type name, else sequence. */
+/** Composite kind of a node type: simulate.composite, else the (ancestor) type name, else sequence. */
 export function resolveCompositeKind(type: CompiledItemType): SimulateComposite {
   if (type.simulate?.composite) {
     return type.simulate.composite;
   }
-  for (const name of [type.name, ...(type.bases ?? [])]) {
-    const found = COMPOSITE_BY_NAME[name.toLowerCase()];
+  const chain = type.ancestors ?? type.bases ?? [];
+  for (const name of [type.name, ...chain]) {
+    const found = COMPOSITE_BY_NAME.get(name.toLowerCase());
     if (found) {
       return found;
     }
@@ -186,7 +202,8 @@ export type UtilitySelection = 'highest' | 'weightedrandom';
  * Combines the scores of the score decorators of one child: the product of all scores. With more
  * than one score, factors in 0..1 are compensated (Dave Mark's IAUS make-up value) so that a child
  * with many considerations is not punished only for having many: s + (1 - s) * (1 - 1/n) * s.
- * Factors outside 0..1 (weights) are multiplied as they are. No scores = 0.
+ * Factors outside 0..1 (weights) are multiplied as they are. Any non-positive or non-finite factor
+ * disqualifies the child (returns 0). No scores = 0.
  */
 export function combineScores(scores: readonly number[]): number {
   if (scores.length === 0) return 0;
@@ -194,10 +211,13 @@ export function combineScores(scores: readonly number[]): number {
   const modification = 1 - 1 / n;
   let total = 1;
   for (const s of scores) {
-    const factor = n > 1 && s >= 0 && s <= 1 ? s + (1 - s) * modification * s : s;
+    if (!Number.isFinite(s) || s <= 0) {
+      return 0;
+    }
+    const factor = n > 1 && s <= 1 ? s + (1 - s) * modification * s : s;
     total *= factor;
   }
-  return total;
+  return Number.isFinite(total) ? total : Number.MAX_VALUE;
 }
 
 /** Effective action mode: explicit mode, else 'rule' when condition / duration / effects exist, else 'manual'. */
@@ -213,6 +233,7 @@ export function resolveActionMode(sim: SimulateJson | undefined): SimulateMode {
 
 export function formatValue(value: unknown): string {
   if (value === undefined) return '(unset)';
+  if (typeof value === 'number' && !Number.isFinite(value)) return String(value);
   if (typeof value === 'string') return JSON.stringify(value);
   return JSON.stringify(value) ?? String(value);
 }
@@ -238,7 +259,21 @@ function createRandom(seed: number): Random {
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
-  return a === b || JSON.stringify(a) === JSON.stringify(b);
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) {
+    return false;
+  }
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => valuesEqual(item, b[i]));
+  }
+  const ra = a as Record<string, unknown>;
+  const rb = b as Record<string, unknown>;
+  const keys = Object.keys(ra);
+  return (
+    keys.length === Object.keys(rb).length &&
+    keys.every((key) => Object.hasOwn(rb, key) && valuesEqual(ra[key], rb[key]))
+  );
 }
 
 function deepClone<T>(value: T): T {
@@ -248,11 +283,22 @@ function deepClone<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
-      out[key] = deepClone(inner);
+      setOwnProperty(out, key, deepClone(inner));
     }
     return out as T;
   }
   return value;
+}
+
+const PROP_MAPS = new WeakMap<CompiledItemType, Map<string, CompiledProperty>>();
+
+function propOf(type: CompiledItemType, name: string): CompiledProperty | undefined {
+  let map = PROP_MAPS.get(type);
+  if (!map) {
+    map = new Map(type.properties.map((p) => [p.name, p]));
+    PROP_MAPS.set(type, map);
+  }
+  return map.get(name);
 }
 
 // ---------- engine ----------
@@ -262,6 +308,13 @@ interface BodyState {
   duration?: number;
   manual?: boolean;
   childResults?: Array<Outcome | undefined>;
+}
+
+interface TimeLimitEntry {
+  index: number;
+  id: string;
+  type: string;
+  limit: number;
 }
 
 interface NodeState {
@@ -275,7 +328,10 @@ interface NodeState {
   /** The body restarts at the start of the next tick (loop decorator). */
   restart?: boolean;
   loopTotal: number;
-  timeLimit?: number;
+  /** Index of the innermost / outermost loop decorator (undefined when the node has no loop). */
+  loopIndex?: number;
+  outerLoopIndex?: number;
+  timeLimits?: TimeLimitEntry[];
 }
 
 export function createRun(tree: TreeNode, project: CompiledProject, options: RunOptions): Run {
@@ -284,17 +340,23 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     selfRef: options.treeRef,
   });
   const root = expansion.root;
-  const blackboard: Record<string, unknown> = deepClone(options.blackboard);
+  const rawBlackboard = options.blackboard;
+  const blackboard: Record<string, unknown> =
+    typeof rawBlackboard === 'object' && rawBlackboard !== null && !Array.isArray(rawBlackboard)
+      ? deepClone(rawBlackboard)
+      : {};
   const overrides = options.overrides ?? {};
   const random = createRandom(options.seed ?? 1);
 
   const statuses: Record<string, RunStatus> = {};
   const subStatuses: Record<string, SubStatus> = {};
   const scores: Record<string, number> = {};
+  let scoreCount = 0;
+  let ranServices: string[] = [];
   const states = new Map<string, NodeState>();
   const cooldownStart = new Map<string, number>();
   const resolutions = new Map<string, ManualResult>();
-  let pending: string[] = [];
+  const pending = new Set<string>();
   let finished: ManualResult | undefined;
   let tickNo = 0;
   let loops = normalizeLoops(options.loops);
@@ -309,6 +371,22 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
   forEachNode(root, (node) => {
     statuses[node.id] = 'idle';
   });
+
+  const firstPending = (): string | undefined => pending.values().next().value;
+
+  const setScore = (nodeId: string, value: number): void => {
+    if (!Object.hasOwn(scores, nodeId)) {
+      scoreCount++;
+    }
+    scores[nodeId] = value;
+  };
+
+  const deleteScore = (nodeId: string): void => {
+    if (Object.hasOwn(scores, nodeId)) {
+      delete scores[nodeId];
+      scoreCount--;
+    }
+  };
 
   // ----- logging -----
 
@@ -325,11 +403,11 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     owner: { id: string; properties: Record<string, unknown> },
     name: string,
   ): unknown => {
-    const own = overrides[owner.id];
+    const own = Object.hasOwn(overrides, owner.id) ? overrides[owner.id] : undefined;
     if (own && Object.hasOwn(own, name) && own[name] !== undefined) {
       return own[name];
     }
-    const prop = type.properties.find((p) => p.name === name);
+    const prop = propOf(type, name);
     if (prop) {
       return getEffectiveValue(prop, owner.properties);
     }
@@ -373,7 +451,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
   const setBlackboard = (key: string, value: unknown, nodeId: string, itemId?: string): void => {
     const had = Object.hasOwn(blackboard, key);
     const old = had ? blackboard[key] : undefined;
-    blackboard[key] = value;
+    setOwnProperty(blackboard, key, value);
     if (!had || !valuesEqual(old, value)) {
       add('blackboard', nodeId, `${key}: ${formatValue(old)} → ${formatValue(value)}`, itemId);
     }
@@ -386,13 +464,15 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     nodeId: string,
     itemId?: string,
   ): void => {
-    for (const src of effects ?? []) {
+    if (!effects || effects.length === 0) return;
+    const ctx = ctxFor(type, owner);
+    for (const src of effects) {
       let assignment = assignCache.get(src);
       if (!assignment) {
         assignment = parseAssignment(src);
         assignCache.set(src, assignment);
       }
-      const value = evaluate(assignment.expr, ctxFor(type, owner));
+      const value = evaluate(assignment.expr, ctx);
       setBlackboard(assignment.target, value, nodeId, itemId);
     }
   };
@@ -400,12 +480,15 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
   // ----- bookkeeping -----
 
   const dropManual = (id: string): void => {
-    pending = pending.filter((p) => p !== id);
+    pending.delete(id);
     resolutions.delete(id);
   };
 
   const clearSubStatuses = (node: TreeNode): void => {
-    for (const item of [...node.decorators, ...node.services]) {
+    for (const item of node.decorators) {
+      delete subStatuses[item.id];
+    }
+    for (const item of node.services) {
       delete subStatuses[item.id];
     }
   };
@@ -415,7 +498,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     for (const child of node.childNodes) {
       states.delete(child.id);
       statuses[child.id] = 'idle';
-      delete scores[child.id];
+      deleteScore(child.id);
       clearSubStatuses(child);
       dropManual(child.id);
       resetChildren(child);
@@ -428,6 +511,10 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     if (states.has(node.id)) {
       states.delete(node.id);
       statuses[node.id] = 'idle';
+      clearSubStatuses(node);
+      for (const child of node.childNodes) {
+        deleteScore(child.id);
+      }
       dropManual(node.id);
       add('result', node.id, 'aborted');
     }
@@ -501,6 +588,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
         continue;
       }
       subStatuses[service.id] = 'ran';
+      ranServices.push(service.id);
       add('service', node.id, `${service.type} ticked`, service.id);
       try {
         runEffects(type.simulate?.effects, type, service, node.id, service.id);
@@ -527,16 +615,28 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     return combineScores(parts);
   };
 
-  /** Weighted random permutation of the given candidates (weights > 0). */
+  /** Weighted random permutation of the given candidates (weights > 0). Rescales if sum overflows. */
   const weightedOrder = (pool: Array<{ i: number; w: number }>): number[] => {
     const rest = [...pool];
     const order: number[] = [];
     while (rest.length > 0) {
-      const total = rest.reduce((sum, p) => sum + p.w, 0);
+      let total = 0;
+      let maxW = 0;
+      for (const p of rest) {
+        total += p.w;
+        if (p.w > maxW) maxW = p.w;
+      }
+      const scale = !Number.isFinite(total) && maxW > 0 ? 1 / maxW : 1;
+      if (scale !== 1) {
+        total = 0;
+        for (const p of rest) {
+          total += p.w * scale;
+        }
+      }
       let r = random.next() * total;
       let pick = rest.length - 1;
       for (let k = 0; k < rest.length; k++) {
-        r -= rest[k].w;
+        r -= rest[k].w * scale;
         if (r < 0) {
           pick = k;
           break;
@@ -565,7 +665,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
 
     const scored = node.childNodes.map((child, i) => {
       const score = scoreChild(child);
-      scores[child.id] = score;
+      setScore(child.id, score);
       return { i, w: score };
     });
     const eligible = scored
@@ -613,23 +713,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       .map((w) => (w.trim() === '' ? NaN : Number(w)))
       .map((w) => (Number.isFinite(w) && w > 0 ? w : 1));
     const pool = indices.map((i) => ({ i, w: weights[i] ?? 1 }));
-    const order: number[] = [];
-    while (pool.length > 0) {
-      const total = pool.reduce((sum, p) => sum + p.w, 0);
-      let r = random.next() * total;
-      let pick = 0;
-      for (let k = 0; k < pool.length; k++) {
-        r -= pool[k].w;
-        if (r < 0) {
-          pick = k;
-          break;
-        }
-        pick = k;
-      }
-      order.push(pool[pick].i);
-      pool.splice(pick, 1);
-    }
-    return order;
+    return weightedOrder(pool);
   };
 
   const execComposite = (node: TreeNode, state: NodeState, type: CompiledItemType): Outcome => {
@@ -646,7 +730,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       const requireOne =
         String(propValue(type, node, 'Policy') ?? '').toLowerCase() === 'requireone';
       if (node.childNodes.length === 0) {
-        return 'success';
+        return requireOne ? 'failure' : 'success';
       }
       const anySuccess = results.includes('success');
       const anyFailure = results.includes('failure');
@@ -696,7 +780,7 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       }
       if (!state.body.manual) {
         state.body.manual = true;
-        pending.push(node.id);
+        pending.add(node.id);
         add('enter', node.id, 'waiting for manual result');
       }
       return 'running';
@@ -741,9 +825,60 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     if (isSubtreeType(type)) {
       return execSubtree(node, state);
     }
-    const isComposite = type.isComposite || (type.isInvalid === true && node.childNodes.length > 0);
+    const isComposite = type.isInvalid ? node.childNodes.length > 0 : type.isComposite;
     return isComposite ? execComposite(node, state, type) : execAction(node, state, type);
   }
+
+  /** Applies result decorators (`invert`, `forceSuccess`, `forceFailure`) from `fromIndex` down to `toIndex`. */
+  const applyResultDecorators = (
+    node: TreeNode,
+    initial: ManualResult,
+    fromIndex: number,
+    toIndex = 0,
+  ): ManualResult => {
+    let final = initial;
+    for (let i = Math.min(fromIndex, node.decorators.length - 1); i >= toIndex; i--) {
+      const decorator = node.decorators[i];
+      const kind = getItemType(project, 'decorator', decorator.type).simulate?.decorator;
+      let next = final;
+      if (kind === 'invert') next = final === 'success' ? 'failure' : 'success';
+      else if (kind === 'forceSuccess') next = 'success';
+      else if (kind === 'forceFailure') next = 'failure';
+      if (next !== final) {
+        add('decorator', node.id, `${decorator.type}: ${final} → ${next}`, decorator.id);
+        final = next;
+      }
+    }
+    return final;
+  };
+
+  /** Checks if any timeLimit decorator has expired; returns the failure result (with outer result decorators) or undefined. */
+  const checkTimeLimit = (node: TreeNode, state: NodeState): ManualResult | undefined => {
+    if (!state.timeLimits || state.timeLimits.length === 0) {
+      return undefined;
+    }
+    const elapsed = tickNo - state.startTick;
+    let minExpiredIndex: number | undefined;
+    for (const entry of state.timeLimits) {
+      if (elapsed >= entry.limit) {
+        if (minExpiredIndex === undefined || entry.index < minExpiredIndex) {
+          minExpiredIndex = entry.index;
+        }
+      }
+    }
+    if (minExpiredIndex === undefined) {
+      return undefined;
+    }
+    abortChildren(node);
+    for (const entry of state.timeLimits) {
+      if (elapsed >= entry.limit) {
+        subStatuses[entry.id] = 'fail';
+        add('decorator', node.id, `${entry.type}: time limit reached`, entry.id);
+      }
+    }
+    const final = applyResultDecorators(node, 'failure', minExpiredIndex - 1, 0);
+    return finishNode(node, final);
+  };
 
   function execNode(node: TreeNode): Outcome {
     let state = states.get(node.id);
@@ -760,9 +895,12 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
         loopTotal: 1,
       };
 
+      let currentDecorator: SubItem | undefined;
       try {
         // cooldowns and conditions
-        for (const decorator of node.decorators) {
+        for (let i = 0; i < node.decorators.length; i++) {
+          const decorator = node.decorators[i];
+          currentDecorator = decorator;
           const type = getItemType(project, 'decorator', decorator.type);
           const sim = type.simulate;
           if (sim?.decorator === 'cooldown') {
@@ -776,31 +914,48 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
                 `${decorator.type}: cooling down (${ticks - (tickNo - since)} ticks left) → fail`,
                 decorator.id,
               );
-              statuses[node.id] = 'failure';
-              add('result', node.id, 'failure');
-              return 'failure';
+              const final = applyResultDecorators(node, 'failure', i - 1, 0);
+              statuses[node.id] = final;
+              add('result', node.id, final);
+              return final;
             }
           }
           if (!decoratorPasses(node, decorator, type, false)) {
             subStatuses[decorator.id] = 'fail';
-            statuses[node.id] = 'failure';
-            add('result', node.id, 'failure');
-            return 'failure';
+            const final = applyResultDecorators(node, 'failure', i - 1, 0);
+            statuses[node.id] = final;
+            add('result', node.id, final);
+            return final;
           }
           subStatuses[decorator.id] = 'pass';
           if (sim?.decorator === 'loop') {
             const count = Math.floor(evalNumber(sim.count, 1, type, decorator, 'count'));
-            state.loopTotal =
-              count < 0 || state.loopTotal === Infinity ? Infinity : state.loopTotal * count;
+            state.outerLoopIndex ??= i;
+            state.loopIndex = i;
+            if (count === 0 || state.loopTotal === 0) {
+              state.loopTotal = 0;
+            } else if (count < 0 || state.loopTotal === Infinity) {
+              state.loopTotal = Infinity;
+            } else {
+              state.loopTotal = state.loopTotal * count;
+            }
           }
           if (sim?.decorator === 'timeLimit') {
             const ticks = evalNumber(sim.ticks, 0, type, decorator, 'ticks');
-            state.timeLimit = Math.min(state.timeLimit ?? Infinity, ticks);
+            (state.timeLimits ??= []).push({
+              index: i,
+              id: decorator.id,
+              type: decorator.type,
+              limit: ticks,
+            });
           }
         }
       } catch (e) {
+        if (currentDecorator) {
+          subStatuses[currentDecorator.id] = 'fail';
+        }
         statuses[node.id] = 'failure';
-        add('error', node.id, e instanceof Error ? e.message : String(e));
+        add('error', node.id, e instanceof Error ? e.message : String(e), currentDecorator?.id);
         add('result', node.id, 'failure');
         return 'failure';
       }
@@ -808,9 +963,15 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       states.set(node.id, state);
       statuses[node.id] = 'running';
       add('enter', node.id, 'started');
+
+      if (state.loopTotal === 0) {
+        const final = applyResultDecorators(node, 'success', (state.outerLoopIndex ?? 0) - 1, 0);
+        return finishNode(node, final);
+      }
     } else {
       // resumed: periodic decorators are checked again
-      for (const decorator of node.decorators) {
+      for (let i = 0; i < node.decorators.length; i++) {
+        const decorator = node.decorators[i];
         if (!decorator.periodic) continue;
         const type = getItemType(project, 'decorator', decorator.type);
         let pass: boolean;
@@ -824,7 +985,8 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
           subStatuses[decorator.id] = 'fail';
           abortChildren(node);
           add('decorator', node.id, `${decorator.type}: condition false, aborting`, decorator.id);
-          return finishNode(node, 'failure');
+          const final = applyResultDecorators(node, 'failure', i - 1, 0);
+          return finishNode(node, final);
         }
       }
     }
@@ -849,47 +1011,38 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     }
 
     if (result === 'running') {
-      if (state.timeLimit !== undefined && tickNo - state.startTick >= state.timeLimit) {
-        abortChildren(node);
-        for (const decorator of node.decorators) {
-          if (
-            getItemType(project, 'decorator', decorator.type).simulate?.decorator === 'timeLimit'
-          ) {
-            subStatuses[decorator.id] = 'fail';
-            add('decorator', node.id, `${decorator.type}: time limit reached`, decorator.id);
-          }
-        }
-        return finishNode(node, 'failure');
+      const timedOut = checkTimeLimit(node, state);
+      if (timedOut !== undefined) {
+        return timedOut;
       }
       return 'running';
     }
     let final: ManualResult = result;
 
-    // loops: repeat the body (from the next tick on) after each success
-    if (final === 'success' && state.loopDone + 1 < state.loopTotal) {
-      state.loopDone++;
-      state.restart = true;
-      add(
-        'decorator',
-        node.id,
-        `loop ${state.loopDone}/${state.loopTotal === Infinity ? '∞' : state.loopTotal} done`,
-      );
-      return 'running';
+    // Result decorators inside the loop apply to each iteration before the loop checks success.
+    const loopIdx = state.loopIndex;
+    if (loopIdx !== undefined) {
+      final = applyResultDecorators(node, final, node.decorators.length - 1, loopIdx + 1);
+      if (final === 'success' && state.loopDone + 1 < state.loopTotal) {
+        const timedOut = checkTimeLimit(node, state);
+        if (timedOut !== undefined) {
+          return timedOut;
+        }
+        state.loopDone++;
+        state.restart = true;
+        add(
+          'decorator',
+          node.id,
+          `loop ${state.loopDone}/${state.loopTotal === Infinity ? '∞' : state.loopTotal} done`,
+        );
+        return 'running';
+      }
+      final = applyResultDecorators(node, final, loopIdx - 1, 0);
+      return finishNode(node, final);
     }
 
     // result decorators, innermost (last) first
-    for (let i = node.decorators.length - 1; i >= 0; i--) {
-      const decorator = node.decorators[i];
-      const kind = getItemType(project, 'decorator', decorator.type).simulate?.decorator;
-      let next = final;
-      if (kind === 'invert') next = final === 'success' ? 'failure' : 'success';
-      else if (kind === 'forceSuccess') next = 'success';
-      else if (kind === 'forceFailure') next = 'failure';
-      if (next !== final) {
-        add('decorator', node.id, `${decorator.type}: ${final} → ${next}`, decorator.id);
-        final = next;
-      }
-    }
+    final = applyResultDecorators(node, final, node.decorators.length - 1, 0);
     return finishNode(node, final);
   }
 
@@ -900,15 +1053,19 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     pass++;
     states.clear();
     resolutions.clear();
-    pending = [];
+    pending.clear();
+    ranServices = [];
     for (const key of Object.keys(statuses)) statuses[key] = 'idle';
     for (const key of Object.keys(subStatuses)) delete subStatuses[key];
-    for (const key of Object.keys(scores)) delete scores[key];
+    if (scoreCount > 0) {
+      for (const key of Object.keys(scores)) delete scores[key];
+      scoreCount = 0;
+    }
   };
 
   // ----- public API -----
 
-  const snapshotResult = (entries: LogEntry[]): TickResult => {
+  const snapshotResult = (entries: LogEntry[], copyLog = true): TickResult => {
     const result: TickResult = {
       tick: tickNo,
       pass,
@@ -916,62 +1073,77 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
       statuses: { ...statuses },
       subStatuses: { ...subStatuses },
       blackboard: deepClone(blackboard),
-      log: [...entries],
+      log: copyLog ? [...entries] : entries,
     };
-    if (Object.keys(scores).length > 0) result.scores = { ...scores };
+    if (scoreCount > 0) result.scores = { ...scores };
     if (finished) result.finished = finished;
     if (passResult !== undefined && (loops !== 1 || pass > 1)) result.passResult = passResult;
-    if (pending.length > 0) result.pendingManual = pending[0];
+    const first = firstPending();
+    if (first !== undefined) result.pendingManual = first;
     return result;
+  };
+
+  const advanceTick = (): LogEntry[] => {
+    if (finished || pending.size > 0) {
+      return [];
+    }
+    tickNo++;
+    log = [];
+    const restart = passResult !== undefined;
+    passResult = undefined;
+    if (restart) {
+      startNextPass();
+    } else if (ranServices.length > 0) {
+      for (const key of ranServices) {
+        if (subStatuses[key] === 'ran') delete subStatuses[key];
+      }
+      ranServices = [];
+    }
+    if (loops !== 1 && (restart || tickNo === 1)) {
+      add('pass', root.id, `Run ${pass}/${loops === 0 ? '∞' : loops} started`);
+    }
+    const result = execNode(root);
+    if (result !== 'running') {
+      passResult = result;
+      if (loops !== 1) {
+        add(
+          'pass',
+          root.id,
+          `Run ${pass}/${loops === 0 ? '∞' : loops} finished: ${result === 'success' ? 'Success' : 'Failure'}`,
+        );
+      }
+      if (loops !== 0 && pass >= loops) {
+        finished = result;
+      }
+    }
+    return log;
   };
 
   return {
     root,
     tick() {
-      if (finished || pending.length > 0) {
-        return snapshotResult([]);
-      }
-      tickNo++;
-      log = [];
-      const restart = passResult !== undefined;
-      passResult = undefined;
-      if (restart) {
-        startNextPass();
-      } else {
-        for (const key of Object.keys(subStatuses)) {
-          if (subStatuses[key] === 'ran') delete subStatuses[key];
-        }
-      }
-      if (loops !== 1 && (restart || tickNo === 1)) {
-        add('pass', root.id, `Run ${pass}/${loops === 0 ? '∞' : loops} started`);
-      }
-      const result = execNode(root);
-      if (result !== 'running') {
-        passResult = result;
-        if (loops !== 1) {
-          add(
-            'pass',
-            root.id,
-            `Run ${pass}/${loops === 0 ? '∞' : loops} finished: ${result === 'success' ? 'Success' : 'Failure'}`,
-          );
-        }
-        if (loops !== 0 && pass >= loops) {
-          finished = result;
-        }
-      }
-      return snapshotResult(log);
+      const entries = advanceTick();
+      return snapshotResult(entries, false);
+    },
+    step() {
+      const entries = advanceTick();
+      const result: StepResult = { tick: tickNo, log: entries };
+      if (finished) result.finished = finished;
+      const first = firstPending();
+      if (first !== undefined) result.pendingManual = first;
+      return result;
     },
     resolveManual(nodeId, result) {
-      if (!pending.includes(nodeId)) {
+      if (!pending.has(nodeId)) {
         throw new Error(`Node '${nodeId}' is not waiting for a manual result`);
       }
-      pending = pending.filter((p) => p !== nodeId);
+      pending.delete(nodeId);
       resolutions.set(nodeId, result);
     },
-    pendingManual: () => pending[0],
+    pendingManual: firstPending,
     snapshot: () => snapshotResult(log),
     setBlackboardValue(key, value) {
-      blackboard[key] = value;
+      setOwnProperty(blackboard, key, deepClone(value));
     },
     removeBlackboardKey(key) {
       delete blackboard[key];
@@ -1007,20 +1179,27 @@ export function createRun(tree: TreeNode, project: CompiledProject, options: Run
     restore(checkpoint) {
       const data = checkpoint as unknown as CheckpointData;
       for (const key of Object.keys(blackboard)) delete blackboard[key];
-      Object.assign(blackboard, deepClone(data.blackboard));
+      for (const [key, value] of Object.entries(deepClone(data.blackboard))) {
+        setOwnProperty(blackboard, key, value);
+      }
       for (const key of Object.keys(statuses)) delete statuses[key];
       Object.assign(statuses, data.statuses);
       for (const key of Object.keys(subStatuses)) delete subStatuses[key];
       Object.assign(subStatuses, data.subStatuses);
+      ranServices = Object.entries(subStatuses)
+        .filter(([, status]) => status === 'ran')
+        .map(([id]) => id);
       for (const key of Object.keys(scores)) delete scores[key];
       Object.assign(scores, data.scores);
+      scoreCount = Object.keys(scores).length;
       states.clear();
       for (const [id, state] of data.states) states.set(id, deepClone(state));
       cooldownStart.clear();
       for (const [id, start] of data.cooldownStart) cooldownStart.set(id, start);
       resolutions.clear();
       for (const [id, result] of data.resolutions) resolutions.set(id, result);
-      pending = [...data.pending];
+      pending.clear();
+      for (const id of data.pending) pending.add(id);
       finished = data.finished;
       tickNo = data.tickNo;
       loops = data.loops;

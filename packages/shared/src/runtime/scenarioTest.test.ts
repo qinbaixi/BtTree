@@ -223,4 +223,23 @@ describe('validateScenarioTestFields', () => {
       },
     ]);
   });
+
+  it('rejects expect.ticks = 0, ignores non-plain array blackboards, and avoids ReDoS in globs', () => {
+    expect(validateScenarioTestFields(scenario({ expect: { ticks: 0 } }))).toEqual([
+      expect.objectContaining({ field: 'expect.ticks', severity: 'error' }),
+    ]);
+
+    const outcome = runScenarioTest(tree({ type: 'Say' }), project, {
+      name: 'Arr',
+      blackboard: [] as unknown as Record<string, unknown>,
+    });
+    expect(outcome.blackboard).toEqual({ Said: true });
+
+    const evil = `${'**/'.repeat(25)}x.json`;
+    const samplePath = `${'a/'.repeat(25)}y.json`;
+    const start = Date.now();
+    expect(globToRegExp(evil).test(samplePath)).toBe(false);
+    expect(scenarioAppliesTo(scenario({ trees: evil }), samplePath)).toBe(false);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
 });
