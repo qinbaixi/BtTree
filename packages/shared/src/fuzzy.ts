@@ -4,11 +4,11 @@
  * Returns 0 when the query characters do not all occur in order (case-insensitive).
  */
 export function scoreMatch(text: string, query: string): number {
-  if (text === query) {
-    return 1;
-  }
   if (query === '') {
     return 0;
+  }
+  if (text === query) {
+    return 1;
   }
 
   const lowerText = text.toLowerCase();

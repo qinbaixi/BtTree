@@ -2,6 +2,7 @@ import { getItemType } from '../compileProject';
 import {
   checkSubtrees,
   expandSubtrees,
+  normalizeSubtreeRef,
   subtreeName,
   subtreeOwnerId,
   subtreeRefOf,
@@ -17,7 +18,7 @@ import type {
   TreeNode,
 } from '../types';
 import { getEffectiveValue, validatePropertyValue } from '../validation';
-import { atom, ExportError, toExportValue } from './model';
+import { atom, ExportError, sanitizeLineComment, toExportValue } from './model';
 import type { ExportEntry, ExportField, ExportModel, ExportValue } from './model';
 import { snakeCase } from './names';
 import { numberTree, type NumberedItem } from './numberTree';
@@ -50,8 +51,9 @@ function exportedSubType(type: CompiledItemType): ExportValue {
 
 /** `<Type>` or `<Type> - <label>`. Falls back to the comment when there is no label. */
 function commentOf(type: CompiledItemType, item: TreeNode | SubItem): string {
-  const label = (item.label ?? item.comment ?? '').replace(/[\r\n]+/g, ' ').trim();
-  return label === '' ? type.name : `${type.name} - ${label}`;
+  const name = sanitizeLineComment(type.name).trim();
+  const label = sanitizeLineComment(item.label?.trim() || item.comment || '').trim();
+  return label === '' ? name : `${name} - ${label}`;
 }
 
 function propertyValue(prop: CompiledProperty, value: unknown): ExportValue {
@@ -240,9 +242,34 @@ export function buildExportModel(
     )) {
       warnings.push(`${paths.get(nodeId) ?? nodeId}: ${problem.message}`);
     }
+  } else {
+    // Without a library we cannot check missing files, but empty, outside and self-cycle refs are still checkable.
+    const selfNorm =
+      options.treeRef !== undefined ? normalizeSubtreeRef(options.treeRef) : undefined;
+    const selfRef = selfNorm && 'ref' in selfNorm ? selfNorm.ref : options.treeRef;
+    const visitRefs = (node: TreeNode, path: string): void => {
+      const ref = subtreeRefOf(node, project);
+      if (ref) {
+        if ('error' in ref) {
+          warnings.push(
+            `${path}: ${
+              ref.error === 'empty'
+                ? 'No tree referenced'
+                : 'Referenced tree must be inside the project folder'
+            }`,
+          );
+        } else if (selfRef !== undefined && ref.ref === selfRef) {
+          warnings.push(`${path}: Subtree cycle: ${selfRef} → ${selfRef}`);
+        }
+      }
+      node.childNodes.forEach((child, index) => visitRefs(child, `${path}.childNodes[${index}]`));
+    };
+    visitRefs(tree, 'root');
   }
 
-  const numbered = numberTree(root);
+  const numbered = numberTree(root, {
+    visitChildren: (node) => getItemType(project, 'node', node.type).isComposite,
+  });
   const idOf = new Map<object, number>();
   for (const entry of numbered) {
     idOf.set(entry.item, entry.id);

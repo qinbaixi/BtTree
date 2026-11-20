@@ -294,4 +294,39 @@ describe('buildExportModel', () => {
   it('throws for a root without a type', () => {
     expect(() => build({} as TreeNodeJson)).toThrow(ExportError);
   });
+
+  it('skips orphaned childNodes on non-composite nodes and falls back from empty label to comment', () => {
+    const model = build({
+      type: 'Bare',
+      label: '',
+      comment: 'fallback note',
+      childNodes: [{ type: 'Wait' }],
+    });
+    expect(model.entries).toHaveLength(1);
+    expect(model.entries[0].comment).toBe('Bare - fallback note');
+  });
+
+  it('warns about empty and outside subtree refs even when library is omitted', () => {
+    const project = compileProject({
+      nodes: [
+        { name: 'Sequence', isComposite: true },
+        { name: 'SubTree', subtree: true },
+      ],
+    });
+    const root = nodeFromJson(
+      {
+        type: 'Sequence',
+        childNodes: [
+          { type: 'SubTree', properties: [{ name: 'Tree', value: '' }] },
+          { type: 'SubTree', properties: [{ name: 'Tree', value: '../escape.json' }] },
+        ],
+      },
+      createIdGen(),
+    );
+    const model = buildExportModel(root, project);
+    expect(model.warnings).toEqual([
+      'root.childNodes[0]: No tree referenced',
+      'root.childNodes[1]: Referenced tree must be inside the project folder',
+    ]);
+  });
 });

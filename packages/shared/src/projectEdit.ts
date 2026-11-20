@@ -204,24 +204,25 @@ export function renameType(
 
 /** Copies the type right after the original as `<name> copy` (numbered when taken). Returns the new name. */
 export function duplicateType(file: ProjectFile, kind: ItemKind, name: string): string {
-  const list = ensureList(file, kind);
-  const index = list.findIndex((desc) => desc.name === name);
-  if (index < 0) {
+  const existing = file[LIST_KEY[kind]];
+  const index = existing ? existing.findIndex((desc) => desc.name === name) : -1;
+  if (!existing || index < 0) {
     throw new Error(`Unknown ${kind} type '${name}'`);
   }
-  const copy = JSON.parse(JSON.stringify(list[index])) as ItemTypeDescJson;
+  const copy = JSON.parse(JSON.stringify(existing[index])) as ItemTypeDescJson;
   copy.name = uniqueTypeName(file, kind, `${name} copy`);
-  list.splice(index + 1, 0, copy);
+  existing.splice(index + 1, 0, copy);
   return copy.name;
 }
 
 /** Moves a type from one index to another within its kind. */
 export function moveType(file: ProjectFile, kind: ItemKind, from: number, to: number): void {
-  const list = ensureList(file, kind);
-  requireIndex(list.length, from, 'Source');
-  requireIndex(list.length, to, 'Target');
-  const [moved] = list.splice(from, 1);
-  list.splice(to, 0, moved);
+  const existing = file[LIST_KEY[kind]];
+  const length = existing ? existing.length : 0;
+  requireIndex(length, from, 'Source');
+  requireIndex(length, to, 'Target');
+  const [moved] = existing!.splice(from, 1);
+  existing!.splice(to, 0, moved);
 }
 
 /** Names of the types of the same kind that derive from `name` (directly or with several bases). */
@@ -255,7 +256,18 @@ function findProperty(desc: ItemTypeDescJson, propName: string): number {
   return (desc.properties ?? []).findIndex((prop) => prop.name === propName);
 }
 
-/** Adds a property to a type, appended or inserted at `index`. Throws on duplicate or empty names. */
+function checkPropertyName(raw: string): string {
+  const name = raw.trim();
+  if (name === '') {
+    throw new Error('Property name must not be empty');
+  }
+  if (name === '__proto__') {
+    throw new Error(`Property name '${name}' is reserved`);
+  }
+  return name;
+}
+
+/** Adds a property to a type, appended or inserted at `index`. Throws on duplicate, reserved or empty names. */
 export function addProperty(
   file: ProjectFile,
   kind: ItemKind,
@@ -264,10 +276,7 @@ export function addProperty(
   index?: number,
 ): void {
   const desc = requireType(file, kind, typeName);
-  const name = prop.name.trim();
-  if (name === '') {
-    throw new Error('Property name must not be empty');
-  }
+  const name = checkPropertyName(prop.name);
   if (findProperty(desc, name) >= 0) {
     throw new Error(`Duplicate property '${name}'`);
   }
@@ -332,17 +341,24 @@ export function updateProperty(
     throw new Error(`Unknown property '${propName}' of '${typeName}'`);
   }
   const prop = desc.properties[index];
-  if (typeof patch.name === 'string') {
-    const renamed = patch.name.trim();
-    if (renamed === '') {
+  if (Object.hasOwn(patch, 'name')) {
+    if (patch.name === undefined) {
+      patch = { ...patch };
+      delete patch.name;
+    } else if (typeof patch.name !== 'string') {
       throw new Error('Property name must not be empty');
+    } else {
+      const renamed = checkPropertyName(patch.name);
+      if (renamed !== propName && findProperty(desc, renamed) >= 0) {
+        throw new Error(`Duplicate property '${renamed}'`);
+      }
+      patch = { ...patch, name: renamed };
     }
-    if (renamed !== propName && findProperty(desc, renamed) >= 0) {
-      throw new Error(`Duplicate property '${renamed}'`);
-    }
-    patch = { ...patch, name: renamed };
   }
   for (const [key, value] of Object.entries(patch)) {
+    if (key === 'name' && value === undefined) {
+      continue;
+    }
     if (value === undefined) {
       delete prop[key];
     } else {
@@ -407,24 +423,34 @@ export function renameCustomType(file: ProjectFile, oldName: string, newName: st
 
 /**
  * Own and inherited properties of a type, in display order: inherited properties first (base order),
- * then the type's own. A property redeclared by a derived type keeps the position of the base one.
+ * then the type's own. A property redeclared by a derived type keeps the position of the base one
+ * and shallow-merges onto the inherited descriptor (matching compileProject).
  */
 export function listEffectiveProperties(
   file: ProjectFile,
   kind: ItemKind,
   name: string,
 ): EffectiveProperty[] {
+  const byName = new Map<string, ItemTypeDescJson>();
+  for (const desc of getTypes(file, kind)) {
+    if (desc && typeof desc.name === 'string' && !byName.has(desc.name)) {
+      byName.set(desc.name, desc);
+    }
+  }
   const result: EffectiveProperty[] = [];
+  const propIndex = new Map<string, number>();
   const visiting = new Set<string>();
   const visited = new Set<string>();
 
   const add = (desc: ItemTypeDescJson, owner: string) => {
     for (const prop of desc.properties ?? []) {
       const from = owner === name ? undefined : owner;
-      const index = result.findIndex((entry) => entry.prop.name === prop.name);
-      if (index >= 0) {
-        result[index] = { prop, from };
+      const index = propIndex.get(prop.name);
+      if (index !== undefined) {
+        const merged = prop.type === undefined ? { ...result[index].prop, ...prop } : prop;
+        result[index] = { prop: merged, from };
       } else {
+        propIndex.set(prop.name, result.length);
         result.push({ prop, from });
       }
     }
@@ -434,7 +460,7 @@ export function listEffectiveProperties(
     if (visited.has(typeName) || visiting.has(typeName)) {
       return;
     }
-    const desc = findType(file, kind, typeName);
+    const desc = byName.get(typeName);
     if (!desc) {
       return;
     }
@@ -465,18 +491,30 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
   const push = (path: string, message: string, severity: ProjectIssueSeverity = SEVERITY_ERROR) => {
     issues.push({ path, message, severity });
   };
-  const customTypes = file.types ?? {};
+  const rawCustomTypes: unknown = file.types;
+  const customTypes: Record<string, CustomTypeJson> =
+    typeof rawCustomTypes === 'object' && rawCustomTypes !== null && !Array.isArray(rawCustomTypes)
+      ? (rawCustomTypes as Record<string, CustomTypeJson>)
+      : {};
+  if (rawCustomTypes !== undefined && rawCustomTypes !== customTypes) {
+    push('types', 'Custom types must be an object');
+  }
 
   for (const [name, custom] of Object.entries(customTypes)) {
     const path = `types.${name}`;
     if (name.trim() === '' || RESERVED_TYPE_NAMES.includes(name.trim())) {
       push(path, `Type name '${name}' is ${name.trim() === '' ? 'empty' : 'reserved'}`);
     }
+    if (typeof custom !== 'object' || custom === null || Array.isArray(custom)) {
+      push(path, `Custom type '${name}' must be an object`);
+      continue;
+    }
     if (custom.type !== 'string' && custom.type !== 'number') {
       push(`${path}.type`, `Custom type '${name}' must be 'string' or 'number'`);
     }
     if (custom.pattern !== undefined) {
       try {
+        new RegExp(custom.pattern);
         new RegExp(`^(?:${custom.pattern})$`);
       } catch (e) {
         push(`${path}.pattern`, `Invalid pattern: ${e instanceof Error ? e.message : String(e)}`);
@@ -485,12 +523,21 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
   }
 
   for (const kind of ['node', 'decorator', 'service'] as const) {
-    const list = getTypes(file, kind);
     const key = LIST_KEY[kind];
+    const rawList: unknown = file[key];
+    if (rawList !== undefined && !Array.isArray(rawList)) {
+      push(key, `${key} must be an array`);
+      continue;
+    }
+    const list = (rawList ?? []) as ItemTypeDescJson[];
     const byName = new Map<string, Located>();
 
     list.forEach((desc, index) => {
       const path = `${key}[${index}]`;
+      if (typeof desc !== 'object' || desc === null || Array.isArray(desc)) {
+        push(path, 'Type descriptor must be an object');
+        return;
+      }
       const name = typeof desc.name === 'string' ? desc.name.trim() : '';
       if (name === '') {
         push(`${path}.name`, 'Name is required');
@@ -504,6 +551,9 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
     });
 
     list.forEach((desc, index) => {
+      if (typeof desc !== 'object' || desc === null || Array.isArray(desc)) {
+        return;
+      }
       const path = `${key}[${index}]`;
       for (const base of basesOf(desc)) {
         if (!byName.has(base)) {
@@ -515,13 +565,26 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
     reportCycles(list, byName, key, push);
 
     list.forEach((desc, index) => {
+      if (typeof desc !== 'object' || desc === null || Array.isArray(desc)) {
+        return;
+      }
       const path = `${key}[${index}]`;
       const seen = new Set<string>();
-      (desc.properties ?? []).forEach((prop, propIndex) => {
+      const rawProps: unknown = desc.properties;
+      if (rawProps !== undefined && !Array.isArray(rawProps)) {
+        push(`${path}.properties`, 'Properties must be an array');
+      }
+      (Array.isArray(rawProps) ? (rawProps as PropertyDescJson[]) : []).forEach((prop, propIndex) => {
         const propPath = `${path}.properties[${propIndex}]`;
+        if (typeof prop !== 'object' || prop === null || Array.isArray(prop)) {
+          push(propPath, 'Property must be an object');
+          return;
+        }
         const propName = typeof prop.name === 'string' ? prop.name.trim() : '';
         if (propName === '') {
           push(`${propPath}.name`, 'Property name is required');
+        } else if (propName === '__proto__') {
+          push(`${propPath}.name`, `Property name '${propName}' is reserved`);
         } else if (seen.has(prop.name)) {
           push(`${propPath}.name`, `Duplicate property '${prop.name}'`);
         } else {
@@ -554,8 +617,16 @@ export function validateProjectFile(file: ProjectFile): ProjectIssue[] {
   }
 
   const scenarioNames = new Set<string>();
-  (file.scenarios ?? []).forEach((scenario, index) => {
+  const rawScenarios: unknown = file.scenarios;
+  if (rawScenarios !== undefined && !Array.isArray(rawScenarios)) {
+    push('scenarios', 'Scenarios must be an array');
+  }
+  (Array.isArray(rawScenarios) ? (rawScenarios as ScenarioJson[]) : []).forEach((scenario, index) => {
     const path = `scenarios[${index}]`;
+    if (typeof scenario !== 'object' || scenario === null || Array.isArray(scenario)) {
+      push(path, 'Scenario must be an object');
+      return;
+    }
     const name = typeof scenario.name === 'string' ? scenario.name.trim() : '';
     if (name === '') {
       push(`${path}.name`, 'Scenario name is required');
@@ -623,7 +694,7 @@ function reportCycles(
   };
 
   for (const desc of list) {
-    if (typeof desc.name === 'string' && byName.has(desc.name)) {
+    if (desc && typeof desc === 'object' && typeof desc.name === 'string' && byName.has(desc.name)) {
       visit(desc.name);
     }
   }
@@ -654,7 +725,16 @@ function defaultMessage(prop: PropertyDescJson): string {
 
 /** True when `base` is another type of the kind and making it a base of `name` creates no cycle. */
 export function canAddBase(file: ProjectFile, kind: ItemKind, name: string, base: string): boolean {
-  if (base === name || !isTypeNameTaken(file, kind, base)) {
+  if (base === name) {
+    return false;
+  }
+  const byName = new Map<string, ItemTypeDescJson>();
+  for (const desc of getTypes(file, kind)) {
+    if (desc && typeof desc.name === 'string' && !byName.has(desc.name)) {
+      byName.set(desc.name, desc);
+    }
+  }
+  if (!byName.has(base)) {
     return false;
   }
   const seen = new Set<string>();
@@ -668,12 +748,44 @@ export function canAddBase(file: ProjectFile, kind: ItemKind, name: string, base
       continue;
     }
     seen.add(current);
-    const desc = findType(file, kind, current);
+    const desc = byName.get(current);
     if (desc) {
       pending.push(...basesOf(desc));
     }
   }
   return true;
+}
+
+/** Names of types of `kind` that can be added as a base of `name` without creating a cycle (O(T + E)). */
+export function availableBaseTypes(file: ProjectFile, kind: ItemKind, name: string): string[] {
+  const list = getTypes(file, kind);
+  const childrenOf = new Map<string, string[]>();
+  for (const desc of list) {
+    if (!desc || typeof desc.name !== 'string') continue;
+    for (const base of basesOf(desc)) {
+      let children = childrenOf.get(base);
+      if (!children) {
+        children = [];
+        childrenOf.set(base, children);
+      }
+      children.push(desc.name);
+    }
+  }
+  // Any type that already inherits from `name` (or `name` itself) would form a cycle if added as a base.
+  const forbidden = new Set<string>([name]);
+  const stack = [name];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const child of childrenOf.get(current) ?? []) {
+      if (!forbidden.has(child)) {
+        forbidden.add(child);
+        stack.push(child);
+      }
+    }
+  }
+  return list
+    .filter((desc) => desc && typeof desc.name === 'string' && !forbidden.has(desc.name))
+    .map((desc) => desc.name);
 }
 
 /** Replaces the bases of a type. One base is stored as a string, several as an array, none removes the field. */
@@ -746,18 +858,28 @@ export function updateScenario(
   if (!scenario) {
     throw new Error(`Unknown scenario '${name}'`);
   }
-  if (typeof patch.name === 'string') {
-    const renamed = patch.name.trim();
-    if (renamed === '') {
+  if (Object.hasOwn(patch, 'name')) {
+    if (patch.name === undefined) {
+      patch = { ...patch };
+      delete patch.name;
+    } else if (typeof patch.name !== 'string') {
       throw new Error('Scenario name must not be empty');
+    } else {
+      const renamed = patch.name.trim();
+      if (renamed === '') {
+        throw new Error('Scenario name must not be empty');
+      }
+      if (renamed !== name && findScenario(file, renamed)) {
+        throw new Error(`Duplicate scenario name '${renamed}'`);
+      }
+      patch = { ...patch, name: renamed };
     }
-    if (renamed !== name && findScenario(file, renamed)) {
-      throw new Error(`Duplicate scenario name '${renamed}'`);
-    }
-    patch = { ...patch, name: renamed };
   }
   const target = scenario as unknown as Record<string, unknown>;
   for (const [key, value] of Object.entries(patch)) {
+    if (key === 'name' && value === undefined) {
+      continue;
+    }
     if (value === undefined) {
       delete target[key];
     } else {

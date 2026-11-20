@@ -75,6 +75,40 @@ export function toExportValue(value: unknown): ExportValue {
   return null;
 }
 
+export const INT32_MIN = -(2 ** 31);
+export const INT32_MAX = 2 ** 31 - 1;
+export const INT64_MIN = -(2 ** 63);
+export const INT64_LIMIT = 2 ** 63;
+
+/**
+ * Deduplicates ordered key/value pairs so that when a key repeats (e.g. from `export.fields` or a
+ * property's `exportName` reusing a generated field), the last value wins at the position of the
+ * first occurrence.
+ */
+export function lastWins(pairs: Array<[string, ExportValue]>): Array<[string, ExportValue]> {
+  const byKey = new Map<string, ExportValue>();
+  for (const [key, value] of pairs) {
+    byKey.set(key, value);
+  }
+  return byKey.size === pairs.length ? pairs : [...byKey];
+}
+
+/** True when every element is an integer that fits in a signed 32-bit integer. */
+export function isInt32List(values: ExportValue[]): boolean {
+  return values.every(
+    (item) =>
+      typeof item === 'number' && Number.isInteger(item) && item >= INT32_MIN && item <= INT32_MAX,
+  );
+}
+
+/** Line terminators and NUL/BOM characters that must not appear raw in single-line comments. */
+const COMMENT_UNSAFE = new RegExp('[\\r\\n\\u0085\\u2028\\u2029\\ufeff]+', 'g');
+
+/** Keeps comment text on a single safe line (strips NUL, BOM and Unicode line terminators). */
+export function sanitizeLineComment(text: string): string {
+  return text.split('\0').join(' ').replace(COMMENT_UNSAFE, ' ');
+}
+
 /** Cached results are dropped when there are more than this many (keys and atoms repeat a lot). */
 const FORMAT_CACHE_LIMIT = 1000;
 

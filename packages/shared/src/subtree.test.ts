@@ -222,4 +222,21 @@ describe('expandSubtrees', () => {
   it('is a subtree type check by compiled type', () => {
     expect(getItemType(project, 'node', 'SubTree').subtree).toBe(true);
   });
+
+  it('rejects drive letters hidden behind ./ or .. segments and NUL bytes', () => {
+    expect(normalizeSubtreeRef('./C:/Windows/foo.json')).toEqual({ error: 'outside' });
+    expect(normalizeSubtreeRef('sub/../C:/proj/main.json')).toEqual({ error: 'outside' });
+    expect(normalizeSubtreeRef('a\0b.json')).toEqual({ error: 'outside' });
+  });
+
+  it('normalizes selfRef for cycle detection in checkSubtrees and expandSubtrees', () => {
+    const root = tree({
+      type: 'Sequence',
+      childNodes: [ref('trees/main.json')],
+    });
+    const problems = checkSubtrees(root, project, {}, 'trees\\main.json');
+    expect(problems.get(root.childNodes[0].id)?.kind).toBe('cycle');
+    const expanded = expandSubtrees(root, project, {}, { mode: 'child', selfRef: './trees/main' });
+    expect(expanded.errors.get(root.childNodes[0].id)?.kind).toBe('cycle');
+  });
 });

@@ -151,4 +151,26 @@ describe('collapseRenames', () => {
       { kind: 'service', from: 'B', to: 'D' },
     ]);
   });
+
+  it('drops reverted identity entries immediately and updates all convergent entries', () => {
+    expect(
+      collapseRenames([
+        { kind: 'node', from: 'A', to: 'B' },
+        { kind: 'node', from: 'B', to: 'A' },
+        { kind: 'node', from: 'C', to: 'A' },
+        { kind: 'node', from: 'A', to: 'D' },
+      ]),
+    ).toEqual([{ kind: 'node', from: 'C', to: 'D' }]);
+
+    expect(
+      collapseRenames([
+        { kind: 'node', from: 'A', to: 'X' },
+        { kind: 'node', from: 'B', to: 'X' },
+        { kind: 'node', from: 'X', to: 'Y' },
+      ]),
+    ).toEqual([
+      { kind: 'node', from: 'A', to: 'Y' },
+      { kind: 'node', from: 'B', to: 'Y' },
+    ]);
+  });
 });

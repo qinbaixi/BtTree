@@ -293,6 +293,9 @@ describe('isTreeValid', () => {
 
   it('is false when a property value is invalid', () => {
     expect(isTreeValid(root(-1), project)).toBe(false);
+    expect(validatePropertyValue({ name: 'p', type: 'string', pattern: 'a)|(b' }, 'a extra')).toBe(
+      false,
+    );
   });
 
   it('is false when a node or sub item type is missing', () => {

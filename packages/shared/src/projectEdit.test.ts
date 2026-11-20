@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { compileProject, getItemType } from './compileProject';
 import {
   addProperty,
+  addScenario,
   addType,
+  availableBaseTypes,
   canAddBase,
   checkTypeName,
   duplicateType,
@@ -19,6 +21,7 @@ import {
   setBases,
   setCustomType,
   updateProperty,
+  updateScenario,
   updateType,
   uniqueTypeName,
   validateProjectFile,
@@ -656,5 +659,27 @@ describe('reserved type names', () => {
     expect(getItemType(compiled, 'node', 'constructor').isInvalid).toBe(true);
     expect(getItemType(compiled, 'node', 'toString').isInvalid).toBe(true);
     expect(({} as Record<string, unknown>).isComposite).toBeUndefined();
+  });
+
+  it('guards updateProperty/updateScenario against { name: undefined }, rejects __proto__ properties and unbalanced patterns', () => {
+    const file = sample();
+    updateProperty(file, 'node', 'Wait', 'Mode', { name: undefined, description: 'ok' });
+    expect(findType(file, 'node', 'Wait')?.properties?.[0].name).toBe('Mode');
+    expect(() => addProperty(file, 'node', 'Wait', { name: '__proto__', type: 'string' })).toThrow();
+
+    addScenario(file, { name: 'S1', blackboard: {} });
+    updateScenario(file, 'S1', { name: undefined, description: 'desc' });
+    expect(file.scenarios?.[0].name).toBe('S1');
+
+    const issues = validateProjectFile({
+      types: { broken: { type: 'string', pattern: 'a)|(b' } },
+      nodes: [null as never],
+    });
+    expect(issues.some((i) => i.path === 'types.broken.pattern')).toBe(true);
+    expect(issues.some((i) => i.path === 'nodes[0]')).toBe(true);
+
+    expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Wait');
+    expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Derived');
+    expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Base');
   });
 });

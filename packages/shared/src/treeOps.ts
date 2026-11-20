@@ -1,3 +1,4 @@
+import { setOwnProperty } from './treeModel';
 import type {
   BasePropertyName,
   CompiledItemType,
@@ -163,7 +164,7 @@ export function setPropertyValue(
   if (value === undefined || value === null) {
     delete item.properties[name];
   } else {
-    item.properties[name] = value;
+    setOwnProperty(item.properties, name, value);
   }
 }
 
@@ -193,7 +194,7 @@ export function setNodeType(
   const removed: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(node.properties)) {
     if (!declared.has(name)) {
-      removed[name] = value;
+      setOwnProperty(removed, name, value);
       delete node.properties[name];
     }
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collapsedToPaths,
   collapsibleIds,
+  countCollapsedDescendants,
   countDescendants,
   hiddenBy,
   isCollapsedNode,
@@ -54,5 +55,15 @@ describe('treeCollapse', () => {
   it('skips invalid persisted paths', () => {
     const root = sample();
     expect([...pathsToCollapsed(root, ['5', '0.x', '1', 3, null, '0'])]).toEqual(['a']);
+  });
+
+  it('computes collapsed descendant counts in a single pass', () => {
+    const root = sample();
+    const counts = countCollapsedDescendants(root, new Set(['root', 'a', 'a2', 'b']));
+    expect([...counts.entries()]).toEqual([
+      ['a2', 1],
+      ['a', 3],
+      ['root', 5],
+    ]);
   });
 });

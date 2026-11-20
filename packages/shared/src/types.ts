@@ -201,6 +201,8 @@ export interface CompiledItemType {
   description?: string;
   /** Direct bases as written in the project file. Omitted when the type has none. */
   bases?: string[];
+  /** Transitive ancestor type names (direct bases first, then grandparents). Omitted when none. */
+  ancestors?: string[];
   /** Nodes only; false for decorators/services. */
   isComposite: boolean;
   properties: CompiledProperty[];

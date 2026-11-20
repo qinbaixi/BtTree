@@ -18,6 +18,14 @@ describe('compareVersions', () => {
   it('returns undefined for anything that is not a version', () => {
     expect(compareVersions('latest', '0.2.0')).toBeUndefined();
     expect(compareVersions('0.2', '0.2.0')).toBeUndefined();
+    expect(compareVersions('01.02.03', '1.2.3')).toBeUndefined();
+    expect(compareVersions('1.0.0-.', '1.0.0')).toBeUndefined();
+    expect(compareVersions('1.0.0-alpha..1', '1.0.0')).toBeUndefined();
+  });
+
+  it('compares arbitrarily large numeric identifiers accurately without NaN', () => {
+    expect(compareVersions('1.0.0-9007199254740992', '1.0.0-9007199254740993')).toBe(-1);
+    expect(compareVersions(`1.0.0-${'9'.repeat(400)}`, `1.0.0-${'9'.repeat(400)}`)).toBe(0);
   });
 });
 

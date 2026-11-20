@@ -10,6 +10,31 @@ export function countDescendants(node: TreeNode): number {
   return count;
 }
 
+/**
+ * Descendant counts for every collapsed node (with children) in a single O(N) bottom-up pass.
+ */
+export function countCollapsedDescendants(
+  root: TreeNode,
+  collapsed: ReadonlySet<string>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  if (collapsed.size === 0) {
+    return counts;
+  }
+  const visit = (node: TreeNode): number => {
+    let total = 0;
+    for (const child of node.childNodes) {
+      total += 1 + visit(child);
+    }
+    if (total > 0 && collapsed.has(node.id)) {
+      counts.set(node.id, total);
+    }
+    return total;
+  };
+  visit(root);
+  return counts;
+}
+
 /** True when the node has children and is in the collapsed set (a leaf never counts as collapsed). */
 export function isCollapsedNode(node: TreeNode, collapsed: ReadonlySet<string>): boolean {
   return node.childNodes.length > 0 && collapsed.has(node.id);

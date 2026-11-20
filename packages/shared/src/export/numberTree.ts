@@ -11,12 +11,18 @@ export interface NumberedItem {
   path: string;
 }
 
+export interface NumberTreeOptions {
+  /** Whether to descend into `node.childNodes`. Defaults to always true. */
+  visitChildren?: (node: TreeNode) => boolean;
+}
+
 /**
  * Assigns ids 1..N depth-first. For every node: its decorators, then its services, then the node itself,
  * then its children (recursively). The root is always 1 and is numbered before its own sub items.
  */
-export function numberTree(root: TreeNode): NumberedItem[] {
+export function numberTree(root: TreeNode, options: NumberTreeOptions = {}): NumberedItem[] {
   const out: NumberedItem[] = [];
+  const visitChildren = options.visitChildren;
   const visit = (node: TreeNode, path: string, isRoot = false): void => {
     if (isRoot) {
       out.push({ id: out.length + 1, kind: 'node', item: node, path });
@@ -42,9 +48,11 @@ export function numberTree(root: TreeNode): NumberedItem[] {
     if (!isRoot) {
       out.push({ id: out.length + 1, kind: 'node', item: node, path });
     }
-    node.childNodes.forEach((child, index) => {
-      visit(child, `${path}.childNodes[${index}]`);
-    });
+    if (!visitChildren || visitChildren(node)) {
+      node.childNodes.forEach((child, index) => {
+        visit(child, `${path}.childNodes[${index}]`);
+      });
+    }
   };
   visit(root, 'root', true);
   return out;

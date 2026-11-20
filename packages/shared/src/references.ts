@@ -77,20 +77,33 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Visits every node (pre-order) with its child-index path and display names (root first, incl. node). */
+/** Visits every node (pre-order) with mutable path and display-name stacks (root first, incl. node). */
 function walk(
   root: TreeNodeJson,
-  visit: (node: TreeNodeJson, path: number[], names: string[]) => void,
+  visit: (node: TreeNodeJson, path: readonly number[], names: readonly string[]) => void,
+  trackNames: boolean,
 ): void {
-  const step = (node: TreeNodeJson, path: number[], names: string[]): void => {
+  const path: number[] = [];
+  const names: string[] = [];
+  const step = (node: TreeNodeJson): void => {
     if (!isObject(node)) {
       return;
     }
-    const own = [...names, displayName(node)];
-    visit(node, path, own);
-    childrenOf(node).forEach((child, index) => step(child, [...path, index], own));
+    if (trackNames) {
+      names.push(displayName(node));
+    }
+    visit(node, path, names);
+    const children = childrenOf(node);
+    for (let index = 0; index < children.length; index++) {
+      path.push(index);
+      step(children[index]);
+      path.pop();
+    }
+    if (trackNames) {
+      names.pop();
+    }
   };
-  step(root, [], []);
+  step(root);
 }
 
 /** Every item of the tree (node, decorator, service) with its kind and position. */
@@ -99,21 +112,28 @@ function forEachItem(
   visit: (
     item: TreeNodeJson | SubItemJson,
     kind: ItemKind,
-    path: number[],
-    names: string[],
+    path: readonly number[],
+    names: readonly string[],
     itemIndex?: number,
   ) => void,
+  trackNames = true,
 ): void {
-  walk(root, (node, path, names) => {
-    visit(node, 'node', path, names);
-    for (const kind of ['decorator', 'service'] as const) {
-      subItemsOf(node, kind).forEach((sub, index) => {
-        if (isObject(sub)) {
-          visit(sub, kind, path, names, index);
+  walk(
+    root,
+    (node, path, names) => {
+      visit(node, 'node', path, names);
+      for (const kind of ['decorator', 'service'] as const) {
+        const subs = subItemsOf(node, kind);
+        for (let index = 0; index < subs.length; index++) {
+          const sub = subs[index];
+          if (isObject(sub)) {
+            visit(sub, kind, path, names, index);
+          }
         }
-      });
-    }
-  });
+      }
+    },
+    trackNames,
+  );
 }
 
 /**
@@ -127,40 +147,57 @@ export function findTreeUsages(
   project?: CompiledProject,
 ): TreeUsage[] {
   const usages: TreeUsage[] = [];
+  const keyPropsCache = new Map<string, ReturnType<typeof getItemType>['properties']>();
+  const getKeyProps = (kind: ItemKind, type: string) => {
+    const cacheKey = `${kind}:${type}`;
+    let props = keyPropsCache.get(cacheKey);
+    if (!props) {
+      props = getItemType(project!, kind, type).properties.filter(isBlackboardKeyProperty);
+      keyPropsCache.set(cacheKey, props);
+    }
+    return props;
+  };
+
   forEachItem(root, (item, kind, path, names, itemIndex) => {
     const type = typeof item.type === 'string' ? item.type : '';
-    const base: TreeUsage = {
-      nodePath: path,
-      itemKind: kind,
-      type,
-      location: names.join(LOCATION_SEPARATOR),
+    const makeBase = (): TreeUsage => {
+      const base: TreeUsage = {
+        nodePath: [...path],
+        itemKind: kind,
+        type,
+        location: names.join(LOCATION_SEPARATOR),
+      };
+      if (itemIndex !== undefined) {
+        base.itemIndex = itemIndex;
+      }
+      if (typeof item.label === 'string') {
+        base.label = item.label;
+      }
+      return base;
     };
-    if (itemIndex !== undefined) {
-      base.itemIndex = itemIndex;
-    }
-    if (typeof item.label === 'string') {
-      base.label = item.label;
-    }
+
     if (query.kind !== 'blackboardKey') {
       if (query.kind === kind && type === query.name) {
-        usages.push(base);
+        usages.push(makeBase());
       }
       return;
     }
     if (!project) {
       return;
     }
-    const compiled = getItemType(project, kind, type);
+    const keyProps = getKeyProps(kind, type);
+    if (keyProps.length === 0) {
+      return;
+    }
     const values = propertiesOf(item);
-    for (const prop of compiled.properties) {
-      if (!isBlackboardKeyProperty(prop)) {
-        continue;
-      }
+    let base: TreeUsage | undefined;
+    for (const prop of keyProps) {
       const explicit = values.find((entry) => isObject(entry) && entry.name === prop.name);
       const hasValue =
         explicit !== undefined && explicit.value !== undefined && explicit.value !== null;
       const value = hasValue ? explicit.value : prop.default;
       if (value === query.name) {
+        base ??= makeBase();
         usages.push({ ...base, property: prop.name, ...(hasValue ? {} : { isDefault: true }) });
       }
     }
@@ -178,14 +215,22 @@ export function collapseRenames(log: readonly RefRename[]): RefRename[] {
     if (rename.from === rename.to) {
       continue;
     }
-    const existing = net.find((entry) => entry.kind === rename.kind && entry.to === rename.from);
-    if (existing) {
-      existing.to = rename.to;
-    } else {
+    let matched = false;
+    for (let i = net.length - 1; i >= 0; i--) {
+      const entry = net[i];
+      if (entry.kind === rename.kind && entry.to === rename.from) {
+        entry.to = rename.to;
+        matched = true;
+        if (entry.from === entry.to) {
+          net.splice(i, 1);
+        }
+      }
+    }
+    if (!matched) {
       net.push({ ...rename });
     }
   }
-  return net.filter((entry) => entry.from !== entry.to);
+  return net;
 }
 
 /**
@@ -212,28 +257,42 @@ export function rewriteTreeReferences(
     }
   }
   const keys = maps.blackboardKey;
+  const keyPropNamesCache = new Map<string, Set<string>>();
+  const getKeyPropNames = (kind: ItemKind, type: string): Set<string> => {
+    const cacheKey = `${kind}:${type}`;
+    let names = keyPropNamesCache.get(cacheKey);
+    if (!names) {
+      names = new Set(
+        getItemType(project!, kind, type)
+          .properties.filter(isBlackboardKeyProperty)
+          .map((p) => p.name),
+      );
+      keyPropNamesCache.set(cacheKey, names);
+    }
+    return names;
+  };
   let changed = 0;
 
-  forEachItem(root, (item, kind) => {
-    if (typeof item.type !== 'string') {
-      return;
-    }
-    const renamed = maps[kind].get(item.type);
-    if (renamed !== undefined) {
-      item.type = renamed;
-      changed++;
-    }
-    if (keys.size === 0 || !project) {
-      return;
-    }
-    const compiled = getItemType(project, kind, item.type);
-    const values = propertiesOf(item);
-    for (const prop of compiled.properties) {
-      if (!isBlackboardKeyProperty(prop)) {
-        continue;
+  forEachItem(
+    root,
+    (item, kind) => {
+      if (typeof item.type !== 'string') {
+        return;
       }
-      for (const entry of values) {
-        if (isObject(entry) && entry.name === prop.name && typeof entry.value === 'string') {
+      const renamed = maps[kind].get(item.type);
+      if (renamed !== undefined) {
+        item.type = renamed;
+        changed++;
+      }
+      if (keys.size === 0 || !project) {
+        return;
+      }
+      const keyPropNames = getKeyPropNames(kind, item.type);
+      if (keyPropNames.size === 0) {
+        return;
+      }
+      for (const entry of propertiesOf(item)) {
+        if (isObject(entry) && keyPropNames.has(entry.name) && typeof entry.value === 'string') {
           const key = keys.get(entry.value);
           if (key !== undefined) {
             entry.value = key;
@@ -241,7 +300,8 @@ export function rewriteTreeReferences(
           }
         }
       }
-    }
-  });
+    },
+    false,
+  );
   return changed;
 }

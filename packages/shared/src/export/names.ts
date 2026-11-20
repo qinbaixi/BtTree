@@ -23,10 +23,12 @@ const ERLANG_RESERVED_WORDS: ReadonlySet<string> = new Set([
   'catch',
   'cond',
   'div',
+  'else',
   'end',
   'fun',
   'if',
   'let',
+  'maybe',
   'not',
   'of',
   'or',
@@ -148,11 +150,13 @@ export function luaKey(name: string): string {
 
 /**
  * Erlang module name from a file name: lower case, every character outside [a-z0-9_] becomes '_',
- * and an `m_` prefix is added when the result does not start with a letter.
+ * and an `m_` prefix is added when the result does not start with a letter or is a reserved word.
  */
 export function sanitizeModuleName(name: string): string {
   const sanitized = name.toLowerCase().replace(/[^a-z0-9_]/g, '_');
-  return /^[a-z]/.test(sanitized) ? sanitized : `m_${sanitized}`;
+  return /^[a-z]/.test(sanitized) && !ERLANG_RESERVED_WORDS.has(sanitized)
+    ? sanitized
+    : `m_${sanitized}`;
 }
 
 /** TypeScript string literal with single quotes. Control characters use `\uXXXX`. */
@@ -180,8 +184,11 @@ export function tsString(text: string): string {
   return `'${out}'`;
 }
 
-/** TypeScript object key: bare when it is a valid identifier, a single-quoted string otherwise. */
+/** TypeScript object key: bare when it is a valid identifier, computed for `__proto__`, quoted otherwise. */
 export function tsKey(name: string): string {
+  if (name === '__proto__') {
+    return "['__proto__']";
+  }
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) ? name : tsString(name);
 }
 
@@ -265,9 +272,12 @@ const CSHARP_KEYWORDS: ReadonlySet<string> = new Set([
   'while',
 ]);
 
-/** C# string literal with double quotes. Control characters use `\uXXXX`. */
+// eslint-disable-next-line no-control-regex -- control, Unicode line terminators and lone surrogates
+const NEEDS_ESCAPE_CSHARP = /[\\"\u0000-\u001f\u007f\u0085\u2028\u2029\ud800-\udfff]/;
+
+/** C# string literal with double quotes. Control chars, Unicode line terminators and lone surrogates use `\uXXXX`. */
 export function csharpString(text: string): string {
-  if (!NEEDS_ESCAPE_DOUBLE.test(text)) {
+  if (!NEEDS_ESCAPE_CSHARP.test(text)) {
     return `"${text}"`;
   }
   let out = '';
@@ -281,7 +291,14 @@ export function csharpString(text: string): string {
       out += '\\r';
     } else if (ch === '\t') {
       out += '\\t';
-    } else if (code < 0x20 || code === 0x7f) {
+    } else if (
+      code < 0x20 ||
+      code === 0x7f ||
+      code === 0x85 ||
+      code === 0x2028 ||
+      code === 0x2029 ||
+      (code >= 0xd800 && code <= 0xdfff)
+    ) {
       out += `\\u${code.toString(16).padStart(4, '0')}`;
     } else {
       out += ch;

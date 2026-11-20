@@ -31,16 +31,17 @@ export function resolveNodeDrop(
   if (dragId === root.id || !findNode(root, dragId)) {
     return undefined;
   }
-  const target = findNode(root, targetId);
-  if (!target || isSameOrDescendant(root, dragId, targetId)) {
+  const targetPath = findNodePath(root, targetId);
+  if (targetPath.length === 0 || targetPath.some((node) => node.id === dragId)) {
     return undefined;
   }
+  const target = targetPath[targetPath.length - 1];
   if (position === 'inside') {
     return isComposite(target)
       ? { parentId: target.id, index: target.childNodes.length }
       : undefined;
   }
-  const parent = findParent(root, targetId);
+  const parent = targetPath.length >= 2 ? targetPath[targetPath.length - 2] : undefined;
   if (!parent) {
     return undefined;
   }
@@ -63,12 +64,16 @@ export function isNoopNodeDrop(root: TreeNode, dragId: string, drop: NodeDropTar
  * node is removed. Returns false (and changes nothing) when the move is invalid.
  */
 export function moveNodeTo(root: TreeNode, dragId: string, drop: NodeDropTarget): boolean {
-  if (dragId === root.id || isSameOrDescendant(root, dragId, drop.parentId)) {
+  if (dragId === root.id) {
     return false;
   }
+  const toPath = findNodePath(root, drop.parentId);
+  if (toPath.length === 0 || toPath.some((node) => node.id === dragId)) {
+    return false;
+  }
+  const to = toPath[toPath.length - 1];
   const from = findParent(root, dragId);
-  const to = findNode(root, drop.parentId);
-  if (!from || !to || drop.index < 0 || drop.index > to.childNodes.length) {
+  if (!from || drop.index < 0 || drop.index > to.childNodes.length) {
     return false;
   }
   const fromIndex = from.childNodes.findIndex((child) => child.id === dragId);

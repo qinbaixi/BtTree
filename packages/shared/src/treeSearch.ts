@@ -29,13 +29,31 @@ export function searchableTexts(item: TreeNode | SubItem): string[] {
   return texts;
 }
 
+function matchesNeedle(item: TreeNode | SubItem, needle: string): boolean {
+  if (item.type.toLowerCase().includes(needle)) {
+    return true;
+  }
+  if (item.label && item.label.toLowerCase().includes(needle)) {
+    return true;
+  }
+  if (item.comment && item.comment.toLowerCase().includes(needle)) {
+    return true;
+  }
+  for (const value of Object.values(item.properties)) {
+    if (valueText(value).toLowerCase().includes(needle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Case-insensitive substring match of a (trimmed, non-empty) query against the item's texts. */
 export function itemMatches(item: TreeNode | SubItem, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (needle === '') {
     return false;
   }
-  return searchableTexts(item).some((text) => text.toLowerCase().includes(needle));
+  return matchesNeedle(item, needle);
 }
 
 /**
@@ -45,18 +63,19 @@ export function itemMatches(item: TreeNode | SubItem, query: string): boolean {
  */
 export function searchTree(root: TreeNode, query: string): Selection[] {
   const results: Selection[] = [];
-  if (query.trim() === '') {
+  const needle = query.trim().toLowerCase();
+  if (needle === '') {
     return results;
   }
   const visitSubItems = (node: TreeNode, kind: SubItemKind, items: SubItem[]): void => {
     for (const item of items) {
-      if (itemMatches(item, query)) {
+      if (matchesNeedle(item, needle)) {
         results.push({ kind, nodeId: node.id, itemId: item.id });
       }
     }
   };
   const visit = (node: TreeNode): void => {
-    if (itemMatches(node, query)) {
+    if (matchesNeedle(node, needle)) {
       results.push({ kind: 'node', nodeId: node.id });
     }
     visitSubItems(node, 'decorator', node.decorators);

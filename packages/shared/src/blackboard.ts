@@ -29,6 +29,9 @@ export const BLACKBOARD_VALUE_TYPES: readonly BlackboardValueType[] = [
 /** Valid key names: an identifier (letters, digits and _, not starting with a digit). */
 const KEY_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/** Identifiers that cannot be blackboard keys (expression literals and prototype keys). */
+const RESERVED_KEY_NAMES: ReadonlySet<string> = new Set(['true', 'false', 'null', '__proto__']);
+
 export interface BlackboardIssue {
   /** Location in the file, e.g. `blackboard[2].name`. */
   path: string;
@@ -47,7 +50,7 @@ export function isBlackboardKeyPropertyDesc(prop: { type?: unknown }): boolean {
 }
 
 export function isValidBlackboardKeyName(name: string): boolean {
-  return KEY_NAME.test(name);
+  return KEY_NAME.test(name) && !RESERVED_KEY_NAMES.has(name);
 }
 
 /** Start value of a key without a default. */
@@ -234,14 +237,31 @@ export function renameBlackboardKey(
     }
   }
   for (const scenario of file.scenarios ?? []) {
+    let touched = false;
     const bb = scenario.blackboard;
     if (
       typeof bb === 'object' &&
       bb !== null &&
+      !Array.isArray(bb) &&
       Object.hasOwn(bb, oldName) &&
       !Object.hasOwn(bb, target)
     ) {
       scenario.blackboard = renameRecordKey(bb, oldName, target);
+      touched = true;
+    }
+    const expBb = scenario.expect?.blackboard;
+    if (
+      scenario.expect &&
+      typeof expBb === 'object' &&
+      expBb !== null &&
+      !Array.isArray(expBb) &&
+      Object.hasOwn(expBb, oldName) &&
+      !Object.hasOwn(expBb, target)
+    ) {
+      scenario.expect.blackboard = renameRecordKey(expBb, oldName, target);
+      touched = true;
+    }
+    if (touched) {
       result.scenarios++;
     }
   }

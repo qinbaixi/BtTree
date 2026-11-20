@@ -50,14 +50,19 @@ export interface DesktopBridge {
   onUpdateState(listener: (state: AppUpdateState) => void): () => void;
 }
 
-function parseVersion(version: string): { core: number[]; pre: string | undefined } | undefined {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(
-    version.trim(),
-  );
+const SEMVER_RE =
+  /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+
+function parseVersion(version: string): { core: bigint[]; pre: string | undefined } | undefined {
+  const match = SEMVER_RE.exec(version.trim());
   if (!match) {
     return undefined;
   }
-  return { core: [Number(match[1]), Number(match[2]), Number(match[3])], pre: match[4] };
+  return { core: [BigInt(match[1]), BigInt(match[2]), BigInt(match[3])], pre: match[4] };
+}
+
+function compareBigInt(a: bigint, b: bigint): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function comparePrerelease(a: string, b: string): number {
@@ -71,8 +76,8 @@ function comparePrerelease(a: string, b: string): number {
     const xNum = /^\d+$/.test(x);
     const yNum = /^\d+$/.test(y);
     if (xNum && yNum) {
-      const diff = Number(x) - Number(y);
-      if (diff !== 0) return Math.sign(diff);
+      const diff = compareBigInt(BigInt(x), BigInt(y));
+      if (diff !== 0) return diff;
     } else if (xNum !== yNum) {
       return xNum ? -1 : 1;
     } else if (x !== y) {
@@ -93,8 +98,8 @@ export function compareVersions(a: string, b: string): number | undefined {
     return undefined;
   }
   for (let i = 0; i < 3; i++) {
-    const diff = left.core[i] - right.core[i];
-    if (diff !== 0) return Math.sign(diff);
+    const diff = compareBigInt(left.core[i], right.core[i]);
+    if (diff !== 0) return diff;
   }
   if (left.pre === undefined || right.pre === undefined) {
     // A release is newer than its prereleases.

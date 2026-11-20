@@ -322,6 +322,20 @@ describe('cloneNode / cloneSubItem', () => {
     expect(subItemToJson(copy)).toEqual(subItemToJson(item));
     expect(copy.properties['a']).not.toBe(item.properties['a']);
   });
+
+  it('stores __proto__ property and extra keys as own properties without mutating prototypes', () => {
+    const json = JSON.parse(
+      '{"type":"Wait","__proto__":{"polluted":1},"properties":[{"name":"__proto__","value":{"v":2}}]}',
+    ) as TreeNodeJson;
+    const node = nodeFromJson(json, createIdGen());
+    expect(Object.hasOwn(node.properties, '__proto__')).toBe(true);
+    expect(Object.hasOwn(node.extra, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(node.properties)).toBe(Object.prototype);
+    expect((node.properties as Record<string, unknown>).v).toBeUndefined();
+    const out = nodeToJson(node);
+    expect(out.properties).toEqual([{ name: '__proto__', value: { v: 2 } }]);
+    expect(Object.hasOwn(out, '__proto__')).toBe(true);
+  });
 });
 
 function collectIds(node: ReturnType<typeof nodeFromJson>): string[] {

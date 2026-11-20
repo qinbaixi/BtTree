@@ -167,4 +167,13 @@ describe('toCSharp', () => {
     const cs = render([], 'Selector - Root\r\nNext line');
     expect(cs).toContain('            // Selector - Root Next line\n            [1] = ');
   });
+
+  it('escapes Unicode line terminators in strings and guards int[] lists', () => {
+    expect(fieldLine([['a', 'a\u0085b\u2028c\u2029d']])).toBe(
+      '["a"] = "a\\u0085b\\u2028c\\u2029d",',
+    );
+    expect(render([['children', ['a', 'b']]])).toContain(
+      '["children"] = new object[] { "a", "b" },',
+    );
+  });
 });
