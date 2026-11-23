@@ -3,6 +3,6 @@ import { VERSION } from './index';
 
 describe('@owlbt/shared', () => {
   it('exports a version string', () => {
-    expect(VERSION).toBe('0.3.3');
+    expect(VERSION).toBe('0.3.4');
   });
 });
