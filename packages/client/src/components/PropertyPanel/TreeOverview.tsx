@@ -25,21 +25,30 @@ export function treeDirectory(treePath: string): string {
   if (index < 0) {
     return '.';
   }
-  return index === 0 ? treePath.slice(0, 1) : treePath.slice(0, index);
+  if (index === 0) {
+    return treePath.slice(0, 1);
+  }
+  if (index === 2 && /^[A-Za-z]:$/.test(treePath.slice(0, 2))) {
+    return treePath.slice(0, 3);
+  }
+  return treePath.slice(0, index);
 }
 
 const projectPaths = new Map<string, Promise<string | undefined>>();
 
 /**
- * Path of the project file that applies to a tree. Fetched once per tree path; failures
- * resolve to undefined (the project row is then hidden).
+ * Path of the project file that applies to a tree. Fetched once per tree path; transient errors
+ * evict the cache entry so a later render can retry.
  */
 export function loadProjectPath(treePath: string): Promise<string | undefined> {
   let cached = projectPaths.get(treePath);
   if (!cached) {
     cached = fetchWorkspace(treeDirectory(treePath)).then(
       (workspace) => workspace.projectPath,
-      () => undefined,
+      () => {
+        projectPaths.delete(treePath);
+        return undefined;
+      },
     );
     projectPaths.set(treePath, cached);
   }
@@ -245,8 +254,8 @@ function OverviewBody({ root, project }: OverviewBodyProps) {
         ) : (
           <>
             <ul className={styles.problemList}>
-              {shownProblems.map((problem) => (
-                <li key={`${problem.nodeId}:${problem.itemId ?? ''}:${problem.kind}`}>
+              {shownProblems.map((problem, index) => (
+                <li key={`${problem.nodeId}:${problem.itemId ?? ''}:${problem.kind}:${index}`}>
                   <ProblemButton problem={problem} />
                 </li>
               ))}

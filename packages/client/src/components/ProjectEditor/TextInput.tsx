@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type Ref } from 'react';
+import { useRef, useState, type KeyboardEvent, type Ref } from 'react';
 
 export interface TextInputProps {
   value: string;
@@ -33,10 +33,22 @@ export function TextInput({
   const [text, setText] = useState(value);
   // Follow the value from the store: adjust during render rather than in an effect.
   const [shown, setShown] = useState(value);
+  // Escape blurs synchronously before React re-renders; prevent blur from committing the reverted text.
+  const revertedRef = useRef(false);
   if (value !== shown) {
     setShown(value);
     setText(value);
   }
+
+  const handleBlur = () => {
+    if (revertedRef.current) {
+      revertedRef.current = false;
+      return;
+    }
+    if (text !== value) {
+      onCommit(text);
+    }
+  };
 
   if (multiline) {
     return (
@@ -48,9 +60,10 @@ export function TextInput({
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         onChange={(event) => (live ? onCommit(event.target.value) : setText(event.target.value))}
-        onBlur={live ? undefined : () => text !== value && onCommit(text)}
+        onBlur={live ? undefined : handleBlur}
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key === 'Escape' && !live) {
+            revertedRef.current = true;
             setText(value);
             (event.target as HTMLElement).blur();
           }
@@ -61,6 +74,7 @@ export function TextInput({
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
+      revertedRef.current = true;
       setText(value);
       event.currentTarget.blur();
     } else if (event.key === 'Enter') {
@@ -79,7 +93,7 @@ export function TextInput({
       aria-label={ariaLabel}
       aria-invalid={invalid || undefined}
       onChange={(event) => (live ? onCommit(event.target.value) : setText(event.target.value))}
-      onBlur={live ? undefined : () => text !== value && onCommit(text)}
+      onBlur={live ? undefined : handleBlur}
       onKeyDown={live ? undefined : onKeyDown}
     />
   );

@@ -9,7 +9,6 @@ import {
   useState,
 } from 'react';
 import {
-  findNode,
   getItemType,
   subtreeOwnerId,
   type CompiledProject,
@@ -28,6 +27,7 @@ import { treeStore, useTreeStore } from '../../store/treeStore';
 import {
   buildDepthMap,
   buildExportIdMap,
+  buildNodeMap,
   clampLogHeight,
   entryInfo,
   entryParts,
@@ -76,17 +76,19 @@ interface GroupProps {
   /** The run (pass) number changed since the previous tick. */
   passStart: boolean;
   root: TreeNode | undefined;
+  nodeMap: ReadonlyMap<string, TreeNode>;
   project: CompiledProject | undefined;
   depths: Map<string, number>;
   ids: ReadonlyMap<string, number>;
   overrides: RunOverrides;
   showIds: boolean;
-  expanded: boolean;
+  /** Explicit expand/collapse override for this tick; undefined follows errors-open default. */
+  expandedOverride: boolean | undefined;
   current: boolean;
   future: boolean;
-  breakpointHit: boolean;
+  breakpoints: ReadonlySet<string>;
   kinds: ReadonlySet<LogKind>;
-  onToggle(index: number): void;
+  onToggle(tickNumber: number, currentExpanded: boolean): void;
 }
 
 const TickGroup = memo(function TickGroup({
@@ -94,19 +96,27 @@ const TickGroup = memo(function TickGroup({
   tick,
   passStart,
   root,
+  nodeMap,
   project,
   depths,
   ids,
   overrides,
   showIds,
-  expanded,
+  expandedOverride,
   current,
   future,
-  breakpointHit,
+  breakpoints,
   kinds,
   onToggle,
 }: GroupProps) {
   const summary = useMemo(() => summarizeTick(tick, root), [tick, root]);
+  const expanded = expandedOverride ?? summary.errors > 0;
+  const breakpointHit = useMemo(
+    () =>
+      breakpoints.size > 0 &&
+      tick.log.some((entry) => entry.kind === 'enter' && breakpoints.has(entry.nodeId)),
+    [tick, breakpoints],
+  );
   const visible = useMemo(
     () => (expanded ? tick.log.filter((entry) => kinds.has(entry.kind)) : []),
     [expanded, tick, kinds],
@@ -116,7 +126,7 @@ const TickGroup = memo(function TickGroup({
   return (
     <li
       className={styles.group}
-      data-tick={index}
+      data-tick={tick.tick}
       data-current={current ? 'true' : undefined}
       data-future={future ? 'true' : undefined}
     >
@@ -131,7 +141,7 @@ const TickGroup = memo(function TickGroup({
           className={styles.groupToggle}
           aria-expanded={expanded}
           aria-label={t('Tick {tick}', { tick: tick.tick })}
-          onClick={() => onToggle(index)}
+          onClick={() => onToggle(tick.tick, expanded)}
         >
           <i
             className={`fa-solid ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} ${styles.chevron}`}
@@ -164,8 +174,8 @@ const TickGroup = memo(function TickGroup({
             ) : (
               <>
                 {summary.activeNodes.slice(0, MAX_ACTIVE).map((id, i) => {
-                  const node = root ? findNode(root, id) : undefined;
-                  const info = nodeInfo(root, project, ids, overrides, id);
+                  const node = nodeMap.get(id);
+                  const info = nodeInfo(root, project, ids, overrides, id, nodeMap);
                   const waiting = summary.manualPending === id;
                   const full = [
                     info.exportId !== undefined ? `#${info.exportId}` : '',
@@ -255,7 +265,7 @@ const TickGroup = memo(function TickGroup({
         <button
           type="button"
           className={styles.viewButton}
-          aria-label={t('View tick {tick}', { tick: index })}
+          aria-label={t('View tick {tick}', { tick: tick.tick })}
           title={t('Show this tick on the canvas')}
           onClick={() => runStore.getState().seek(index)}
         >
@@ -263,7 +273,7 @@ const TickGroup = memo(function TickGroup({
         </button>
       </div>
       {expanded && (
-        <ul className={styles.trace} aria-label={t('Tick {tick} entries', { tick: index })}>
+        <ul className={styles.trace} aria-label={t('Tick {tick} entries', { tick: tick.tick })}>
           {visible.length === 0 && (
             <li className={styles.traceEmpty}>{t('No entries to show.')}</li>
           )}
@@ -272,6 +282,7 @@ const TickGroup = memo(function TickGroup({
               key={i}
               entry={entry}
               root={root}
+              nodeMap={nodeMap}
               project={project}
               ids={ids}
               overrides={overrides}
@@ -320,6 +331,7 @@ function iconFor(entry: LogEntry): { icon: string; tone: string } {
 function TraceLine({
   entry,
   root,
+  nodeMap,
   project,
   ids,
   overrides,
@@ -328,6 +340,7 @@ function TraceLine({
 }: {
   entry: LogEntry;
   root: TreeNode | undefined;
+  nodeMap: ReadonlyMap<string, TreeNode>;
   project: CompiledProject | undefined;
   ids: ReadonlyMap<string, number>;
   overrides: RunOverrides;
@@ -335,8 +348,8 @@ function TraceLine({
   depth: number;
 }) {
   const { icon, tone } = iconFor(entry);
-  const parts = entryParts(root, entry);
-  const info = entryInfo(root, project, ids, overrides, entry);
+  const parts = entryParts(root, entry, nodeMap);
+  const info = entryInfo(root, project, ids, overrides, entry, nodeMap);
   const description = entry.kind === 'enter' ? info.description : undefined;
   const change = entry.kind === 'blackboard' ? parseBlackboardMessage(entry.message) : undefined;
   return (
@@ -428,6 +441,7 @@ export default function RunLog() {
   const last = Math.max(0, history.length - 1);
   const live = viewIndex >= last;
   const depths = useMemo(() => buildDepthMap(root), [root]);
+  const nodeMap = useMemo(() => buildNodeMap(root), [root]);
   const ids = useMemo(() => buildExportIdMap(treeRoot), [treeRoot]);
 
   useLayoutEffect(() => {
@@ -440,43 +454,28 @@ export default function RunLog() {
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const errorTicks = useMemo(() => {
-    const set = new Set<number>();
-    history.forEach((tick, i) => {
-      if (tick.log.some((entry) => entry.kind === 'error')) set.add(i);
-    });
-    return set;
-  }, [history]);
-
   const toggle = useCallback(
-    (index: number) =>
+    (tickNumber: number, currentExpanded: boolean) =>
       setOverrides((current) => {
         const next = new Map(current);
-        next.set(index, !(current.get(index) ?? errorTicks.has(index)));
+        next.set(tickNumber, !currentExpanded);
         return next;
       }),
-    [errorTicks],
+    [],
   );
   const setAll = (open: boolean): void => {
     const next = new Map<number, boolean>();
-    for (let i = floor; i < history.length; i++) next.set(i, open);
+    for (let i = floor; i < history.length; i++) next.set(history[i].tick, open);
     setOverrides(next);
   };
 
-  // Newest ticks only; the replayed tick stays reachable.
-  const first = Math.max(floor, history.length - limit);
-  const start = viewIndex >= floor && viewIndex < first ? viewIndex : first;
-
-  const breakpointTicks = useMemo(() => {
-    const set = new Set<number>();
-    if (breakpoints.size === 0) return set;
-    history.forEach((tick, i) => {
-      if (tick.log.some((entry) => entry.kind === 'enter' && breakpoints.has(entry.nodeId))) {
-        set.add(i);
-      }
-    });
-    return set;
-  }, [history, breakpoints]);
+  // Keep a bounded window around the viewed tick so scrubbing early in a 5000-tick run stays fast.
+  const defaultStart = Math.max(floor, history.length - limit);
+  const end =
+    viewIndex >= floor && viewIndex < defaultStart
+      ? Math.min(history.length, Math.max(viewIndex + Math.floor(limit / 2), floor + limit))
+      : history.length;
+  const start = Math.max(floor, end - limit);
 
   // Follow the newest ticks while the user is at the bottom.
   useLayoutEffect(() => {
@@ -487,11 +486,12 @@ export default function RunLog() {
   }, [history.length, live, collapsed, overrides]);
 
   // Bring the replayed tick into view.
+  const viewTick = history[viewIndex]?.tick;
   useEffect(() => {
-    if (live || collapsed) return;
-    const group = listRef.current?.querySelector(`[data-tick="${viewIndex}"]`);
+    if (live || collapsed || viewTick === undefined) return;
+    const group = listRef.current?.querySelector(`[data-tick="${viewTick}"]`);
     (group as HTMLElement | null)?.scrollIntoView?.({ block: 'nearest' });
-  }, [viewIndex, live, collapsed]);
+  }, [viewTick, live, collapsed]);
 
   const toggleKind = (kind: LogKind): void => {
     setKinds((current) => {
@@ -507,13 +507,16 @@ export default function RunLog() {
 
   const effectiveHeight = clampLogHeight(height, area);
   const resize = (value: number): void => {
+    setHeight(clampLogHeight(value, area));
+  };
+  const commitHeight = (value: number): void => {
     const clamped = clampLogHeight(value, area);
     setHeight(clamped);
     setJson(LOG_HEIGHT_STORAGE_KEY, clamped);
   };
 
   const groups: number[] = [];
-  for (let i = start; i < history.length; i++) groups.push(i);
+  for (let i = start; i < end; i++) groups.push(i);
 
   return (
     <div
@@ -526,6 +529,7 @@ export default function RunLog() {
           orientation="horizontal"
           value={effectiveHeight}
           onResize={resize}
+          onCommit={commitHeight}
           min={LOG_MIN_HEIGHT}
           max={Math.max(LOG_MIN_HEIGHT, Math.floor(area * LOG_MAX_RATIO))}
           defaultValue={LOG_DEFAULT_HEIGHT}
@@ -625,26 +629,30 @@ export default function RunLog() {
             </li>
           )}
           {groups.length === 0 && <li className={styles.logEmpty}>{t('No log entries yet.')}</li>}
-          {groups.map((index) => (
-            <TickGroup
-              key={index}
-              index={index}
-              tick={history[index]}
-              passStart={index > 0 && history[index - 1].pass !== history[index].pass}
-              root={root}
-              project={project}
-              depths={depths}
-              ids={ids}
-              overrides={propOverrides}
-              showIds={showIds}
-              expanded={overrides.get(index) ?? errorTicks.has(index)}
-              current={index === viewIndex}
-              future={index > viewIndex}
-              breakpointHit={breakpointTicks.has(index)}
-              kinds={kinds}
-              onToggle={toggle}
-            />
-          ))}
+          {groups.map((index) => {
+            const tick = history[index];
+            return (
+              <TickGroup
+                key={tick.tick}
+                index={index}
+                tick={tick}
+                passStart={index > 0 && history[index - 1].pass !== tick.pass}
+                root={root}
+                nodeMap={nodeMap}
+                project={project}
+                depths={depths}
+                ids={ids}
+                overrides={propOverrides}
+                showIds={showIds}
+                expandedOverride={overrides.get(tick.tick)}
+                current={index === viewIndex}
+                future={index > viewIndex}
+                breakpoints={breakpoints}
+                kinds={kinds}
+                onToggle={toggle}
+              />
+            );
+          })}
         </ul>
       )}
     </div>

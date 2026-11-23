@@ -533,5 +533,49 @@ describe('run mode components', () => {
       render(<RunLog />);
       expect(screen.getByTestId('log-dropped').textContent).toBe('Older ticks were dropped');
     });
+
+    it('keys tick groups and aria labels by tick.tick rather than array index after dropping', () => {
+      load(loopTree);
+      runStore.getState().enter();
+      runStore.getState().step();
+      const shifted = runStore.getState().history[1];
+      runStore.setState({
+        dropped: 50,
+        history: [{ ...shifted, tick: 51 }],
+        viewIndex: 0,
+      });
+      render(<RunLog />);
+      expect(screen.getByRole('button', { name: 'View tick 51' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Tick 51' }));
+      expect(screen.getByRole('list', { name: 'Tick 51 entries' })).toBeTruthy();
+    });
+
+    it('supports switching to (custom) scenario and clearing/negative typing in ParamRow', () => {
+      load({
+        type: 'Sequence',
+        childNodes: [{ type: 'Wait', properties: [{ name: 'Duration', value: 4 }] }],
+      });
+      const wait = root.childNodes[0];
+      treeStore.setState({ selection: { kind: 'node', nodeId: wait.id } });
+      runStore.getState().enter();
+      render(<RunPanel />);
+
+      const select = screen.getByLabelText('Scenario') as HTMLSelectElement;
+      expect(select.value).toBe('Armed');
+      fireEvent.change(select, { target: { value: '' } });
+      expect(runStore.getState().selectedScenario).toBeUndefined();
+
+      const input = screen.getByLabelText('Override Duration') as HTMLInputElement;
+      fireEvent.change(input, { target: { value: '' } });
+      expect(input.value).toBe('');
+      fireEvent.change(input, { target: { value: '10' } });
+      expect(runStore.getState().overrides).toEqual({ [wait.id]: { Duration: 10 } });
+      // Clearing an existing override keeps the field empty while editing, then restores base on blur.
+      fireEvent.change(input, { target: { value: '' } });
+      expect(input.value).toBe('');
+      expect(runStore.getState().overrides).toEqual({});
+      fireEvent.blur(input);
+      expect(input.value).toBe('4');
+    });
   });
 });

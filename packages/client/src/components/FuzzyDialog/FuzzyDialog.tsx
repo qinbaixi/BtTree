@@ -75,6 +75,19 @@ export function FuzzyDialog({
       onClose();
       return;
     }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      clearTimeout(timer.current);
+      if (filter !== query) {
+        const fresh = fuzzyFilter(items, query, (item) => item.name);
+        if (fresh.length > 0) {
+          onAccept(fresh[0].id);
+        }
+      } else if (active >= 0 && matches[active]) {
+        onAccept(matches[active].id);
+      }
+      return;
+    }
     if (matches.length === 0) {
       return;
     }
@@ -84,9 +97,6 @@ export function FuzzyDialog({
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
       setIndex((active - 1 + matches.length) % matches.length);
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      onAccept(matches[active].id);
     }
   };
 

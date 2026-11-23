@@ -96,6 +96,8 @@ function ScenarioSection() {
           onChange={(event) => {
             if (event.target.value) {
               runStore.getState().loadScenario(event.target.value);
+            } else {
+              runStore.setState({ selectedScenario: undefined });
             }
           }}
         >
@@ -133,7 +135,12 @@ interface ValueInputProps {
 
 /** Typed value editor. Text is kept locally while typing and committed when it parses. */
 function ValueInput({ value, type, disabled, label, onCommit }: ValueInputProps) {
-  const external = value === null || value === undefined ? '' : String(value);
+  const external =
+    value === null || value === undefined
+      ? ''
+      : typeof value === 'object'
+        ? JSON.stringify(value)
+        : String(value);
   const [text, setText] = useState(external);
 
   useEffect(() => {
@@ -185,14 +192,19 @@ function BlackboardSection() {
   const store = runStore.getState();
 
   const values = viewed?.blackboard ?? {};
-  const entryKeys = new Set(entries.map((entry) => entry.key));
+  const entryKeys = new Set(entries.map((entry) => entry.key.trim()).filter((key) => key !== ''));
   const missingDeclared = declared.filter((key) => !entryKeys.has(key.name));
   // Keys created at runtime (by effects) that are not part of the start blackboard.
   const runtimeKeys = Object.keys(values).filter((key) => !entryKeys.has(key));
 
-  const changed = (key: string): boolean =>
-    previous !== undefined &&
-    JSON.stringify(previous.blackboard[key]) !== JSON.stringify(values[key]);
+  const changed = (key: string): boolean => {
+    const trimmed = key.trim();
+    return (
+      trimmed !== '' &&
+      previous !== undefined &&
+      JSON.stringify(previous.blackboard[trimmed]) !== JSON.stringify(values[trimmed])
+    );
+  };
 
   const duplicate = (key: string): boolean =>
     key.trim() !== '' && entries.filter((entry) => entry.key.trim() === key.trim()).length > 1;
@@ -207,7 +219,11 @@ function BlackboardSection() {
       </p>
       <ul className={styles.bbList}>
         {entries.map((entry, index) => {
-          const shown = Object.hasOwn(values, entry.key) ? values[entry.key] : entry.value;
+          const trimmedKey = entry.key.trim();
+          const shown =
+            trimmedKey !== '' && Object.hasOwn(values, trimmedKey)
+              ? values[trimmedKey]
+              : entry.value;
           const type = inferValueType(shown);
           return (
             <li
@@ -232,10 +248,9 @@ function BlackboardSection() {
                 value={type}
                 disabled={!live}
                 onChange={(event) =>
-                  store.setBlackboardValue(
-                    entry.key,
-                    convertValue(shown, event.target.value as ValueType),
-                  )
+                  store.updateBlackboardEntry(index, {
+                    value: convertValue(shown, event.target.value as ValueType),
+                  })
                 }
               >
                 {VALUE_TYPES.map((valueType) => (
@@ -249,7 +264,7 @@ function BlackboardSection() {
                 type={type}
                 label={t('Value of {key}', { key: entry.key })}
                 disabled={!live}
-                onCommit={(value) => store.setBlackboardValue(entry.key, value)}
+                onCommit={(value) => store.updateBlackboardEntry(index, { value })}
               />
               <button
                 type="button"
@@ -379,6 +394,19 @@ interface ParamRowProps {
 function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
   const store = runStore.getState();
   const shown = overridden ? value : base;
+  const external = shown === undefined || shown === null ? '' : String(shown);
+  const [text, setText] = useState(external);
+  const [prevExternal, setPrevExternal] = useState(external);
+  const [allowEmpty, setAllowEmpty] = useState(false);
+
+  if (external !== prevExternal) {
+    setPrevExternal(external);
+    if (!allowEmpty) {
+      setText(external);
+    }
+    setAllowEmpty(false);
+  }
+
   const set = (next: unknown): void => store.setOverride(itemId, prop.name, next);
   const clear = (): void => store.setOverride(itemId, prop.name, undefined);
 
@@ -412,19 +440,26 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
       <input
         type={prop.type === 'number' ? 'number' : 'text'}
         aria-label={t('Override {name}', { name: prop.name })}
-        value={shown === undefined || shown === null ? '' : String(shown)}
+        value={text}
         placeholder={base === undefined ? '' : String(base)}
         onChange={(event) => {
           const raw = event.target.value;
+          setText(raw);
           if (raw === '') {
-            clear();
+            if (overridden) {
+              setAllowEmpty(true);
+              clear();
+            }
           } else if (prop.type === 'number') {
-            const num = Number(raw);
-            if (Number.isFinite(num)) set(num);
+            if (raw !== '-') {
+              const num = Number(raw);
+              if (Number.isFinite(num)) set(num);
+            }
           } else {
             set(raw);
           }
         }}
+        onBlur={() => setText(external)}
       />
     );
   }

@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { validateProjectFile, type ProjectIssue } from '@owlbt/shared';
+import AlertPanel from '../components/AlertPanel/AlertPanel';
 import { isEditableTarget, matchesHotkey } from '../commands/useHotkeys';
 import { BlackboardView } from '../components/ProjectEditor/BlackboardView';
 import { CustomTypesView } from '../components/ProjectEditor/CustomTypesView';
 import { ExportSettingsView } from '../components/ProjectEditor/ExportSettingsView';
 import { ScenariosView } from '../components/ProjectEditor/ScenariosView';
 import { ProblemsBar } from '../components/ProjectEditor/ProblemsBar';
-import { ReferenceUpdateBanner } from '../components/ProjectEditor/ReferenceUpdateBanner';
+import {
+  confirmLeaveProject,
+  ReferenceUpdateBanner,
+} from '../components/ProjectEditor/ReferenceUpdateBanner';
 import { TypeForm } from '../components/ProjectEditor/TypeForm';
 import { TypeList } from '../components/ProjectEditor/TypeList';
 import { TypePreview } from '../components/ProjectEditor/TypePreview';
@@ -135,6 +139,9 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
   // Hotkeys: Ctrl+S saves (also from fields), undo/redo and Ctrl+F only outside text fields.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) {
+        return;
+      }
       const store = projectEditorStore.getState();
       if (store.conflict) {
         return;
@@ -249,7 +256,16 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
         </ul>
         <ol className={styles.breadcrumb}>
           <li>
-            <Link to="/">{t('Home')}</Link>
+            <Link
+              to="/"
+              onClick={(event) => {
+                if (!confirmLeaveProject()) {
+                  event.preventDefault();
+                }
+              }}
+            >
+              {t('Home')}
+            </Link>
           </li>
           <li title={projectPath ?? path}>{fileName}</li>
           <li className={styles.active}>
@@ -279,6 +295,7 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
           </div>
         )}
         <ReferenceUpdateBanner />
+        <AlertPanel />
       </div>
 
       {loadError !== undefined && !draft ? (
@@ -297,7 +314,11 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
             <CenterPanel selection={selection} />
           </section>
           {selection?.view === 'type' && (
-            <PanelResizer value={previewWidth} onResize={setPreviewWidth} />
+            <PanelResizer
+              value={previewWidth}
+              onResize={(v) => setPreviewWidth(v, false)}
+              onCommit={(v) => setPreviewWidth(v, true)}
+            />
           )}
           {selection?.view === 'type' && (
             <TypePreview

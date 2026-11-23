@@ -113,17 +113,27 @@ export default function TabBar({ store = appTabsStore, onOpenTree }: TabBarProps
 }
 
 function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseChoice): void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const previous = document.activeElement;
     saveRef.current?.focus();
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onAnswer('cancel');
+      }
+    };
+    window.addEventListener('keydown', onWindowKeyDown, true);
     return () => {
+      window.removeEventListener('keydown', onWindowKeyDown, true);
       if (previous instanceof HTMLElement) {
         previous.focus();
       }
     };
-  }, []);
+  }, [onAnswer]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     // Keeps the editor hotkeys (window listeners) away while the question is open.
@@ -131,12 +141,27 @@ function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseC
     if (event.key === 'Escape') {
       event.preventDefault();
       onAnswer('cancel');
+    } else if (event.key === 'Tab') {
+      const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+      if (!buttons || buttons.length === 0) {
+        return;
+      }
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     }
   };
 
   return (
     <div className={styles.backdrop} onMouseDown={() => onAnswer('cancel')}>
       <div
+        ref={dialogRef}
         className={styles.dialog}
         role="alertdialog"
         aria-modal="true"

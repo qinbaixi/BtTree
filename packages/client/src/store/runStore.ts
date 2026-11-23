@@ -675,8 +675,12 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         if (index < 0 || index >= blackboard.length) {
           return;
         }
+        const updated = { ...blackboard[index], ...patch };
+        const trimmed = updated.key.trim();
+        const touched = 'value' in patch && trimmed !== '' ? [trimmed] : [];
         editBlackboard(
-          blackboard.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
+          blackboard.map((entry, i) => (i === index ? updated : entry)),
+          touched,
         );
       },
 

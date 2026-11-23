@@ -79,7 +79,7 @@ export function BlackboardEditor({ values, scope, addLabel, onChange }: Blackboa
               <span className={styles.muted}>null</span>
             ) : (
               <TextInput
-                value={String(value)}
+                value={typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value)}
                 ariaLabel={t('Value of {key} in {scope}', { key, scope })}
                 className={styles.input}
                 onCommit={(text) => {

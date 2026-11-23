@@ -316,4 +316,19 @@ describe('TreeCanvas drag and drop', () => {
     expect(treeStore.getState().undoStack).toHaveLength(0);
     expect(container.querySelector('[data-drop-indicator]')).toBeNull();
   });
+
+  it('cancels an active drag when the window loses focus', () => {
+    const { container } = render(<TreeCanvas />);
+    const ids = nodeIds();
+    const order = [ids.first, ids.group, ids.last];
+    placeCards(container, order);
+    stubHit(container, order);
+
+    drag(container, ids.last, 10);
+    expect(container.querySelector('[data-drop-indicator="line"]')).not.toBeNull();
+    fireEvent.blur(window);
+    expect(container.querySelector('[data-drop-indicator]')).toBeNull();
+    expect(card(container, ids.last)!.getAttribute('data-dragging')).toBeNull();
+    expect(treeStore.getState().undoStack).toHaveLength(0);
+  });
 });

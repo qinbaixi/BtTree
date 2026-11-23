@@ -109,4 +109,29 @@ describe('TabBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open tree…' }));
     expect(onOpenTree).toHaveBeenCalledTimes(1);
   });
+
+  it('cancels the close dialog on window Escape and traps Tab focus within its buttons', async () => {
+    const { tree } = await setup();
+    act(() => {
+      tree.getState().apply('Edit', (draft) => {
+        draft.label = 'changed';
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close b.json' }));
+    const dialog = screen.getByRole('alertdialog');
+    const saveBtn = screen.getByRole('button', { name: 'Save' });
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    expect(document.activeElement).toBe(saveBtn);
+
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(cancelBtn);
+    fireEvent.keyDown(dialog, { key: 'Tab' });
+    expect(document.activeElement).toBe(saveBtn);
+
+    // Even if focus leaves the dialog, Escape on window still cancels it.
+    saveBtn.blur();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await act(async () => undefined);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
 });

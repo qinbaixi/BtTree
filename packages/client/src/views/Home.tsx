@@ -26,6 +26,7 @@ import {
   setJson,
   setStorageItem,
 } from '../lib/storage';
+import AlertPanel from '../components/AlertPanel/AlertPanel';
 import { alerts } from '../store/alertStore';
 import { setTheme, themeLabel, useTheme, type ThemeId } from '../lib/theme';
 import { getLanguage, isLanguage, LANGUAGES, switchLanguage, t } from '../i18n';
@@ -212,6 +213,14 @@ function WorkspacePanel({
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<ExportProjectResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const [pluginExport, setPluginExport] = useState<{
     projectPath: string;
@@ -265,11 +274,18 @@ function WorkspacePanel({
     setExportError(null);
     setExportResult(null);
     try {
-      setExportResult(await exportProject(dir, selectedFormats));
+      const result = await exportProject(dir, selectedFormats);
+      if (mountedRef.current) {
+        setExportResult(result);
+      }
     } catch (err) {
-      setExportError(errorMessage(err));
+      if (mountedRef.current) {
+        setExportError(errorMessage(err));
+      }
     } finally {
-      setExporting(false);
+      if (mountedRef.current) {
+        setExporting(false);
+      }
     }
   };
 
@@ -277,11 +293,18 @@ function WorkspacePanel({
     setInitializing(true);
     setInitError(null);
     try {
-      onWorkspace(await initProject(dir));
+      const initialized = await initProject(dir);
+      if (mountedRef.current) {
+        onWorkspace(initialized);
+      }
     } catch (err) {
-      setInitError(errorMessage(err));
+      if (mountedRef.current) {
+        setInitError(errorMessage(err));
+      }
     } finally {
-      setInitializing(false);
+      if (mountedRef.current) {
+        setInitializing(false);
+      }
     }
   };
 
@@ -295,10 +318,14 @@ function WorkspacePanel({
     setCreateError(null);
     try {
       const created = await createTree(joinPath(dir, name));
-      navigate(editorUrl(created.path));
+      if (mountedRef.current) {
+        navigate(editorUrl(created.path));
+      }
     } catch (err) {
-      setCreateError(errorMessage(err));
-      setCreating(false);
+      if (mountedRef.current) {
+        setCreateError(errorMessage(err));
+        setCreating(false);
+      }
     }
   };
 
@@ -647,6 +674,7 @@ export default function Home() {
       </div>
 
       <div className={styles.body}>
+        <AlertPanel />
         {notice !== null && (
           <div role="alert" className={styles.notice}>
             {notice}
@@ -655,6 +683,7 @@ export default function Home() {
 
         {folder !== null && (
           <WorkspacePanel
+            key={folder}
             folder={folder}
             workspace={workspace}
             loading={loading}

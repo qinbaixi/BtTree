@@ -71,8 +71,11 @@ export default function Editor() {
     tabs.init();
     if (treePath) {
       tabs.open(treePath);
-    } else if (tabs.activeId !== undefined) {
-      tabs.activate(tabs.activeId);
+    } else {
+      const restored = tabsStore.getState().activeId;
+      if (restored !== undefined) {
+        tabsStore.getState().activate(restored);
+      }
     }
   }, [treePath]);
 
@@ -85,7 +88,7 @@ export default function Editor() {
     const active = selectActiveTab(state);
     if (!active) {
       void navigate('/');
-    } else if (active.path !== treePath) {
+    } else if (!samePath(active.path, treePath)) {
       void navigate(editorUrl(active.path), { replace: true });
     }
   }, [activeTab, treePath, navigate]);
