@@ -119,6 +119,14 @@ function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseC
   useEffect(() => {
     const previous = document.activeElement;
     saveRef.current?.focus();
+    return () => {
+      if (previous instanceof HTMLElement) {
+        previous.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -129,9 +137,6 @@ function CloseDialog({ name, onAnswer }: { name: string; onAnswer(choice: CloseC
     window.addEventListener('keydown', onWindowKeyDown, true);
     return () => {
       window.removeEventListener('keydown', onWindowKeyDown, true);
-      if (previous instanceof HTMLElement) {
-        previous.focus();
-      }
     };
   }, [onAnswer]);
 

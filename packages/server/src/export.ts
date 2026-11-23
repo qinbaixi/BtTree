@@ -524,7 +524,8 @@ async function exportTreeIn(
       return { ...result, error: output.error };
     }
     const { path, baseName } = output;
-    const allowedRoot = options.outDir !== undefined ? resolve(options.outDir) : project.dir;
+    const allowedRoot =
+      options.outDir !== undefined ? resolve(project.dir, options.outDir) : project.dir;
     if (!(await isRealPathInDir(path, allowedRoot))) {
       return { ...result, error: `Export path escapes allowed directory: ${path}` };
     }

@@ -756,12 +756,16 @@ export function canAddBase(file: ProjectFile, kind: ItemKind, name: string, base
   return true;
 }
 
-/** Names of types of `kind` that can be added as a base of `name` without creating a cycle (O(T + E)). */
+/** Names of types of `kind` that can be added as a new base of `name` without creating a cycle (O(T + E)). */
 export function availableBaseTypes(file: ProjectFile, kind: ItemKind, name: string): string[] {
   const list = getTypes(file, kind);
   const childrenOf = new Map<string, string[]>();
+  let selfDesc: ItemTypeDescJson | undefined;
   for (const desc of list) {
     if (!desc || typeof desc.name !== 'string') continue;
+    if (desc.name === name && selfDesc === undefined) {
+      selfDesc = desc;
+    }
     for (const base of basesOf(desc)) {
       let children = childrenOf.get(base);
       if (!children) {
@@ -783,9 +787,22 @@ export function availableBaseTypes(file: ProjectFile, kind: ItemKind, name: stri
       }
     }
   }
-  return list
-    .filter((desc) => desc && typeof desc.name === 'string' && !forbidden.has(desc.name))
-    .map((desc) => desc.name);
+  // Types already listed as direct bases of `name` cannot be added a second time.
+  // Added after the descendant DFS so pre-existing cycles still exclude every transitive subtype.
+  if (selfDesc) {
+    for (const base of basesOf(selfDesc)) {
+      forbidden.add(base);
+    }
+  }
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const desc of list) {
+    if (desc && typeof desc.name === 'string' && !forbidden.has(desc.name) && !seen.has(desc.name)) {
+      seen.add(desc.name);
+      result.push(desc.name);
+    }
+  }
+  return result;
 }
 
 /** Replaces the bases of a type. One base is stored as a string, several as an array, none removes the field. */

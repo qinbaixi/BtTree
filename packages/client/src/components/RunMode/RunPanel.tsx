@@ -395,6 +395,7 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
   const store = runStore.getState();
   const shown = overridden ? value : base;
   const external = shown === undefined || shown === null ? '' : String(shown);
+  const baseText = base === undefined || base === null ? '' : String(base);
   const [text, setText] = useState(external);
   const [prevExternal, setPrevExternal] = useState(external);
   const [allowEmpty, setAllowEmpty] = useState(false);
@@ -447,19 +448,27 @@ function ParamRow({ itemId, prop, base, overridden, value }: ParamRowProps) {
           setText(raw);
           if (raw === '') {
             if (overridden) {
-              setAllowEmpty(true);
+              if (baseText !== external) {
+                setAllowEmpty(true);
+              }
               clear();
             }
-          } else if (prop.type === 'number') {
-            if (raw !== '-') {
-              const num = Number(raw);
-              if (Number.isFinite(num)) set(num);
-            }
           } else {
-            set(raw);
+            setAllowEmpty(false);
+            if (prop.type === 'number') {
+              if (raw !== '-') {
+                const num = Number(raw);
+                if (Number.isFinite(num)) set(num);
+              }
+            } else {
+              set(raw);
+            }
           }
         }}
-        onBlur={() => setText(external)}
+        onBlur={() => {
+          setAllowEmpty(false);
+          setText(external);
+        }}
       />
     );
   }

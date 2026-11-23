@@ -373,6 +373,28 @@ describe('projectEditorStore', () => {
       emitSocket({ error: 'late' });
       expect(store.getState().externalError).toBe('from socket');
     });
+
+    it('completes an in-flight load when connect() runs immediately after load(), and cancels on disconnect()', async () => {
+      let resolveMeta: ((value: ProjectMeta) => void) | undefined;
+      const { store, fetchMeta } = setup();
+      fetchMeta.mockImplementation(
+        () =>
+          new Promise<ProjectMeta>((resolve) => {
+            resolveMeta = resolve;
+          }),
+      );
+      const pending = store.getState().load(PATH);
+      store.getState().connect(PATH);
+      resolveMeta?.(meta(PROJECT));
+      await pending;
+      expect(store.getState().draft?.nodes?.map((n) => n.name)).toContain('Wait');
+
+      const cancelled = store.getState().load(PATH);
+      store.getState().disconnect();
+      resolveMeta?.(meta(PROJECT));
+      await cancelled;
+      expect(store.getState().draft).toBeUndefined();
+    });
   });
 });
 

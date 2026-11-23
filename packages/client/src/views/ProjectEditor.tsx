@@ -101,7 +101,10 @@ function ProjectEditorPage({ path, from, typeParam }: ProjectEditorPageProps) {
     alertStore.getState().clear();
     void store.load(path);
     store.connect(path);
-    return () => store.disconnect();
+    return () => {
+      store.disconnect();
+      projectEditorStore.setState({ dirty: false });
+    };
   }, [path]);
 
   // Select the type named in the URL once the project is available.

@@ -33,9 +33,9 @@ async function setup() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   const onOpenTree = vi.fn();
-  render(<TabBar store={store} onOpenTree={onOpenTree} />);
+  const rendered = render(<TabBar store={store} onOpenTree={onOpenTree} />);
   const tab = (name: string) => screen.getByRole('tab', { name: new RegExp(`^${name}`) });
-  return { store, tree, onOpenTree, tab };
+  return { store, tree, onOpenTree, tab, rerender: rendered.rerender };
 }
 
 describe('TabBar', () => {
@@ -133,5 +133,21 @@ describe('TabBar', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     await act(async () => undefined);
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('does not steal focus back to Save when TabBar re-renders while the close dialog is open', async () => {
+    const { store, tree, rerender } = await setup();
+    act(() => {
+      tree.getState().apply('Edit', (draft) => {
+        draft.label = 'changed';
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Close b.json' }));
+    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    cancelBtn.focus();
+    expect(document.activeElement).toBe(cancelBtn);
+
+    rerender(<TabBar store={store} onOpenTree={vi.fn()} />);
+    expect(document.activeElement).toBe(cancelBtn);
   });
 });

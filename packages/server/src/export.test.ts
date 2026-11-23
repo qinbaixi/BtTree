@@ -104,6 +104,13 @@ describe('exportTree and exportProject', () => {
     const overridden = join(root, 'override');
     const forced = await exportTree(treePath, ['lua'], { outDir: overridden });
     expect(forced.files).toEqual([{ format: 'lua', path: join(overridden, 'a.lua') }]);
+
+    // Relative outDir option resolves against the project folder consistently with outputFile().
+    const relativeOut = await exportTree(treePath, ['lua'], { outDir: 'rel-override' });
+    expect(relativeOut.error).toBeUndefined();
+    expect(relativeOut.files).toEqual([
+      { format: 'lua', path: join(root, 'rel-override', 'a.lua') },
+    ]);
   });
 
   it('writes TypeScript and C# files to the default folders', async () => {

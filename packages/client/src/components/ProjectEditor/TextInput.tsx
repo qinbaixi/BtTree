@@ -40,6 +40,15 @@ export function TextInput({
     setText(value);
   }
 
+  const handleChange = (next: string) => {
+    revertedRef.current = false;
+    if (live) {
+      onCommit(next);
+    } else {
+      setText(next);
+    }
+  };
+
   const handleBlur = () => {
     if (revertedRef.current) {
       revertedRef.current = false;
@@ -59,7 +68,7 @@ export function TextInput({
         placeholder={placeholder}
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
-        onChange={(event) => (live ? onCommit(event.target.value) : setText(event.target.value))}
+        onChange={(event) => handleChange(event.target.value)}
         onBlur={live ? undefined : handleBlur}
         onKeyDown={(event: KeyboardEvent) => {
           if (event.key === 'Escape' && !live) {
@@ -92,7 +101,7 @@ export function TextInput({
       placeholder={placeholder}
       aria-label={ariaLabel}
       aria-invalid={invalid || undefined}
-      onChange={(event) => (live ? onCommit(event.target.value) : setText(event.target.value))}
+      onChange={(event) => handleChange(event.target.value)}
       onBlur={live ? undefined : handleBlur}
       onKeyDown={live ? undefined : onKeyDown}
     />

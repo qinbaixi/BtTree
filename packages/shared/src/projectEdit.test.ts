@@ -681,5 +681,21 @@ describe('reserved type names', () => {
     expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Wait');
     expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Derived');
     expect(availableBaseTypes(file, 'node', 'Base')).not.toContain('Base');
+    // Existing direct bases of a type must not be offered again.
+    expect(availableBaseTypes(file, 'node', 'Wait')).not.toContain('Base');
+    expect(availableBaseTypes(file, 'node', 'Wait')).not.toContain('Wait');
+    expect(availableBaseTypes(file, 'node', 'Wait')).not.toContain('Derived');
+    expect(availableBaseTypes(file, 'node', 'Wait')).toContain('Selector');
+    // Even with a pre-existing cycle in a broken draft, transitive subtypes stay excluded.
+    const cyclic: ProjectFile = {
+      nodes: [
+        { name: 'A', base: 'B' },
+        { name: 'B', base: 'C' },
+        { name: 'C', base: 'A' },
+        { name: 'D', base: 'B' },
+        { name: 'Other' },
+      ],
+    };
+    expect(availableBaseTypes(cyclic, 'node', 'A')).toEqual(['Other']);
   });
 });

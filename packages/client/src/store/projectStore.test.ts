@@ -221,4 +221,48 @@ describe('projectStore', () => {
     expect(store.getState().project?.nodes.Fresh).toBeDefined();
     expect(store.getState().project?.nodes.Wait).toBeUndefined();
   });
+
+  it('completes an in-flight load when connect() is called immediately after load()', async () => {
+    let resolveLoad: ((text: string) => void) | undefined;
+    const socket = createFakeSocket();
+    const store = createProjectStore({
+      fetchProject: vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveLoad = resolve;
+          }),
+      ),
+      createSocket: () => socket,
+    });
+
+    // Exact call order used by Editor.tsx on mount.
+    const pending = store.getState().load('/trees/a.json');
+    store.getState().connect('/trees/a.json');
+    resolveLoad?.(PROJECT_JSON);
+    await pending;
+
+    expect(store.getState().project?.nodes.Wait).toBeDefined();
+    expect(store.getState().version).toBe(1);
+    expect(store.getState().error).toBeUndefined();
+  });
+
+  it('clears the previous project even when connect() runs before load() for a different tree', async () => {
+    const fetchProject = vi
+      .fn()
+      .mockResolvedValueOnce(PROJECT_JSON)
+      .mockRejectedValueOnce(new Error('No project'));
+    const store = createProjectStore({
+      fetchProject,
+      createSocket: () => createFakeSocket(),
+    });
+
+    await store.getState().load('/projA/t.json');
+    expect(store.getState().project).toBeDefined();
+
+    store.getState().connect('/projB/t.json');
+    await store.getState().load('/projB/t.json');
+    expect(store.getState().project).toBeUndefined();
+    expect(store.getState().scenarios).toEqual([]);
+    expect(store.getState().error).toBe('No project');
+  });
 });

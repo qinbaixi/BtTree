@@ -1,7 +1,9 @@
+import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PROJECT_JSON, TREE_JSON } from '../test/fixtures';
+import { projectStore } from '../store/projectStore';
 import { tabsStore, TABS_STORAGE_KEY } from '../store/tabsStore';
 import { treeStore } from '../store/treeStore';
 import Editor from './Editor';
@@ -51,10 +53,15 @@ describe('Editor tabs', () => {
     renderAt(urlOf(A));
     await screen.findByRole('tab', { name: /^a\.json/ });
     await waitFor(() => expect(treeStore.getState().root?.label).toBe(A));
+    await waitFor(() => expect(projectStore.getState().project?.nodes.Wait).toBeDefined());
+    expect(screen.queryByText('Loading project...')).toBeNull();
+    expect(document.querySelectorAll('[data-node-id]').length).toBeGreaterThan(0);
 
     act(() => tabsStore.getState().open(B));
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(urlOf(B)));
     await waitFor(() => expect(treeStore.getState().root?.label).toBe(B));
+    await waitFor(() => expect(projectStore.getState().project?.nodes.Wait).toBeDefined());
+    expect(screen.queryByText('Loading project...')).toBeNull();
     expect(screen.getAllByRole('tab')).toHaveLength(2);
     expect(JSON.parse(window.localStorage.getItem(TABS_STORAGE_KEY) ?? '{}')).toEqual({
       paths: [A, B],
@@ -85,5 +92,23 @@ describe('Editor tabs', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Discard' }));
     await screen.findByText('home page');
     expect(tabsStore.getState().tabs).toEqual([]);
+  });
+
+  it('loads the project and renders canvas nodes under StrictMode', async () => {
+    window.localStorage.clear();
+    render(
+      <StrictMode>
+        <MemoryRouter initialEntries={[urlOf(A)]}>
+          <Routes>
+            <Route path="/tree" element={<Editor />} />
+            <Route path="/" element={<div>home page</div>} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    );
+    await screen.findByRole('tab', { name: /^a\.json/ });
+    await waitFor(() => expect(projectStore.getState().project?.nodes.Wait).toBeDefined());
+    await waitFor(() => expect(document.querySelectorAll('[data-node-id]').length).toBeGreaterThan(0));
+    expect(screen.queryByText('Loading project...')).toBeNull();
   });
 });

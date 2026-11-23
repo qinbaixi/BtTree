@@ -287,6 +287,12 @@ describe('ProjectEditor page', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Home' }));
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('home page')).toBeNull();
+
+    // Confirming navigation away clears projectEditorStore.dirty so Home does not see stale dirty state.
+    confirm.mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }));
+    await screen.findByText('home page');
+    expect(projectEditorStore.getState().dirty).toBe(false);
     confirm.mockRestore();
   });
 });

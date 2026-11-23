@@ -207,6 +207,11 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
   return createStore<ProjectEditorState>()((set, get) => {
     let socket: ProjectSocket | undefined;
     let loadToken = 0;
+
+    const closeSocket = (): void => {
+      socket?.disconnect();
+      socket = undefined;
+    };
     /** Canonical JSON of the text last loaded or written. Our own file-watcher echo matches it. */
     let savedJson: string | undefined;
     /** stableJson of the draft last loaded or written. Dirty checks compare drafts with it. */
@@ -359,6 +364,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         set({
           loading: true,
           saving: false,
+          dirty: false,
           loadError: undefined,
           projectPath: undefined,
           draft: undefined,
@@ -523,7 +529,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       },
 
       connect(path) {
-        get().disconnect();
+        closeSocket();
         const current = deps.createSocket(path);
         socket = current;
         current.on(PROJECT_RELOAD_EVENT, (payload) => {
@@ -535,8 +541,8 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       },
 
       disconnect() {
-        socket?.disconnect();
-        socket = undefined;
+        loadToken++;
+        closeSocket();
       },
     };
   });

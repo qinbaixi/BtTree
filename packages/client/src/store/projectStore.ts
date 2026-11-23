@@ -85,8 +85,17 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
   return createStore<ProjectState>()((set, get) => {
     let socket: ProjectSocket | undefined;
     let loadToken = 0;
+    /** Tree path the currently loaded `project` belongs to (guards switching regardless of load/connect order). */
+    let loadedTreePath: string | undefined;
     /** Id of the alert shown for the current project error, so it can be dismissed once the project loads. */
     let errorAlertId: number | undefined;
+
+    const closeSocket = (): void => {
+      if (socket) {
+        socket.disconnect();
+        socket = undefined;
+      }
+    };
 
     const dismissErrorAlert = (): void => {
       if (errorAlertId !== undefined) {
@@ -108,6 +117,7 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
         return false;
       }
       dismissErrorAlert();
+      loadedTreePath = get().treePath;
       set((state) => ({
         project: result.project,
         scenarios: parseScenarios(text),
@@ -123,8 +133,11 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
 
       async load(treePath) {
         const token = ++loadToken;
-        const prevPath = get().treePath;
+        const prevPath = loadedTreePath ?? get().treePath;
         const switched = prevPath !== undefined && !samePath(prevPath, treePath);
+        if (switched) {
+          loadedTreePath = undefined;
+        }
         set(
           switched
             ? { treePath, project: undefined, scenarios: [], error: undefined }
@@ -147,7 +160,7 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
       applyContent,
 
       connect(treePath) {
-        get().disconnect();
+        closeSocket();
         set({ treePath });
         const current = createSocket(treePath);
         socket = current;
@@ -167,10 +180,7 @@ export function createProjectStore(deps: Partial<ProjectStoreDeps> = {}) {
 
       disconnect() {
         loadToken++;
-        if (socket) {
-          socket.disconnect();
-          socket = undefined;
-        }
+        closeSocket();
       },
     };
   });
