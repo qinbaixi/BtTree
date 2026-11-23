@@ -346,4 +346,38 @@ describe('exportTree and exportProject', () => {
       rmSync(outside, { recursive: true, force: true });
     }
   });
+
+  it('blocks path traversal in owl-bt.json export outDir and fileName', async () => {
+    const treePath = writeTree('trees/a.json', GOOD_TREE);
+    writeFileSync(
+      join(root, 'owl-bt.json'),
+      JSON.stringify({ ...PROJECT, export: { lua: { outDir: '../escaped' } } }),
+    );
+    const escapedDir = await exportTree(treePath, ['lua']);
+    expect(escapedDir.error).toMatch(/inside the project folder/);
+    expect(escapedDir.files).toEqual([]);
+
+    writeFileSync(
+      join(root, 'owl-bt.json'),
+      JSON.stringify({ ...PROJECT, export: { lua: { fileName: '../evil.lua' } } }),
+    );
+    const escapedFile = await exportTree(treePath, ['lua']);
+    expect(escapedFile.error).toMatch(/Invalid export\.lua\.fileName/);
+    expect(escapedFile.files).toEqual([]);
+  });
+
+  it('exports UTF-8 BOM tree files and handles $ in tree names and uppercase extensions', async () => {
+    const treePath = join(root, 'trees', 'hero$$a.json');
+    mkdirSync(join(root, 'trees'), { recursive: true });
+    writeFileSync(treePath, `\uFEFF${JSON.stringify(GOOD_TREE)}`);
+    writeFileSync(
+      join(root, 'owl-bt.json'),
+      JSON.stringify({ ...PROJECT, export: { lua: { fileName: '{name}.LUA' } } }),
+    );
+    const res = await exportTree(treePath, ['lua']);
+    expect(res.error).toBeUndefined();
+    expect(res.files).toEqual([
+      { format: 'lua', path: join(root, 'export', 'lua', 'hero$$a.LUA') },
+    ]);
+  });
 });

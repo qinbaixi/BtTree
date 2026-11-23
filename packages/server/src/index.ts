@@ -1,7 +1,8 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VERSION } from '@owlbt/shared';
-import { run } from './run';
+import { DEVELOPMENT_PORT, parsePort } from './config';
+import { listenOrigin, run } from './run';
 
 export { run, type RunOptions, type RunResult } from './run';
 export {
@@ -52,7 +53,9 @@ export function parseDevOptions(
 if (isEntryPoint()) {
   process.env.NODE_ENV ??= 'development';
   const devPort =
-    process.env.NODE_ENV === 'development' ? Number(process.env.OWLBT_DEV_PORT ?? 9000) : undefined;
+    process.env.NODE_ENV === 'development'
+      ? (parsePort(process.env.OWLBT_DEV_PORT) ?? DEVELOPMENT_PORT)
+      : undefined;
   const dev = parseDevOptions(process.argv.slice(2));
   run({
     port: devPort,
@@ -62,7 +65,7 @@ if (isEntryPoint()) {
       console.log(
         reused
           ? `owl-bt server already running on port ${port}`
-          : `owl-bt server ${VERSION} listening on http://localhost:${port} (${process.env.NODE_ENV})`,
+          : `owl-bt server ${VERSION} listening on ${listenOrigin(dev.host, port)} (${process.env.NODE_ENV})`,
       );
     },
   }).catch((err: unknown) => {

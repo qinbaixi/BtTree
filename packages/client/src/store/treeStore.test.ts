@@ -360,4 +360,63 @@ describe('dirty state against the undo position', () => {
     store.getState().undo();
     expect(store.getState().dirty).toBe(false);
   });
+
+  it('stays dirty after overflowing the undo limit from an initial load and undoing everything', async () => {
+    const { store } = await loaded();
+    for (let i = 0; i < UNDO_STACK_LIMIT + 3; i++) {
+      store.getState().apply(`Step ${i}`, (draft) => {
+        draft.label = `Label ${i}`;
+      });
+    }
+    for (let i = 0; i < UNDO_STACK_LIMIT; i++) {
+      store.getState().undo();
+    }
+    expect(store.getState().undoStack).toHaveLength(0);
+    // The initial loaded state was trimmed out of history, so the tree still differs from disk.
+    expect(store.getState().dirty).toBe(true);
+
+    // Saving now makes this bottom-of-stack state the new clean baseline.
+    await expect(store.getState().save()).resolves.toBe(true);
+    expect(store.getState().dirty).toBe(false);
+    store.getState().apply('Next', (draft) => {
+      draft.label = 'Next';
+    });
+    expect(store.getState().dirty).toBe(true);
+    store.getState().undo();
+    expect(store.getState().dirty).toBe(false);
+  });
+
+  it('does not corrupt another tree when a save finishes after switching trees, and clears cleanly', async () => {
+    let resolveSave: (() => void) | undefined;
+    const store = createTreeStore({
+      fetchTree: vi.fn(async (path: string) => ({ ...structuredClone(TREE_JSON), label: path })),
+      saveTree: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSave = resolve;
+          }),
+      ),
+      idGen: createIdGen('t'),
+    });
+    await store.getState().load('/a.json');
+    store.getState().apply('Edit A', (d) => {
+      d.label = 'A edited';
+    });
+    const pendingSave = store.getState().save();
+
+    await store.getState().load('/b.json');
+    store.getState().apply('Edit B', (d) => {
+      d.label = 'B edited';
+    });
+    resolveSave?.();
+    await expect(pendingSave).resolves.toBe(true);
+    // B's dirty state must not be cleared by A's late save response.
+    expect(store.getState().dirty).toBe(true);
+
+    store.getState().clear();
+    expect(store.getState().root).toBeUndefined();
+    expect(store.getState().treePath).toBeUndefined();
+    expect(store.getState().dirty).toBe(false);
+    expect(store.getState().undoStack).toEqual([]);
+  });
 });

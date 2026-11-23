@@ -122,4 +122,12 @@ describe('FuzzyDialog', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onAccept).not.toHaveBeenCalled();
   });
+
+  it('filters synchronously when Enter is pressed before the debounce timer expires', () => {
+    const { input, onAccept } = renderDialog();
+    fireEvent.change(input, { target: { value: 'seq' } });
+    // Enter right away, without advancing FILTER_DEBOUNCE_MS.
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onAccept).toHaveBeenCalledWith('sequence');
+  });
 });

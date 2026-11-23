@@ -71,8 +71,13 @@ describe('sanitizeModuleName', () => {
     expect(sanitizeModuleName('bt_mon_1000')).toBe('bt_mon_1000');
   });
 
-  it('prefixes names that do not start with a letter', () => {
+  it('prefixes names that do not start with a letter or are reserved words', () => {
     expect(sanitizeModuleName('1000')).toBe('m_1000');
     expect(sanitizeModuleName('_tree')).toBe('m__tree');
+    expect(sanitizeModuleName('end')).toBe('m_end');
+    expect(sanitizeModuleName('case')).toBe('m_case');
+    expect(sanitizeModuleName('maybe')).toBe('m_maybe');
+    expect(erlangAtom('maybe')).toBe("'maybe'");
+    expect(erlangAtom('else')).toBe("'else'");
   });
 });

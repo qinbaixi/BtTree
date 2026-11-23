@@ -253,6 +253,28 @@ export function buildDepthMap(root: TreeNode | undefined): Map<string, number> {
   return depths;
 }
 
+/** O(1) lookup table from node id to TreeNode (built once per runRoot). */
+export function buildNodeMap(root: TreeNode | undefined): Map<string, TreeNode> {
+  const nodes = new Map<string, TreeNode>();
+  if (!root) return nodes;
+  const stack: TreeNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    nodes.set(node.id, node);
+    for (const child of node.childNodes) stack.push(child);
+  }
+  return nodes;
+}
+
+function lookupNode(
+  root: TreeNode | undefined,
+  nodeId: string,
+  nodeMap?: ReadonlyMap<string, TreeNode>,
+): TreeNode | undefined {
+  if (nodeMap) return nodeMap.get(nodeId);
+  return root ? findNode(root, nodeId) : undefined;
+}
+
 /** Depth of one node (path length - 1); 0 for unknown ids. */
 export function nodeDepth(root: TreeNode | undefined, nodeId: string): number {
   return buildDepthMap(root).get(nodeId) ?? 0;
@@ -271,13 +293,16 @@ export function resultTone(message: string): ResultTone {
 export function entryParts(
   root: TreeNode | undefined,
   entry: LogEntry,
+  nodeMap?: ReadonlyMap<string, TreeNode>,
 ): { name: string; type?: string; item?: string } {
-  const node = root ? findNode(root, entry.nodeId) : undefined;
+  const node = lookupNode(root, entry.nodeId, nodeMap);
   if (!node) return { name: entry.nodeId };
   const parts: { name: string; type?: string; item?: string } = { name: node.label || node.type };
   if (node.label) parts.type = node.type;
   if (entry.itemId) {
-    const item = [...node.decorators, ...node.services].find((i) => i.id === entry.itemId);
+    const item =
+      node.decorators.find((i) => i.id === entry.itemId) ??
+      node.services.find((i) => i.id === entry.itemId);
     if (item) parts.item = item.label || item.type;
   }
   return parts;
@@ -337,8 +362,9 @@ export function nodeInfo(
   ids: ReadonlyMap<string, number>,
   overrides: RunOverrides | undefined,
   nodeId: string,
+  nodeMap?: ReadonlyMap<string, TreeNode>,
 ): NodeInfo {
-  const node = root ? findNode(root, nodeId) : undefined;
+  const node = lookupNode(root, nodeId, nodeMap);
   if (!node) return { name: nodeId };
   const info: NodeInfo = { name: node.label || node.type };
   const exportId = ids.get(node.id);
@@ -363,8 +389,9 @@ export function entryInfo(
   ids: ReadonlyMap<string, number>,
   overrides: RunOverrides | undefined,
   entry: LogEntry,
+  nodeMap?: ReadonlyMap<string, TreeNode>,
 ): NodeInfo {
-  const node = root ? findNode(root, entry.nodeId) : undefined;
+  const node = lookupNode(root, entry.nodeId, nodeMap);
   if (node && entry.itemId) {
     const decorator = node.decorators.find((i) => i.id === entry.itemId);
     const item = decorator ?? node.services.find((i) => i.id === entry.itemId);
@@ -385,5 +412,5 @@ export function entryInfo(
       return info;
     }
   }
-  return nodeInfo(root, project, ids, overrides, entry.nodeId);
+  return nodeInfo(root, project, ids, overrides, entry.nodeId, nodeMap);
 }

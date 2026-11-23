@@ -47,7 +47,7 @@ import {
   type CommandContext,
 } from './registry';
 import { exporterStore } from '../store/exporterStore';
-import { formatHotkey } from './useHotkeys';
+import { flushActiveInput, formatHotkey } from './useHotkeys';
 
 export const COMMAND_PALETTE_ID = 'core:CommandPalette';
 
@@ -288,6 +288,7 @@ const redo: Command = {
   id: 'core:Redo',
   name: t('Redo'),
   hotkey: 'mod+y',
+  hotkeyAliases: ['mod+shift+z'],
   canExec(ctx) {
     return editable() && selectCanRedo(ctx.tree.getState());
   },
@@ -305,6 +306,7 @@ const save: Command = {
     return ctx.tree.getState().root !== undefined;
   },
   async exec(ctx) {
+    flushActiveInput();
     const tree = ctx.tree.getState();
     const project = ctx.project.getState().project;
     if (project && !tree.isValid(project)) {
@@ -432,10 +434,16 @@ const setNodeTypeCommand: Command = {
     const node = target.node;
     const current = getItemType(project, 'node', node.type);
     const types = listNodeChoices(project)
-      .filter(
-        (choice) =>
-          choice.type.isComposite === current.isComposite && choice.type.name !== node.type,
-      )
+      .filter((choice) => {
+        if (choice.type.name === node.type) {
+          return false;
+        }
+        if (current.isInvalid) {
+          // Unknown types with children can only be replaced by a composite; leaves by any node type.
+          return node.childNodes.length === 0 || choice.type.isComposite;
+        }
+        return choice.type.isComposite === current.isComposite;
+      })
       .sort((a, b) => compareStrings(a.type.name, b.type.name));
     const nodeId = node.id;
 
@@ -512,6 +520,7 @@ function exportCommand(
       return tree.root !== undefined && tree.treePath !== undefined;
     },
     async exec(ctx) {
+      flushActiveInput();
       const tree = ctx.tree.getState();
       const { treePath, root } = tree;
       if (!treePath || !root) {
@@ -598,6 +607,7 @@ export async function openProjectEditorFromTree(
   tree: TreeStore,
   type?: ProjectEditorLink['type'],
 ): Promise<void> {
+  flushActiveInput();
   const { treePath, dirty } = tree.getState();
   if (!treePath) {
     return;

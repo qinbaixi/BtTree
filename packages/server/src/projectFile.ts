@@ -5,22 +5,21 @@ export function sha256(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+const FIRST_INDENTED_LINE = /^([ \t]+)\S/m;
+
 /**
  * Indentation of a JSON text: '\t' when the first indented line starts with a tab, otherwise the
  * number of spaces of that line. Undefined when no line is indented.
  */
 export function indentOf(text: string): string | number | undefined {
-  for (const line of text.split(/\r?\n/)) {
-    const match = /^([ \t]+)\S/.exec(line);
-    if (!match) {
-      continue;
-    }
-    if (match[1].startsWith('\t')) {
-      return '\t';
-    }
-    return Math.min(match[1].length, 10);
+  const match = FIRST_INDENTED_LINE.exec(text);
+  if (!match) {
+    return undefined;
   }
-  return undefined;
+  if (match[1].startsWith('\t')) {
+    return '\t';
+  }
+  return Math.min(match[1].length, 10);
 }
 
 /** Indentation of a JSON text. Defaults to 4 spaces when no line is indented. */
@@ -40,9 +39,11 @@ const PRIMITIVE_ARRAY = new RegExp(
   'gm',
 );
 
+const INLINE_ARRAY_RE = new RegExp(String.raw`\[[ \t]*${PRIMITIVE}[ \t]*,[^\n]*\]`);
+
 /** True when the original text writes at least one array of plain values on a single line. */
 function usesInlineArrays(original: string): boolean {
-  return new RegExp(String.raw`\[[ \t]*${PRIMITIVE}[ \t]*,[^\n]*\]`).test(original);
+  return INLINE_ARRAY_RE.test(original);
 }
 
 /** Puts arrays of plain values on one line when the line stays within INLINE_ARRAY_WIDTH. */

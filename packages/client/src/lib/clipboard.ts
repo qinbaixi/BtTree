@@ -9,12 +9,18 @@ export type ClipboardPayload =
   | { itemType: 'node'; item: TreeNodeJson }
   | { itemType: 'decorator' | 'service'; item: SubItemJson };
 
+/** In-memory fallback used only when localStorage writes fail (e.g. private mode / quota). */
+let memoryClipboard: ClipboardPayload | undefined;
+
 export function writeClipboard(payload: ClipboardPayload): void {
-  setJson(CLIPBOARD_KEY, payload);
+  memoryClipboard = setJson(CLIPBOARD_KEY, payload) ? undefined : payload;
 }
 
 /** Returns the copied item, or undefined when the clipboard is empty or holds something unusable. */
 export function readClipboard(): ClipboardPayload | undefined {
+  if (memoryClipboard !== undefined) {
+    return memoryClipboard;
+  }
   const raw = getJson<unknown>(CLIPBOARD_KEY, undefined);
   if (typeof raw !== 'object' || raw === null) {
     return undefined;

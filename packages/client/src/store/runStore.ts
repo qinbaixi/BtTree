@@ -23,6 +23,7 @@ import {
   type ProjectMeta,
   type ProjectSaveBody,
 } from '../lib/api';
+import { samePath } from '../lib/paths';
 import { getJson, setJson } from '../lib/storage';
 import { alerts } from './alertStore';
 import { projectStore } from './projectStore';
@@ -170,6 +171,26 @@ function lastOf(history: TickResult[]): TickResult | undefined {
   return history[history.length - 1];
 }
 
+/** Collects every runtime node / decorator / service id in the tree. */
+function collectTreeIds(root: TreeNode): Set<string> {
+  const ids = new Set<string>();
+  const stack: TreeNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+    ids.add(node.id);
+    for (const dec of node.decorators) {
+      ids.add(dec.id);
+    }
+    for (const svc of node.services) {
+      ids.add(svc.id);
+    }
+    for (const child of node.childNodes) {
+      stack.push(child);
+    }
+  }
+  return ids;
+}
+
 export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
   const deps: RunStoreDeps = { ...defaultDeps, ...overrides };
 
@@ -178,6 +199,8 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
     /** checkpoints[i] is the run state of history[i]; trimmed together with the history. */
     let checkpoints: RunCheckpoint[] = [];
     let timer: ReturnType<typeof setInterval> | undefined;
+    /** Last tree path run mode entered, so switching trees resets stale blackboard/overrides. */
+    let lastTreePath: string | undefined;
 
     const stopTimer = (): void => {
       if (timer !== undefined) {
@@ -217,15 +240,14 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         return 'manual';
       }
       const result = run.tick();
-      let history = [...state.history, result];
-      checkpoints.push(run.checkpoint());
-      let dropped = state.dropped;
-      if (history.length > MAX_HISTORY) {
-        const extra = history.length - MAX_HISTORY;
-        history = history.slice(extra);
-        checkpoints = checkpoints.slice(extra);
-        dropped += extra;
+      const extra = Math.max(0, state.history.length + 1 - MAX_HISTORY);
+      const history = extra > 0 ? state.history.slice(extra) : state.history.slice();
+      history.push(result);
+      if (extra > 0) {
+        checkpoints.splice(0, extra);
       }
+      checkpoints.push(run.checkpoint());
+      const dropped = state.dropped + extra;
       set({ history, viewIndex: history.length - 1, dropped });
 
       const hit = result.log.find(
@@ -378,16 +400,59 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
       seed: 1,
 
       enter() {
-        const { root } = deps.getTree();
-        if (!root || !deps.getProject()) {
+        const { root, treePath } = deps.getTree();
+        const project = deps.getProject();
+        if (!root || !project) {
           deps.notify.error(t('Run mode needs a loaded tree and project'));
           return false;
         }
+        const switchedTree =
+          lastTreePath !== undefined &&
+          (treePath === undefined || !samePath(lastTreePath, treePath));
+        lastTreePath = treePath;
+
+        if (switchedTree) {
+          set({
+            selectedScenario: undefined,
+            blackboard: [],
+            overrides: {},
+            breakpoints: new Set<string>(),
+          });
+        } else {
+          // Prune breakpoints and overrides for items that were removed from this tree.
+          const validIds = collectTreeIds(root);
+          const current = get();
+          let prunedBreakpoints = false;
+          const nextBreakpoints = new Set<string>();
+          for (const id of current.breakpoints) {
+            if (validIds.has(id)) {
+              nextBreakpoints.add(id);
+            } else {
+              prunedBreakpoints = true;
+            }
+          }
+          let prunedOverrides = false;
+          const nextOverrides: Record<string, Record<string, unknown>> = {};
+          for (const [id, props] of Object.entries(current.overrides)) {
+            if (validIds.has(id)) {
+              nextOverrides[id] = props;
+            } else {
+              prunedOverrides = true;
+            }
+          }
+          if (prunedBreakpoints || prunedOverrides) {
+            set({
+              ...(prunedBreakpoints ? { breakpoints: nextBreakpoints } : {}),
+              ...(prunedOverrides ? { overrides: nextOverrides } : {}),
+            });
+          }
+        }
+
         const state = get();
         const scenarios = deps.getScenarios();
         if (state.selectedScenario === undefined && state.blackboard.length === 0) {
           const first = scenarios[0];
-          const declared = deps.getProject()?.blackboard ?? [];
+          const declared = project.blackboard ?? [];
           if (first) {
             set({
               selectedScenario: first.name,
@@ -475,10 +540,10 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         if (!state.active || !run) {
           return;
         }
-        if (lastOf(state.history)?.finished) {
-          build();
+        if (lastOf(state.history)?.finished && !build()) {
+          return;
         }
-        if (run.pendingManual()) {
+        if (!run || run.pendingManual()) {
           return;
         }
         set({ playing: true, viewIndex: get().history.length - 1 });
@@ -610,8 +675,12 @@ export function createRunStore(overrides: Partial<RunStoreDeps> = {}) {
         if (index < 0 || index >= blackboard.length) {
           return;
         }
+        const updated = { ...blackboard[index], ...patch };
+        const trimmed = updated.key.trim();
+        const touched = 'value' in patch && trimmed !== '' ? [trimmed] : [];
         editBlackboard(
-          blackboard.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)),
+          blackboard.map((entry, i) => (i === index ? updated : entry)),
+          touched,
         );
       },
 
@@ -674,6 +743,13 @@ export type RunStore = ReturnType<typeof createRunStore>;
 
 /** Application-wide run store. */
 export const runStore: RunStore = createRunStore();
+
+// Leave run mode when the underlying tree is reloaded (e.g. plugin trust or external refresh).
+treeStore.subscribe((state, prev) => {
+  if (runStore.getState().active && state.loadCount !== prev.loadCount) {
+    runStore.getState().exit();
+  }
+});
 
 export function useRunStore<T>(selector: (state: RunState) => T): T {
   return useStore(runStore, selector);

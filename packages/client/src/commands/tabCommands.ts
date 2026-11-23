@@ -1,8 +1,9 @@
 import { ApiError, fetchWorkspace, pickPath, type WorkspaceTree } from '../lib/api';
 import { getPathLastSegment } from '../lib/mru';
+import { samePath } from '../lib/paths';
 import { alerts } from '../store/alertStore';
 import { tabsStore, type TabsStore } from '../store/tabsStore';
-import { matchesHotkey } from './useHotkeys';
+import { flushActiveInput, matchesHotkey } from './useHotkeys';
 import { commandContext, execCommand, registerCommand, type Command } from './registry';
 import { t } from '../i18n';
 
@@ -17,10 +18,20 @@ export const TAB_COMMAND_IDS = {
 /** Id of the "browse" entry of the Open tree list. */
 export const BROWSE_ITEM_ID = '\u0000browse';
 
-/** Folder part of a path (either slash), or the path itself without one. */
+/** Folder part of a path (either slash), preserving POSIX and Windows drive roots. */
 export function parentDir(path: string): string {
-  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-  return index <= 0 ? path : path.slice(0, index);
+  const trimmed = path.replace(/[\\/]+$/, '');
+  const index = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'));
+  if (index < 0) {
+    return path;
+  }
+  if (index === 0) {
+    return trimmed[0];
+  }
+  if (index === 2 && /^[A-Za-z]:$/.test(trimmed.slice(0, 2))) {
+    return trimmed.slice(0, 3);
+  }
+  return trimmed.slice(0, index);
 }
 
 /** Trees of the project that contains the folder (all of them, not just the folder's). */
@@ -47,11 +58,14 @@ async function browse(tabs: TabsStore, dir: string | undefined): Promise<void> {
   }
 }
 
+let openDialogSeq = 0;
+
 /**
  * Lists the trees of the active tree's project (plus "Browse…" for the native file dialog);
  * the chosen tree opens in a new tab, or its tab is activated when it is already open.
  */
 export async function openTreeDialog(tabs: TabsStore = tabsStore): Promise<void> {
+  const seq = ++openDialogSeq;
   const treePath = commandContext.tree.getState().treePath;
   const dir = treePath ? parentDir(treePath) : undefined;
   let trees: WorkspaceTree[] = [];
@@ -62,6 +76,13 @@ export async function openTreeDialog(tabs: TabsStore = tabsStore): Promise<void>
       // Without a listing only Browse… is offered.
     }
   }
+  if (
+    seq !== openDialogSeq ||
+    !tabs.getState().live ||
+    commandContext.tree.getState().treePath !== treePath
+  ) {
+    return;
+  }
   const openPaths = tabs.getState().tabs.map((tab) => tab.path);
   commandContext.ui.getState().open(
     [
@@ -69,7 +90,7 @@ export async function openTreeDialog(tabs: TabsStore = tabsStore): Promise<void>
       ...trees.map((tree) => ({
         id: tree.path,
         name: tree.relPath,
-        hint: openPaths.includes(tree.path) ? t('open') : undefined,
+        hint: openPaths.some((openPath) => samePath(openPath, tree.path)) ? t('open') : undefined,
       })),
     ],
     (id) => {
@@ -118,6 +139,7 @@ export const tabCommands: Command[] = [
     allowInInput: true,
     canExec: hasTabs,
     async exec() {
+      flushActiveInput();
       const { activeId } = tabsStore.getState();
       if (activeId !== undefined) {
         await tabsStore.getState().close(activeId);
@@ -131,6 +153,7 @@ export const tabCommands: Command[] = [
     allowInInput: true,
     canExec: () => tabsStore.getState().tabs.some((tab) => tab.dirty),
     async exec() {
+      flushActiveInput();
       await tabsStore.getState().saveAll();
     },
   },
@@ -152,7 +175,13 @@ export const TAB_HOTKEY_ALIASES: ReadonlyArray<readonly [hotkey: string, command
 
 /** Runs the tab command of an alias hotkey. Returns true when the event was handled. */
 export function handleTabHotkeyAlias(event: KeyboardEvent): boolean {
-  if (commandContext.ui.getState().current !== undefined || tabsStore.getState().closePrompt) {
+  if (
+    event.defaultPrevented ||
+    event.isComposing ||
+    event.keyCode === 229 ||
+    commandContext.ui.getState().current !== undefined ||
+    tabsStore.getState().closePrompt !== undefined
+  ) {
     return false;
   }
   for (const [hotkey, commandId] of TAB_HOTKEY_ALIASES) {

@@ -275,6 +275,23 @@ function sourceElement(target: Element, source: DragSource): HTMLElement | null 
     : target.closest<HTMLElement>('[data-item-id]');
 }
 
+function sameRect(a: ClientRect | undefined, b: ClientRect | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+}
+
+function sameDragView(a: DragView | undefined, b: DragView | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.invalid === b.invalid &&
+    a.source === b.source &&
+    a.indicator?.kind === b.indicator?.kind &&
+    sameRect(a.indicator?.rect, b.indicator?.rect)
+  );
+}
+
 export interface TreeDragOptions {
   controller: CanvasController;
   /** The canvas container: indicator rectangles are relative to it. */
@@ -323,6 +340,7 @@ export function useTreeDrag({
         return;
       }
       const element = sourceElement(event.target, source);
+      const pointerId = event.pointerId;
       const originX = event.clientX;
       const originY = event.clientY;
       let started = false;
@@ -346,14 +364,22 @@ export function useTreeDrag({
           left: rect.left - (origin?.left ?? 0),
           top: rect.top - (origin?.top ?? 0),
         });
-        setDrag({
+        const next: DragView = {
           source,
           indicator: plan?.valid ? { kind: plan.indicator, rect: toLocal(plan.rect) } : undefined,
           invalid: plan !== undefined && !plan.valid,
-        });
+        };
+        setDrag((prev) => (sameDragView(prev, next) ? prev : next));
       };
 
       const onMove = (moveEvent: PointerEvent): void => {
+        if (moveEvent.pointerId !== pointerId) {
+          return;
+        }
+        if (moveEvent.pointerType === 'mouse' && moveEvent.buttons === 0) {
+          finish(false);
+          return;
+        }
         if (!started) {
           if (
             Math.hypot(moveEvent.clientX - originX, moveEvent.clientY - originY) < DRAG_THRESHOLD
@@ -378,10 +404,19 @@ export function useTreeDrag({
           finalPlan.commit(tree);
         }
       }
-      function onUp(): void {
+      function onUp(upEvent: PointerEvent): void {
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
         finish(true);
       }
-      function onCancel(): void {
+      function onPointerCancel(cancelEvent: PointerEvent): void {
+        if (cancelEvent.pointerId !== pointerId) {
+          return;
+        }
+        finish(false);
+      }
+      function onWindowBlur(): void {
         finish(false);
       }
       function onKeyDown(keyEvent: KeyboardEvent): void {
@@ -394,7 +429,8 @@ export function useTreeDrag({
       function cleanup(): void {
         window.removeEventListener('pointermove', onMove);
         window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onCancel);
+        window.removeEventListener('pointercancel', onPointerCancel);
+        window.removeEventListener('blur', onWindowBlur);
         window.removeEventListener('keydown', onKeyDown, true);
         if (element) {
           delete element.dataset.dragging;
@@ -408,7 +444,8 @@ export function useTreeDrag({
       cleanupRef.current = cleanup;
       window.addEventListener('pointermove', onMove);
       window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onCancel);
+      window.addEventListener('pointercancel', onPointerCancel);
+      window.addEventListener('blur', onWindowBlur);
       window.addEventListener('keydown', onKeyDown, true);
     },
     [containerRef, controller, hitTest, tree],

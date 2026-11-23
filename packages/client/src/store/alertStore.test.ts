@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createAlertStore, SUCCESS_AUTO_HIDE_MS } from './alertStore';
+import { createAlertStore, MAX_ALERTS, SUCCESS_AUTO_HIDE_MS } from './alertStore';
 
 describe('alertStore', () => {
   beforeEach(() => {
@@ -54,5 +54,21 @@ describe('alertStore', () => {
     store.getState().push('error', 'b');
     store.getState().clear();
     expect(store.getState().alerts).toEqual([]);
+  });
+
+  it('cancels pending auto-hide timers on dismiss/clear and caps concurrent alerts', () => {
+    const store = createAlertStore();
+    const id = store.getState().push('success', 'one', { autoHideMs: 500 });
+    expect(vi.getTimerCount()).toBe(1);
+    store.getState().dismiss(id);
+    expect(vi.getTimerCount()).toBe(0);
+
+    for (let i = 0; i < MAX_ALERTS + 5; i++) {
+      store.getState().push('info', `msg-${i}`, { autoHideMs: 500 });
+    }
+    expect(store.getState().alerts).toHaveLength(MAX_ALERTS);
+    expect(vi.getTimerCount()).toBe(MAX_ALERTS);
+    store.getState().clear();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

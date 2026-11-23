@@ -37,6 +37,9 @@ interface Row {
   name: string;
   desc: ItemTypeDescJson;
   index: number;
+  /** File index of the previous/next visible sibling in the same group (for interleaved node kinds). */
+  prevIndex?: number;
+  nextIndex?: number;
 }
 
 interface Group {
@@ -47,40 +50,49 @@ interface Group {
   total: number;
 }
 
+function linkGroupNeighbors(rows: Row[]): Row[] {
+  return rows.map((row, i) => ({
+    ...row,
+    prevIndex: i > 0 ? rows[i - 1].index : undefined,
+    nextIndex: i < rows.length - 1 ? rows[i + 1].index : undefined,
+  }));
+}
+
 /** Groups the types of the file as shown in the list (composite and action nodes, decorators, services). */
 export function buildGroups(draft: ProjectFile, query: string): Group[] {
   const q = query.trim().toLowerCase();
   const rowsOf = (kind: ItemKind): Row[] =>
     getTypes(draft, kind).map((desc, index) => ({ kind, name: desc.name, desc, index }));
   const nodes = rowsOf('node');
+  const isCompositeNode = (row: Row) => row.desc.isComposite === true && row.desc.subtree !== true;
   const matches = (row: Row) => q === '' || row.name.toLowerCase().includes(q);
   const groups: Group[] = [
     {
       id: 'composite',
       label: t('Composite nodes'),
       kind: 'node',
-      rows: nodes.filter((row) => row.desc.isComposite === true),
+      rows: linkGroupNeighbors(nodes.filter(isCompositeNode)),
       total: 0,
     },
     {
       id: 'action',
       label: t('Action nodes'),
       kind: 'node',
-      rows: nodes.filter((row) => row.desc.isComposite !== true),
+      rows: linkGroupNeighbors(nodes.filter((row) => !isCompositeNode(row))),
       total: 0,
     },
     {
       id: 'decorator',
       label: t('Decorators'),
       kind: 'decorator',
-      rows: rowsOf('decorator'),
+      rows: linkGroupNeighbors(rowsOf('decorator')),
       total: 0,
     },
     {
       id: 'service',
       label: t('Services'),
       kind: 'service',
-      rows: rowsOf('service'),
+      rows: linkGroupNeighbors(rowsOf('service')),
       total: 0,
     },
   ];
@@ -155,8 +167,7 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
     select({ view: 'type', kind: row.kind, name: copy });
   };
 
-  const moveRow = (row: Row, delta: number) => {
-    const target = row.index + delta;
+  const moveRowTo = (row: Row, target: number) => {
     runEdit(`Move ${row.kind}`, (d) => {
       moveType(d, row.kind, row.index, target);
     });
@@ -208,8 +219,11 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                   selection.name === row.name;
                 const counts = issueCounts.get(`${row.kind}:${row.name}`);
                 const color =
-                  row.desc.color ?? defaultColorFor(row.kind, row.desc.isComposite === true);
-                const count = getTypes(draft, row.kind).length;
+                  row.desc.color ??
+                  defaultColorFor(
+                    row.kind,
+                    row.desc.isComposite === true && row.desc.subtree !== true,
+                  );
                 return (
                   <li
                     key={`${row.kind}:${row.name}:${row.index}`}
@@ -260,8 +274,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                         className={styles.iconButton}
                         title={t('Move up')}
                         aria-label={t('Move {name} up', { name: row.name })}
-                        disabled={row.index === 0}
-                        onClick={() => moveRow(row, -1)}
+                        disabled={row.prevIndex === undefined}
+                        onClick={() => row.prevIndex !== undefined && moveRowTo(row, row.prevIndex)}
                       >
                         <i className="fa-solid fa-arrow-up" aria-hidden="true" />
                       </button>
@@ -270,8 +284,8 @@ export function TypeList({ searchRef, selection, issueCounts }: TypeListProps) {
                         className={styles.iconButton}
                         title={t('Move down')}
                         aria-label={t('Move {name} down', { name: row.name })}
-                        disabled={row.index >= count - 1}
-                        onClick={() => moveRow(row, 1)}
+                        disabled={row.nextIndex === undefined}
+                        onClick={() => row.nextIndex !== undefined && moveRowTo(row, row.nextIndex)}
                       >
                         <i className="fa-solid fa-arrow-down" aria-hidden="true" />
                       </button>

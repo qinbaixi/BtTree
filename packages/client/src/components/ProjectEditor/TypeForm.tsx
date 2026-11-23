@@ -1,11 +1,10 @@
-import { useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useState, type CSSProperties } from 'react';
 import {
-  canAddBase,
+  availableBaseTypes,
   DEFAULT_COLORS,
   findType,
   findTypeReferences,
   getBases,
-  getTypes,
   listEffectiveProperties,
   renameType,
   setBases,
@@ -20,13 +19,15 @@ import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { ProjectUsages } from '../ProjectUsages/ProjectUsages';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
-import { IconPicker } from './IconPicker';
 import { unknownPlaceholders } from './issues';
 import { PropertyTable, runEdit, type ProjectRecipe } from './PropertyTable';
 import { SimulationSection } from './SimulationSection';
 import { confirmLeaveProject } from './ReferenceUpdateBanner';
 import { TextInput } from './TextInput';
 import styles from './ProjectEditor.module.css';
+
+// Lazy-loaded so the 1400+ icon catalog stays out of the initial ProjectEditor chunk.
+const IconPicker = lazy(() => import('./IconPicker').then((mod) => ({ default: mod.IconPicker })));
 
 /** Keys of a type descriptor that have their own field; any other key is shown as unknown. */
 export const KNOWN_TYPE_KEYS: readonly string[] = [
@@ -142,9 +143,7 @@ export function TypeForm({ kind, name }: TypeFormProps) {
   const propNames = effective.map((entry) => entry.prop.name);
   const customTypes = draft.types ?? {};
   const bases = getBases(desc);
-  const baseCandidates = getTypes(draft, kind)
-    .map((other) => other.name)
-    .filter((other) => !bases.includes(other) && canAddBase(draft, kind, name, other));
+  const baseCandidates = availableBaseTypes(draft, kind, name);
   const references = findTypeReferences(draft, kind, name);
   const unknown = Object.keys(desc).filter((key) => !KNOWN_TYPE_KEYS.includes(key));
   const isSubtree = kind === 'node' && desc.subtree === true;
@@ -210,7 +209,9 @@ export function TypeForm({ kind, name }: TypeFormProps) {
     set('Insert placeholder', (d) => {
       const target = findType(d, kind, name);
       if (target) {
-        target.description = `${target.description ?? ''}{{${prop}}}`;
+        const current = target.description ?? '';
+        const prefix = current.endsWith('{{') ? current.slice(0, -2) : current;
+        target.description = `${prefix}{{${prop}}}`;
       }
     });
 
@@ -282,7 +283,12 @@ export function TypeForm({ kind, name }: TypeFormProps) {
               onChange={(event) => {
                 const on = event.target.checked;
                 set(on ? 'Make subtree reference' : 'Remove subtree reference', (d) => {
-                  updateType(d, kind, name, { subtree: on ? true : undefined });
+                  updateType(
+                    d,
+                    kind,
+                    name,
+                    on ? { subtree: true, isComposite: undefined } : { subtree: undefined },
+                  );
                   // A new subtree type gets the property that holds the referenced tree.
                   const target = findType(d, kind, name);
                   if (on && target && !propNames.includes(SUBTREE_PROPERTY)) {
@@ -569,14 +575,16 @@ export function TypeForm({ kind, name }: TypeFormProps) {
       )}
 
       {iconOpen && (
-        <IconPicker
-          current={desc.icon}
-          onPick={(icon) => {
-            setIconOpen(false);
-            set('Set icon', (d) => updateType(d, kind, name, { icon }));
-          }}
-          onClose={() => setIconOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <IconPicker
+            current={desc.icon}
+            onPick={(icon) => {
+              setIconOpen(false);
+              set('Set icon', (d) => updateType(d, kind, name, { icon }));
+            }}
+            onClose={() => setIconOpen(false)}
+          />
+        </Suspense>
       )}
     </div>
   );

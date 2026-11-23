@@ -5,6 +5,7 @@ describe('scoreMatch', () => {
   it('returns 1 for an exact match and 0 for an empty query', () => {
     expect(scoreMatch('Hello World', 'Hello World')).toBe(1);
     expect(scoreMatch('Hello World', '')).toBe(0);
+    expect(scoreMatch('', '')).toBe(0);
   });
 
   it('returns 0 when a query character is missing', () => {

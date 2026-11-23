@@ -7,12 +7,24 @@ import {
   type ViewTransform,
 } from '../components/TreeCanvas/viewportStore';
 import { saveTree } from '../lib/api';
+import { samePath } from '../lib/paths';
 import { getJson, setJson } from '../lib/storage';
 import { alerts } from './alertStore';
+import { dialogStore } from './dialogStore';
 import { inspectStore } from './inspectStore';
 import { runStore } from './runStore';
-import { treeStore, type TreeSnapshot, type TreeStore } from './treeStore';
+import {
+  INITIAL_SAVED,
+  isCleanHistory,
+  treeStore,
+  UNREACHABLE_SAVED,
+  type SavedMarker,
+  type TreeSnapshot,
+  type TreeStore,
+} from './treeStore';
 import { t } from '../i18n';
+
+export { samePath } from '../lib/paths';
 
 /** localStorage key of the open tabs (paths and the active one). */
 export const TABS_STORAGE_KEY = 'owlbt.editorTabs';
@@ -57,6 +69,11 @@ export interface TabsState {
   saveAll(): Promise<boolean>;
   /** Moves the active tab out of the tree store (the editor is left). */
   detach(): void;
+  /**
+   * Drops parked snapshots (and reloads the active tab) for clean tabs matching `paths` after
+   * external writes such as project-wide reference updates.
+   */
+  invalidate(paths: readonly string[]): void;
 }
 
 export interface TabsStoreDeps {
@@ -69,11 +86,6 @@ export interface TabsStoreDeps {
   loadPersisted(): PersistedTabs;
   persist(tabs: PersistedTabs): void;
   notify: { error(message: string): void; success(message: string): void };
-}
-
-/** Same file, accepting either slash as separator. */
-export function samePath(a: string, b: string): boolean {
-  return a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
 }
 
 export function readPersistedTabs(): PersistedTabs {
@@ -96,6 +108,7 @@ const defaultDeps: TabsStoreDeps = {
   beforeSwitch() {
     runStore.getState().exit();
     inspectStore.getState().clear();
+    dialogStore.getState().close();
   },
   getViewTransform,
   requestViewTransform,
@@ -172,22 +185,54 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
         return tree.getState().save();
       }
       const saved = data.get(tab.id);
-      const root = saved?.snapshot?.data.root;
-      if (!saved?.snapshot || !root) {
+      const snapshot = saved?.snapshot;
+      const root = snapshot?.data.root;
+      if (!snapshot || !root) {
         return true; // Never loaded, so nothing to save.
       }
+      const { undoStack } = snapshot.data;
+      const savedMarker: SavedMarker =
+        undoStack.length > 0 ? undoStack[undoStack.length - 1] : INITIAL_SAVED;
+      const savedTrimCount = snapshot.trimCount;
       try {
         await deps.saveTree(tab.path, nodeToJson(root));
       } catch (err) {
         deps.notify.error(errorText(err));
         return false;
       }
-      const { undoStack } = saved.snapshot.data;
-      saved.snapshot = {
-        data: { ...saved.snapshot.data, dirty: false },
-        savedTop: undoStack[undoStack.length - 1],
-      };
-      setDirty(tab.id, false);
+      // The tab may have been closed, activated, or re-parked while the request ran.
+      if (!find(tab.id)) {
+        return true;
+      }
+      const after = get();
+      if (after.live && after.activeId === tab.id) {
+        if (samePath(tree.getState().treePath ?? '', tab.path)) {
+          tree.getState().markSaved(savedMarker, savedTrimCount);
+          setDirty(tab.id, tree.getState().dirty);
+        }
+        return true;
+      }
+      const currentSaved = data.get(tab.id);
+      if (currentSaved?.snapshot) {
+        const currentSnap = currentSaved.snapshot;
+        let nextMarker: SavedMarker;
+        if (savedMarker === INITIAL_SAVED) {
+          nextMarker =
+            currentSnap.trimCount === savedTrimCount ? INITIAL_SAVED : UNREACHABLE_SAVED;
+        } else {
+          const reachable =
+            currentSnap.data.undoStack.includes(savedMarker) ||
+            currentSnap.data.redoStack.includes(savedMarker);
+          nextMarker = reachable ? savedMarker : UNREACHABLE_SAVED;
+        }
+        const nextDirty = !isCleanHistory(currentSnap.data.undoStack, nextMarker);
+        currentSaved.snapshot = {
+          data: { ...currentSnap.data, dirty: nextDirty },
+          savedTop: nextMarker,
+          trimCount: currentSnap.trimCount,
+        };
+        setDirty(tab.id, nextDirty);
+      }
       return true;
     };
 
@@ -212,6 +257,8 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
         show(next);
       } else if (next) {
         set({ activeId: next.id });
+      } else if (state.live) {
+        tree.getState().clear();
       }
     };
 
@@ -301,8 +348,18 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
           if (!current) {
             return true;
           }
-          if (choice === 'save' && !(await saveTab(current))) {
-            return false;
+          if (choice === 'save') {
+            if (!(await saveTab(current))) {
+              return false;
+            }
+            const afterSave = find(id);
+            if (!afterSave) {
+              return true;
+            }
+            // Edits made while saving stay unsaved; do not close and discard them.
+            if (afterSave.dirty) {
+              return false;
+            }
           }
         }
         remove(id);
@@ -319,8 +376,10 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
       async saveAll() {
         let ok = true;
         let others = 0;
-        for (const tab of get().tabs) {
-          if (!tab.dirty) {
+        const tabIds = get().tabs.map((tab) => tab.id);
+        for (const id of tabIds) {
+          const tab = find(id);
+          if (!tab || !tab.dirty) {
             continue;
           }
           const isActive = get().live && get().activeId === tab.id;
@@ -341,8 +400,28 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
       },
 
       detach() {
+        if (pendingClose) {
+          get().answerClose('cancel');
+        }
         park();
         set({ live: false });
+      },
+
+      invalidate(paths) {
+        if (paths.length === 0) {
+          return;
+        }
+        const state = get();
+        for (const tab of state.tabs) {
+          if (tab.dirty || !paths.some((path) => samePath(path, tab.path))) {
+            continue;
+          }
+          if (state.live && state.activeId === tab.id) {
+            void tree.getState().load(tab.path);
+          } else {
+            data.delete(tab.id);
+          }
+        }
       },
     };
   });
@@ -364,13 +443,25 @@ export function createTabsStore(overrides: Partial<TabsStoreDeps> = {}) {
     }
   });
 
-  // Open tabs survive a reload of the page.
+  // Open tabs survive a reload of the page (skip redundant writes when only dirty flags change).
+  let lastPersistedPaths: string[] = [];
+  let lastPersistedActive: string | undefined;
   store.subscribe((state, prev) => {
     if (state.tabs === prev.tabs && state.activeId === prev.activeId) {
       return;
     }
-    const active = state.tabs.find((tab) => tab.id === state.activeId);
-    deps.persist({ paths: state.tabs.map((tab) => tab.path), active: active?.path });
+    const paths = state.tabs.map((tab) => tab.path);
+    const active = state.tabs.find((tab) => tab.id === state.activeId)?.path;
+    if (
+      active === lastPersistedActive &&
+      paths.length === lastPersistedPaths.length &&
+      paths.every((path, index) => path === lastPersistedPaths[index])
+    ) {
+      return;
+    }
+    lastPersistedPaths = paths;
+    lastPersistedActive = active;
+    deps.persist({ paths, active });
   });
 
   return store;

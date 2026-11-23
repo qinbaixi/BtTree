@@ -320,6 +320,43 @@ describe('compileProject', () => {
   it('handles an empty project', () => {
     expect(compileProject({})).toEqual({ nodes: {}, decorators: {}, services: {} });
   });
+
+  it('preserves overrides in diamond inheritance and records transitive ancestors', () => {
+    const project = compileProject({
+      nodes: [
+        {
+          name: 'Root',
+          isAbstract: true,
+          isComposite: true,
+          color: '#111111',
+          simulate: { mode: 'success' },
+          properties: [{ name: 'P', type: 'number', default: 1 }],
+        },
+        {
+          name: 'BaseA',
+          base: 'Root',
+          isAbstract: true,
+          color: '#aaaaaa',
+          simulate: { mode: 'failure' },
+          properties: [{ name: 'P', type: 'number', default: 2 }],
+        },
+        {
+          name: 'BaseB',
+          base: 'Root',
+          isAbstract: true,
+          properties: [{ name: 'Q', type: 'string', default: 'q' }],
+        },
+        { name: 'Child', base: ['BaseA', 'BaseB'] },
+      ],
+    });
+    const child = project.nodes['Child'];
+    expect(child.color).toBe('#aaaaaa');
+    expect(child.simulate?.mode).toBe('failure');
+    expect(child.properties.find((p) => p.name === 'P')?.default).toBe(2);
+    expect(child.properties.find((p) => p.name === 'Q')?.default).toBe('q');
+    expect(child.bases).toEqual(['BaseA', 'BaseB']);
+    expect(child.ancestors).toEqual(['BaseA', 'BaseB', 'Root']);
+  });
 });
 
 describe('getItemType', () => {

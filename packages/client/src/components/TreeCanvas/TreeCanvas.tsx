@@ -18,7 +18,7 @@ import {
   type ZoomTransform,
 } from 'd3-zoom';
 import {
-  countDescendants,
+  countCollapsedDescendants,
   forEachNode,
   searchTree,
   selectionKey,
@@ -121,6 +121,7 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   /** Node to center once it is laid out (e.g. a focus request that first had to expand it). */
   const pendingFocusRef = useRef<string | undefined>(undefined);
   const dragEnabledRef = useRef(!runActive);
+  const draggingRef = useRef(false);
 
   const { drag, onPointerDown: onDragPointerDown } = useTreeDrag({
     controller,
@@ -131,6 +132,10 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
   useEffect(() => {
     dragEnabledRef.current = !runActive;
   }, [runActive]);
+
+  useEffect(() => {
+    draggingRef.current = drag !== undefined;
+  }, [drag]);
 
   // Collapse state: restored per tree, persisted, and expanded when the selection moves inside.
   useEffect(() => connectCollapse(treeStore), []);
@@ -145,18 +150,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     [root, sizes, collapsed],
   );
 
-  /** Number of hidden descendants of each collapsed node. */
-  const hiddenCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    if (root) {
-      forEachNode(root, (node) => {
-        if (collapsed.has(node.id) && node.childNodes.length > 0) {
-          counts.set(node.id, countDescendants(node));
-        }
-      });
-    }
-    return counts;
-  }, [root, collapsed]);
+  /** Number of hidden descendants of each collapsed node (single O(N) bottom-up pass). */
+  const hiddenCounts = useMemo(
+    () => (root ? countCollapsedDescendants(root, collapsed) : new Map<string, number>()),
+    [root, collapsed],
+  );
 
   const searchMatches = useMemo(
     () => (root && searchOpen ? searchTree(root, searchQuery) : []),
@@ -185,7 +183,9 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
       pendingFocusRef.current = nodeId;
       return;
     }
-    pendingFocusRef.current = undefined;
+    if (duration > 0 || pendingFocusRef.current === nodeId) {
+      pendingFocusRef.current = undefined;
+    }
     const k = transformRef.current.k;
     const target = zoomIdentity
       .translate(
@@ -210,9 +210,11 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     }
     const behavior = zoom<HTMLDivElement, unknown>()
       .scaleExtent([MIN_ZOOM, MAX_ZOOM])
-      // d3's default filter, except that presses on draggable items start a drag, not a pan.
+      // d3's default filter, except that presses on draggable items start a drag, not a pan,
+      // and wheel zooming is paused while an active drag is in progress.
       .filter(
         (event: MouseEvent) =>
+          !draggingRef.current &&
           (!event.ctrlKey || event.type === 'wheel') &&
           !event.button &&
           (event.type === 'wheel' ||
@@ -232,6 +234,8 @@ export default function TreeCanvas({ onContextMenu }: TreeCanvasProps) {
     reportViewTransform(undefined);
     const containerSelection = select(container).call(behavior).on('dblclick.zoom', null);
     return () => {
+      containerSelection.interrupt();
+      behavior.on('zoom', null);
       containerSelection.on('.zoom', null);
       zoomRef.current = undefined;
     };

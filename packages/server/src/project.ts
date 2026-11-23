@@ -1,9 +1,8 @@
-import { existsSync } from 'node:fs';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { Module, createRequire } from 'node:module';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { ProjectFile, TreeNodeJson } from '@owlbt/shared';
-import { trustStatus } from './pluginTrust';
+import { readTrustEntries, trustStatusFromEntries } from './pluginTrust';
 
 export const PROJECT_FILE_NAME = 'owl-bt.json';
 export const PLUGIN_FILE_NAME = 'owl-bt.js';
@@ -52,6 +51,10 @@ export interface Project {
 export interface ProjectOptions {
   /** Runs owl-bt.js without checking the trust store (the --trust-plugins flag). */
   trustAllPlugins?: boolean;
+  /** Whether to compile and execute trusted plugin files (default true). Set false for metadata/trust routes. */
+  loadPlugin?: boolean;
+  /** Whether to compile `exporters/*.js` files when loading the plugin (default true). */
+  loadExporters?: boolean;
 }
 
 async function isFile(path: string): Promise<boolean> {
@@ -153,8 +156,11 @@ export async function getProject(
   const dir = dirname(path);
   const content = await readFile(path, 'utf8');
   const pluginPath = join(dir, PLUGIN_FILE_NAME);
-  const exporterFiles = await listExporterFiles(dir);
-  const pluginFiles = [...(existsSync(pluginPath) ? [pluginPath] : []), ...exporterFiles];
+  const [hasMainPlugin, exporterFiles] = await Promise.all([
+    isFile(pluginPath),
+    listExporterFiles(dir),
+  ]);
+  const pluginFiles = [...(hasMainPlugin ? [pluginPath] : []), ...exporterFiles];
   if (pluginFiles.length === 0) {
     return { path, dir, content };
   }
@@ -162,8 +168,9 @@ export async function getProject(
   const sources = await Promise.all(pluginFiles.map((file) => readFile(file, 'utf8')));
   const statusPath = pluginFiles[0];
   if (options.trustAllPlugins !== true) {
-    const statuses = await Promise.all(
-      pluginFiles.map((file, index) => trustStatus(file, sources[index])),
+    const entries = await readTrustEntries();
+    const statuses = pluginFiles.map((file, index) =>
+      trustStatusFromEntries(file, sources[index], entries),
     );
     if (statuses.some((status) => !status.trusted)) {
       return {
@@ -180,21 +187,33 @@ export async function getProject(
     }
   }
 
-  const hasMain = pluginFiles[0] === pluginPath;
+  if (options.loadPlugin === false) {
+    return {
+      path,
+      dir,
+      content,
+      pluginFiles,
+      pluginStatus: { path: statusPath, trusted: true },
+    };
+  }
+
+  const hasMain = hasMainPlugin;
   const main = hasMain ? compilePlugin(pluginPath, sources[0]) : undefined;
   const pluginWarnings: string[] = [];
   const fileExporters: Record<string, unknown> = {};
-  exporterFiles.forEach((file, index) => {
-    const format = exporterFormatOf(file);
-    const label = `${EXPORTERS_DIR_NAME}/${basename(file)}`;
-    try {
-      fileExporters[format] = compileExporterFile(file, sources[index + (hasMain ? 1 : 0)]);
-    } catch (err) {
-      pluginWarnings.push(
-        `${label} failed to load: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-  });
+  if (options.loadExporters !== false) {
+    exporterFiles.forEach((file, index) => {
+      const format = exporterFormatOf(file);
+      const label = `${EXPORTERS_DIR_NAME}/${basename(file)}`;
+      try {
+        fileExporters[format] = compileExporterFile(file, sources[index + (hasMain ? 1 : 0)]);
+      } catch (err) {
+        pluginWarnings.push(
+          `${label} failed to load: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    });
+  }
   const mainExporters: unknown = main?.exporters;
   let exporters: unknown = mainExporters;
   if (Object.keys(fileExporters).length > 0) {
@@ -203,7 +222,7 @@ export async function getProject(
         ? (mainExporters as Record<string, unknown>)
         : {};
     for (const format of Object.keys(fileExporters)) {
-      if (format in fromMain) {
+      if (Object.hasOwn(fromMain, format)) {
         pluginWarnings.push(
           `${EXPORTERS_DIR_NAME}/${format}: owl-bt.js also defines exporter "${format}"; using owl-bt.js`,
         );
@@ -227,4 +246,52 @@ export function isPathInDir(file: string, dir: string): boolean {
   const norm = (p: string): string => (process.platform === 'win32' ? p.toLowerCase() : p);
   const rel = relative(norm(resolve(dir)), norm(resolve(file)));
   return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
+}
+
+/** Resolves symlinks on `target` (or its nearest existing ancestor when `target` does not exist yet). */
+export async function resolveRealPath(target: string): Promise<string> {
+  const abs = resolve(target);
+  try {
+    return await realpath(abs);
+  } catch {
+    const suffix: string[] = [];
+    let current = abs;
+    for (;;) {
+      const parent = dirname(current);
+      if (parent === current) {
+        return abs;
+      }
+      suffix.unshift(basename(current));
+      current = parent;
+      try {
+        const realParent = await realpath(current);
+        return join(realParent, ...suffix);
+      } catch {
+        // Keep walking up until an existing ancestor is found.
+      }
+    }
+  }
+}
+
+const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
+
+/** True when `file` lies inside `dir` after resolving symlinks (blocks symlink escapes). */
+export async function isRealPathInDir(file: string, dir: string): Promise<boolean> {
+  const [realFile, realDir] = await Promise.all([resolveRealPath(file), resolveRealPath(dir)]);
+  const norm = (p: string): string => (CASE_INSENSITIVE_FS ? p.toLowerCase() : p);
+  const rel = relative(norm(realDir), norm(realFile));
+  return !isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`);
+}
+
+/** True when `file` refers to `owl-bt.json`, `owl-bt.js`, or a file under `exporters/`. */
+export function isProjectConfigOrPluginPath(file: string, projectDir: string): boolean {
+  const norm = (p: string): string => (CASE_INSENSITIVE_FS ? p.toLowerCase() : p);
+  const rel = relative(norm(resolve(projectDir)), norm(resolve(file)));
+  const normalized = rel.split(sep).join('/');
+  return (
+    normalized === PROJECT_FILE_NAME ||
+    normalized === PLUGIN_FILE_NAME ||
+    normalized === EXPORTERS_DIR_NAME ||
+    normalized.startsWith(`${EXPORTERS_DIR_NAME}/`)
+  );
 }

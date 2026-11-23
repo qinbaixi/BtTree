@@ -208,6 +208,22 @@ describe('plugin trust routes', () => {
       const res = await request(app()).post('/api/plugin/revoke').send(trustBody(treePath));
       expect(res.status).toBe(404);
     });
+
+    it('can trust and revoke a throwing plugin without executing it during trust or revoke', async () => {
+      writePlugin('throw new Error("boom at load");');
+      const application = app();
+      const trusted = await request(application)
+        .post('/api/plugin/trust')
+        .send(trustBody(treePath));
+      expect(trusted.status).toBe(200);
+      expect(trusted.body).toEqual({ pluginPath, trusted: true, changed: false });
+
+      const revoked = await request(application)
+        .post('/api/plugin/revoke')
+        .send(trustBody(treePath));
+      expect(revoked.status).toBe(200);
+      expect(revoked.body).toEqual({ pluginPath, trusted: false, changed: false });
+    });
   });
 
   describe('trustAllPlugins', () => {

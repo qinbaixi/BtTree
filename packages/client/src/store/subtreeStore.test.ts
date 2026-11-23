@@ -123,6 +123,39 @@ describe('subtreeStore', () => {
     expect(store.getState().error).toBe('offline');
     expect(store.getState().loading).toBe(false);
   });
+
+  it('cancels an in-flight resolve when refresh sees no remaining references', async () => {
+    let resolvePending: ((res: SubtreeResolution) => void) | undefined;
+    let currentRoot = nodeFromJson(
+      { type: 'Sequence', childNodes: [ref('trees/a.json')] },
+      createIdGen('n'),
+    );
+    const store = createSubtreeStore({
+      resolve: vi.fn(
+        () =>
+          new Promise<SubtreeResolution>((resolve) => {
+            resolvePending = resolve;
+          }),
+      ),
+      getTree: () => ({ root: currentRoot, treePath: '/p/trees/main.json' }),
+      getProject: () => project,
+    });
+
+    const pending = store.getState().sync();
+    expect(store.getState().loading).toBe(true);
+    currentRoot = nodeFromJson({ type: 'Sequence', childNodes: [] }, createIdGen('m'));
+    await store.getState().refresh();
+    expect(store.getState().loading).toBe(false);
+    expect(store.getState().error).toBeUndefined();
+
+    resolvePending?.({
+      projectDir: '/p',
+      self: 'trees/main.json',
+      library: { 'trees/a.json': LIBRARY['trees/a.json'] },
+    });
+    await pending;
+    expect(store.getState().library).toEqual({});
+  });
 });
 
 describe('startSubtreeSync', () => {

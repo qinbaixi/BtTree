@@ -5,8 +5,6 @@ export const editor: Record<string, string> = {
   Remove: '删除',
   Copy: '复制',
   Paste: '粘贴',
-  Undo: '撤销',
-  Redo: '重做',
   'Tree contains invalid items. Save anyway?': '行为树包含无效的项。仍要保存吗？',
   'Focus Selected Node': '定位到选中节点',
   'Set Node Type': '设置节点类型',
@@ -75,20 +73,13 @@ export const editor: Record<string, string> = {
   'Classic dark': '经典深色',
 
   // Top menu
-  File: '文件',
   Edit: '编辑',
   View: '视图',
   Run: '运行',
   'Find in tree': '在行为树中查找',
   'Collapse / Expand subtree': '折叠 / 展开子树',
-  'Collapse all': '全部折叠',
-  'Expand all': '全部展开',
   'Toggle run mode': '切换运行模式',
-  Step: '单步',
   'Step back': '后退一步',
-  Play: '播放',
-  Pause: '暂停',
-  Reset: '重置',
   'Exit run mode (F5)': '退出运行模式 (F5)',
   'Simulate the tree (F5)': '模拟运行行为树 (F5)',
   'Exit run': '退出运行',
@@ -97,8 +88,6 @@ export const editor: Record<string, string> = {
   'No tree path given.': '未指定行为树路径。',
   'Go to the home page': '返回首页',
   'and open a tree.': '并打开一个行为树。',
-  Home: '首页',
-  Unsaved: '未保存',
   'Item palette': '类型面板',
   'Item Details': '项详情',
   'Something went wrong.': '出错了。',
@@ -107,14 +96,11 @@ export const editor: Record<string, string> = {
   'No matching items': '没有匹配的项',
 
   // Item palette
-  'Loading project...': '正在加载项目...',
   'Select a composite node to add child nodes': '选择一个组合节点以添加子节点',
   'Click a type to see its definition, or select a node to add items':
     '点击类型查看其定义，或选择一个节点以添加项',
   'Composite Nodes': '组合节点',
   'Action Nodes': '动作节点',
-  Services: '服务',
-  Decorators: '装饰器',
   'Show details of {name}': '查看 {name} 的详情',
 
   // Plugin banner
@@ -126,7 +112,6 @@ export const editor: Record<string, string> = {
     '信任插件会重新加载行为树，未保存的更改将被丢弃。是否继续？',
   'Could not trust the plugin: {message}': '无法信任插件：{message}',
   'Trust and run': '信任并运行',
-  Dismiss: '忽略',
 
   // Project upgrade banner
   'This project was created by an older version and does not have the new built-in types: {names}.':
@@ -203,7 +188,6 @@ export const editor: Record<string, string> = {
   Workspace: '工作区',
   Refresh: '刷新',
   'Close folder': '关闭文件夹',
-  Project: '项目',
   'Edit project types': '编辑项目类型',
   'This folder is not inside an owl-bt project.': '此文件夹不在 owl-bt 项目中。',
   'Initialize project here': '在此初始化项目',

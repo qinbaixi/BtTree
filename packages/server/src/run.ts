@@ -1,10 +1,35 @@
+import { networkInterfaces } from 'node:os';
 import { createServer, type ServerBundle } from './app';
 import { getPort } from './config';
-import { isLoopbackHost } from './localGuard';
+import { isLoopbackHost, isWildcardHost, normalizeHostname } from './localGuard';
 import type { Picker } from './picker';
 
 /** Interface used when no host is given: this machine only. */
 export const DEFAULT_HOST = '127.0.0.1';
+
+/** Browser-openable base URL for the listening host and port. */
+export function listenOrigin(host: string | undefined, port: number): string {
+  const name = normalizeHostname(host ?? DEFAULT_HOST);
+  if (name === '' || name === '127.0.0.1' || name === '0.0.0.0' || name === 'localhost') {
+    return `http://localhost:${port}`;
+  }
+  if (name === '[::]') {
+    return `http://[::1]:${port}`;
+  }
+  return `http://${name}:${port}`;
+}
+
+function localInterfaceAddresses(): string[] {
+  const hosts: string[] = [];
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.address) {
+        hosts.push(entry.address);
+      }
+    }
+  }
+  return hosts;
+}
 
 export interface RunOptions {
   /** Defaults to getPort(). */
@@ -49,12 +74,15 @@ export function run(options: RunOptions = {}): Promise<RunResult> {
       `owl-bt: warning: listening on ${host} makes the API reachable from other machines. The API has no authentication, so anyone who can reach it can read and change the files it serves.`,
     );
   }
+  const allowedHosts = isWildcardHost(host)
+    ? [host, ...localInterfaceAddresses()]
+    : [host];
   const bundle = createServer({
     clientDist: options.clientDist,
     picker: options.picker,
     trustAllPlugins: options.trustAllPlugins,
-    // Other hosts must be named in the Host header; loopback names are always allowed.
-    allowedHosts: loopback ? undefined : [host],
+    // Always include the bound host (including 127.0.0.2 / non-canonical IPv6) plus interface IPs for wildcard binds.
+    allowedHosts,
   });
   const { httpServer } = bundle;
 

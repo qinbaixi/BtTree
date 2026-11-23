@@ -23,6 +23,8 @@ function patternRegex(pattern: string): RegExp | null {
   let regex = PATTERN_CACHE.get(pattern);
   if (regex === undefined) {
     try {
+      // Validate standalone pattern first so unbalanced parentheses like `a)|(b` cannot escape ^(?:...)$.
+      new RegExp(pattern);
       regex = new RegExp(`^(?:${pattern})$`);
     } catch {
       regex = null;

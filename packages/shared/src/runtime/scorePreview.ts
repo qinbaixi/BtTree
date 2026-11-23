@@ -51,10 +51,16 @@ export function previewScore(
   }
   if (!readsBlackboard(expr)) return undefined;
 
+  if (!Number.isFinite(steps) || steps < 1) {
+    return undefined;
+  }
+  const sampleSteps = Math.floor(steps);
+
   // Every blackboard read returns the input, so the key name does not matter: an empty string
   // property (e.g. an Input key not chosen yet) gets a placeholder so that get({{Input}}) works.
+  const propMap = new Map(type.properties.map((p) => [p.name, p]));
   const propValue = (name: string): unknown => {
-    const prop = type.properties.find((p) => p.name === name);
+    const prop = propMap.get(name);
     if (prop) {
       const value = getEffectiveValue(prop, properties);
       return prop.type === 'string' && (value === undefined || value === '') ? PREVIEW_KEY : value;
@@ -63,16 +69,23 @@ export function previewScore(
   };
   const lo = propValue('Min');
   const hi = propValue('Max');
-  const ranged = typeof lo === 'number' && typeof hi === 'number' && lo < hi;
-  const min = ranged ? lo : 0;
-  const max = ranged ? hi : 1;
+  const ranged =
+    typeof lo === 'number' &&
+    typeof hi === 'number' &&
+    Number.isFinite(lo) &&
+    Number.isFinite(hi) &&
+    lo !== hi;
+  const min = ranged ? Math.min(lo, hi) : 0;
+  const max = ranged ? Math.max(lo, hi) : 1;
 
+  let currentX = min;
+  const ctx = { get: () => currentX, prop: propValue };
   const points: Array<[number, number]> = [];
-  for (let i = 0; i <= steps; i++) {
-    const x = min + ((max - min) * i) / steps;
+  for (let i = 0; i <= sampleSteps; i++) {
+    currentX = min + ((max - min) * i) / sampleSteps;
     try {
-      const y = evaluate(expr, { get: () => x, prop: propValue });
-      if (typeof y === 'number' && Number.isFinite(y)) points.push([x, y]);
+      const y = evaluate(expr, ctx);
+      if (typeof y === 'number' && Number.isFinite(y)) points.push([currentX, y]);
     } catch {
       // left out
     }

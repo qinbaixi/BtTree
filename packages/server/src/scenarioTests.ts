@@ -20,8 +20,8 @@ import {
   type SubtreeLibrary,
   type TreeNodeJson,
 } from '@owlbt/shared';
-import { isPathInDir, PROJECT_FILE_NAME } from './project';
-import { loadSubtreeLibrary } from './subtrees';
+import { findProjectFile, isPathInDir, PROJECT_FILE_NAME } from './project';
+import { loadSubtreeLibrary, type SubtreeFileCache } from './subtrees';
 import { loadWorkspace } from './workspace';
 
 /*
@@ -150,12 +150,31 @@ export async function runScenarioTests(
     target = dirname(target);
     isFile = false;
   }
-  const workspace = await loadWorkspace(target);
-  if (workspace.projectPath === undefined || workspace.projectDir === undefined) {
-    throw new ScenarioConfigError(`No owl-bt.json found for ${target}`);
+  let projectPath: string | undefined;
+  let projectDir: string | undefined;
+  let workspaceTrees: Array<{ path: string; relPath: string }>;
+  let truncated = false;
+  if (isFile) {
+    projectPath = await findProjectFile(target);
+    if (projectPath === undefined) {
+      throw new ScenarioConfigError(`No owl-bt.json found for ${target}`);
+    }
+    projectDir = dirname(projectPath);
+    if (!isPathInDir(target, projectDir)) {
+      throw new ScenarioConfigError(`${target} is not in the project ${projectDir}`);
+    }
+    workspaceTrees = [{ path: target, relPath: relative(projectDir, target).split(sep).join('/') }];
+  } else {
+    const workspace = await loadWorkspace(target);
+    if (workspace.projectPath === undefined || workspace.projectDir === undefined) {
+      throw new ScenarioConfigError(`No owl-bt.json found for ${target}`);
+    }
+    projectPath = workspace.projectPath;
+    projectDir = workspace.projectDir;
+    truncated = workspace.truncated;
+    const toRel = (path: string) => relative(projectDir!, path).split(sep).join('/');
+    workspaceTrees = workspace.trees.map((tree) => ({ path: tree.path, relPath: toRel(tree.path) }));
   }
-  const projectDir = workspace.projectDir;
-  const projectPath = workspace.projectPath;
   const file = options.project ?? (await readProjectFile(projectPath));
 
   let compiled: CompiledProject;
@@ -175,19 +194,13 @@ export async function runScenarioTests(
   }
 
   const warnings: string[] = [];
-  if (workspace.truncated) {
+  if (truncated) {
     warnings.push('Only the first 500 tree files of the project were tested');
   }
 
   // Trees: the file itself, the trees below the folder, or every tree of the project.
-  const toRel = (path: string) => relative(projectDir, path).split(sep).join('/');
-  let trees = workspace.trees.map((tree) => ({ path: tree.path, relPath: toRel(tree.path) }));
-  if (isFile) {
-    if (!isPathInDir(target, projectDir)) {
-      throw new ScenarioConfigError(`${target} is not in the project ${projectDir}`);
-    }
-    trees = [{ path: target, relPath: toRel(target) }];
-  } else if (target !== projectDir) {
+  let trees = workspaceTrees;
+  if (!isFile && target !== projectDir) {
     trees = trees.filter((tree) => isPathInDir(tree.path, target));
   }
   if (options.trees && options.trees.length > 0) {
@@ -213,16 +226,19 @@ export async function runScenarioTests(
   if (scenarios.length === 0) {
     throw new ScenarioConfigError(`No scenarios defined in ${projectPath}`);
   }
-  for (const scenario of scenarios) {
-    const patterns = scenarioTreePatterns(scenario);
-    if (
-      patterns.length > 0 &&
-      !workspace.trees.some((tree) => scenarioAppliesTo(scenario, toRel(tree.path)))
-    ) {
-      warnings.push(`Scenario '${scenario.name}': trees ${patterns.join(', ')} match no tree`);
+  if (!isFile) {
+    for (const scenario of scenarios) {
+      const patterns = scenarioTreePatterns(scenario);
+      if (
+        patterns.length > 0 &&
+        !workspaceTrees.some((tree) => scenarioAppliesTo(scenario, tree.relPath))
+      ) {
+        warnings.push(`Scenario '${scenario.name}': trees ${patterns.join(', ')} match no tree`);
+      }
     }
   }
 
+  const subtreeCache: SubtreeFileCache = new Map();
   const cases: ScenarioTestCase[] = [];
   for (const tree of trees) {
     const applicable = scenarios.filter((s) => scenarioAppliesTo(s, tree.relPath));
@@ -251,11 +267,12 @@ export async function runScenarioTests(
       }
       const started = performance.now();
       try {
-        // Referenced trees are loaded once per tree (without the project plugin).
+        // Referenced trees are loaded once per tree and cached across trees in the run.
         subtrees ??= await loadSubtreeLibrary(
           projectDir,
           compiled,
           collectSubtreeRefsJson(json, compiled),
+          { cache: subtreeCache },
         );
         const outcome = runScenarioTest(nodeFromJson(json, createIdGen()), compiled, scenario, {
           subtrees,

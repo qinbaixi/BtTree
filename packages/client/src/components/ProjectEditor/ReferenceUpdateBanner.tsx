@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RefRename } from '@owlbt/shared';
 import { updateReferences, type ChangedTree, type UpdateReferencesResult } from '../../lib/api';
 import { getDirtyTreePaths } from '../../lib/dirtyTrees';
+import { normalizePathKey } from '../../lib/paths';
 import { t } from '../../i18n';
 import { alerts } from '../../store/alertStore';
 import { projectEditorStore, useProjectEditorStore } from '../../store/projectEditorStore';
@@ -19,10 +20,7 @@ export function confirmLeaveProject(): boolean {
 }
 
 /** Paths compared the way the file system does: separators unified, case-insensitive on Windows. */
-export function normalizeTreePath(path: string): string {
-  const unified = path.replace(/\\/g, '/');
-  return /^[A-Za-z]:\//.test(unified) ? unified.toLowerCase() : unified;
-}
+export { normalizePathKey as normalizeTreePath } from '../../lib/paths';
 
 /** Trees with unsaved edits in this tab or another one (see dirtyTrees). */
 export function openDirtyTreePaths(): Set<string> {
@@ -37,7 +35,7 @@ export function openDirtyTreePaths(): Set<string> {
       paths.push(tab.path);
     }
   }
-  return new Set(paths.map(normalizeTreePath));
+  return new Set(paths.map(normalizePathKey));
 }
 
 /** "Old → New" list of renames, e.g. `MoveTo → Walk, key Target → Goal`. */
@@ -129,7 +127,7 @@ export function ReferenceUpdateBanner() {
   }
 
   const dirtyPaths = openDirtyTreePaths();
-  const isOpenDirty = (file: ChangedTree) => dirtyPaths.has(normalizeTreePath(file.path));
+  const isOpenDirty = (file: ChangedTree) => dirtyPaths.has(normalizePathKey(file.path));
   const files = check.result.changed;
   const writable = files.filter((file) => !isOpenDirty(file));
   const skipped = files.filter(isOpenDirty);
@@ -141,6 +139,9 @@ export function ReferenceUpdateBanner() {
         skip: skipped.map((file) => file.path),
       });
       const written = result.changed.filter((file) => !file.skipped);
+      if (written.length > 0) {
+        tabsStore.getState().invalidate(written.map((file) => file.path));
+      }
       alerts.success(
         written.length === 1
           ? t('Updated 1 tree file')

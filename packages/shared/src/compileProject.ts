@@ -57,11 +57,13 @@ function basesOf(desc: ItemTypeDescJson): string[] {
 /** Shallow-merges properties that share a name, keeping the position of the first occurrence. */
 function dedupeProperties(props: PropertyDescJson[]): PropertyDescJson[] {
   const out: PropertyDescJson[] = [];
+  const byName = new Map<string, number>();
   for (const prop of props) {
-    const index = out.findIndex((e) => e.name === prop.name);
-    if (index >= 0) {
+    const index = byName.get(prop.name);
+    if (index !== undefined) {
       out[index] = { ...out[index], ...prop };
     } else {
+      byName.set(prop.name, out.length);
       out.push(prop);
     }
   }
@@ -110,37 +112,86 @@ function mergeSimulate(
   return { ...base, ...own };
 }
 
-/** Produces the descriptor with inherited fields and properties merged in (bases must already be resolved). */
+/**
+ * Produces the descriptor with inherited fields and properties merged in.
+ * Linearizes unique ancestors (post-order DFS from raw descriptors) so diamond inheritance does
+ * not let a shared ancestor overwrite a sibling base's explicit overrides.
+ */
 function resolveInheritance(
   desc: ItemTypeDescJson,
-  resolved: Map<string, ItemTypeDescJson>,
+  descs: Map<string, ItemTypeDescJson>,
 ): ItemTypeDescJson {
   const bases = basesOf(desc);
   if (bases.length === 0) {
     return desc;
   }
 
-  let merged: ItemTypeDescJson = { name: desc.name };
-  let props: PropertyDescJson[] = [];
-  for (const base of bases) {
-    const baseDesc = resolved.get(base);
-    if (!baseDesc) {
-      throw new Error(`Missing base type '${base}' for '${desc.name}'`);
+  const chain: ItemTypeDescJson[] = [];
+  const visited = new Set<string>();
+  const collect = (typeName: string): void => {
+    if (visited.has(typeName)) {
+      return;
     }
-    merged = Object.assign(merged, baseDesc, desc, { isAbstract: desc.isAbstract });
-    props = props.concat(baseDesc.properties ?? []);
-  }
-  props = props.concat(desc.properties ?? []);
-  let simulate: SimulateJson | undefined;
+    const current = descs.get(typeName);
+    if (!current) {
+      throw new Error(`Missing base type '${typeName}' for '${desc.name}'`);
+    }
+    visited.add(typeName);
+    for (const base of basesOf(current)) {
+      collect(base);
+    }
+    chain.push(current);
+  };
   for (const base of bases) {
-    simulate = mergeSimulate(simulate, resolved.get(base)?.simulate);
+    collect(base);
   }
-  simulate = mergeSimulate(simulate, desc.simulate);
+  chain.push(desc);
+
+  const merged: ItemTypeDescJson = { name: desc.name };
+  const props: PropertyDescJson[] = [];
+  let simulate: SimulateJson | undefined;
+  for (const part of chain) {
+    for (const [key, value] of Object.entries(part)) {
+      if (key === 'name' || key === 'base' || key === 'isAbstract' || key === 'properties' || key === 'simulate') {
+        continue;
+      }
+      if (value !== undefined) {
+        merged[key] = value;
+      }
+    }
+    if (part.properties) {
+      props.push(...part.properties);
+    }
+    simulate = mergeSimulate(simulate, part.simulate);
+  }
+  if (desc.isAbstract !== undefined) {
+    merged.isAbstract = desc.isAbstract;
+  }
   if (simulate) {
     merged.simulate = simulate;
   }
   merged.properties = dedupeProperties(props);
   return merged;
+}
+
+/** Transitive ancestors of `desc` in breadth-first order (direct bases first, then grandparents). */
+function collectAncestors(desc: ItemTypeDescJson, descs: Map<string, ItemTypeDescJson>): string[] {
+  const ancestors: string[] = [];
+  const seen = new Set<string>([desc.name]);
+  const queue = [...basesOf(desc)];
+  for (let i = 0; i < queue.length; i++) {
+    const base = queue[i];
+    if (seen.has(base)) {
+      continue;
+    }
+    seen.add(base);
+    ancestors.push(base);
+    const baseDesc = descs.get(base);
+    if (baseDesc) {
+      queue.push(...basesOf(baseDesc));
+    }
+  }
+  return ancestors;
 }
 
 export function resolveProperty(
@@ -177,6 +228,7 @@ function compileItem(
   desc: ItemTypeDescJson,
   customTypes: Record<string, CustomTypeJson>,
   bases: string[],
+  ancestors: string[],
 ): CompiledItemType {
   // Subtree references run another tree: they never have child nodes of their own.
   const subtree = kind === 'node' && desc.subtree === true;
@@ -193,6 +245,7 @@ function compileItem(
   if (desc.export !== undefined) item.export = desc.export;
   if (desc.simulate !== undefined) item.simulate = desc.simulate;
   if (bases.length > 0) item.bases = bases;
+  if (ancestors.length > 0) item.ancestors = ancestors;
   if (subtree) {
     item.subtree = true;
     if (!item.properties.some((p) => p.name === SUBTREE_PROPERTY)) {
@@ -224,7 +277,7 @@ function compileKind(
   for (const name of sortByBases(descs)) {
     const desc = descs.get(name);
     if (desc) {
-      resolved.set(name, resolveInheritance(desc, resolved));
+      resolved.set(name, resolveInheritance(desc, descs));
     }
   }
 
@@ -236,7 +289,13 @@ function compileKind(
     }
     // Bases come from the descriptor as written: inheritance overwrites `base` in the resolved one.
     const original = descs.get(name);
-    result[name] = compileItem(kind, desc, customTypes, original ? basesOf(original) : []);
+    result[name] = compileItem(
+      kind,
+      desc,
+      customTypes,
+      original ? basesOf(original) : [],
+      original ? collectAncestors(original, descs) : [],
+    );
   }
   return result;
 }

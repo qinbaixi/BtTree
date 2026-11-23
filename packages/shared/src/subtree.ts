@@ -63,7 +63,7 @@ export function normalizeSubtreeRef(raw: unknown): NormalizedRef {
   if (text === '') {
     return { error: 'empty' };
   }
-  if (text.startsWith('/') || /^[A-Za-z]:/.test(text)) {
+  if (text.includes('\0') || text.startsWith('/') || /^[A-Za-z]:/.test(text)) {
     return { error: 'outside' };
   }
   const out: string[] = [];
@@ -82,6 +82,9 @@ export function normalizeSubtreeRef(raw: unknown): NormalizedRef {
   }
   if (out.length === 0) {
     return { error: 'empty' };
+  }
+  if (/^[A-Za-z]:/.test(out[0])) {
+    return { error: 'outside' };
   }
   const ref = out.join('/');
   return { ref: /\.json$/i.test(ref) ? ref : `${ref}.json` };
@@ -111,9 +114,11 @@ export function subtreeRefOf(node: TreeNode, project: CompiledProject): Normaliz
 /** Unique valid references of the subtree nodes of a tree, in tree order. */
 export function collectSubtreeRefs(root: TreeNode, project: CompiledProject): string[] {
   const refs: string[] = [];
+  const seen = new Set<string>();
   const visit = (node: TreeNode): void => {
     const result = subtreeRefOf(node, project);
-    if (result && 'ref' in result && !refs.includes(result.ref)) {
+    if (result && 'ref' in result && !seen.has(result.ref)) {
+      seen.add(result.ref);
       refs.push(result.ref);
     }
     for (const child of node.childNodes) {
@@ -124,9 +129,48 @@ export function collectSubtreeRefs(root: TreeNode, project: CompiledProject): st
   return refs;
 }
 
-/** Same as collectSubtreeRefs for a tree file's JSON. */
+/** Same as collectSubtreeRefs for a tree file's JSON (walks JSON directly without building TreeNodes). */
 export function collectSubtreeRefsJson(json: TreeNodeJson, project: CompiledProject): string[] {
-  return collectSubtreeRefs(nodeFromJson(json, createIdGen()), project);
+  const refs: string[] = [];
+  const seen = new Set<string>();
+  const visit = (node: TreeNodeJson): void => {
+    if (typeof node !== 'object' || node === null) {
+      return;
+    }
+    const type = getItemType(project, 'node', node.type || 'unknown');
+    if (isSubtreeType(type)) {
+      const prop = type.properties.find((p) => p.name === SUBTREE_PROPERTY) ?? SUBTREE_PROPERTY_DESC;
+      let raw: unknown;
+      if (Array.isArray(node.properties)) {
+        for (const entry of node.properties) {
+          if (entry && entry.name === SUBTREE_PROPERTY) {
+            raw = entry.value;
+          }
+        }
+      }
+      const value = raw !== undefined ? raw : prop.default;
+      const result = normalizeSubtreeRef(value);
+      if ('ref' in result && !seen.has(result.ref)) {
+        seen.add(result.ref);
+        refs.push(result.ref);
+      }
+    }
+    if (Array.isArray(node.childNodes)) {
+      for (const child of node.childNodes) {
+        visit(child);
+      }
+    }
+  };
+  visit(json);
+  return refs;
+}
+
+function normalizeSelfRef(selfRef: string | undefined): string | undefined {
+  if (selfRef === undefined) {
+    return undefined;
+  }
+  const normalized = normalizeSubtreeRef(selfRef);
+  return 'ref' in normalized ? normalized.ref : selfRef;
 }
 
 function loadProblem(ref: string, entry: SubtreeEntry | undefined): SubtreeProblem | undefined {
@@ -160,11 +204,12 @@ export function checkSubtrees(
   library: SubtreeLibrary,
   selfRef?: string,
 ): Map<string, SubtreeProblem> {
+  const normalizedSelfRef = normalizeSelfRef(selfRef);
   const problems = new Map<string, SubtreeProblem>();
   const ownRefs = collectSubtreeRefs(root, project);
   const edgeCache = new Map<string, string[]>();
   const edges = (ref: string): string[] => {
-    if (ref === selfRef) {
+    if (ref === normalizedSelfRef) {
       return ownRefs;
     }
     let list = edgeCache.get(ref);
@@ -178,7 +223,7 @@ export function checkSubtrees(
 
   // Cycle reachable from a reference, as the chain of references that closes it.
   const memo = new Map<string, string[] | null>();
-  const visiting: string[] = selfRef !== undefined ? [selfRef] : [];
+  const visiting: string[] = normalizedSelfRef !== undefined ? [normalizedSelfRef] : [];
   const findCycle = (ref: string): string[] | null => {
     const known = memo.get(ref);
     if (known !== undefined) {
@@ -207,7 +252,7 @@ export function checkSubtrees(
       const problem =
         refProblem(result) ??
         ('ref' in result ? loadProblem(result.ref, library[result.ref]) : undefined);
-      if (problem && !('ref' in result && result.ref === selfRef)) {
+      if (problem && !('ref' in result && result.ref === normalizedSelfRef)) {
         problems.set(node.id, problem);
       } else if ('ref' in result) {
         const cycle = findCycle(result.ref);
@@ -258,9 +303,10 @@ export function expandSubtrees(
   library: SubtreeLibrary,
   options: ExpandOptions,
 ): ExpandResult {
+  const normalizedSelfRef = normalizeSelfRef(options.selfRef);
   const errors = new Map<string, SubtreeProblem>();
   const refs = new Map<string, string>();
-  const stack: string[] = options.selfRef !== undefined ? [options.selfRef] : [];
+  const stack: string[] = normalizedSelfRef !== undefined ? [normalizedSelfRef] : [];
   let count = 0;
 
   const expandNode = (node: TreeNode, depth: number): TreeNode => {

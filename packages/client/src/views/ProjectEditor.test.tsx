@@ -249,4 +249,44 @@ describe('ProjectEditor page', () => {
     renderEditor('/project');
     expect(screen.getByText(/No project path given/)).toBeTruthy();
   });
+
+  it('reverts TextInput edits on Escape without committing and strips trailing {{ on placeholder insert', async () => {
+    renderEditor();
+    const list = await loaded();
+    fireEvent.click(within(list).getByRole('button', { name: /^Wait/ }));
+
+    const nameInput = (await screen.findByRole('textbox', { name: 'Type name' })) as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: 'TemporaryName' } });
+    fireEvent.keyDown(nameInput, { key: 'Escape' });
+    expect(nameInput.value).toBe('Wait');
+    expect(draft()?.nodes?.map((n) => n.name)).toContain('Wait');
+    expect(draft()?.nodes?.map((n) => n.name)).not.toContain('TemporaryName');
+
+    const descInput = screen.getByRole('textbox', { name: 'Description template' });
+    fireEvent.change(descInput, { target: { value: 'Wait {{' } });
+    fireEvent.click(screen.getByRole('button', { name: '{{duration}}' }));
+    await waitFor(() =>
+      expect(draft()?.nodes?.find((n) => n.name === 'Wait')?.description).toBe('Wait {{duration}}'),
+    );
+  });
+
+  it('moves types within their visible group and guards the Home breadcrumb when dirty', async () => {
+    renderEditor();
+    const list = await loaded();
+    const actionRegion = within(list).getByRole('region', { name: 'Action nodes' });
+    // Base is the first action node even though Selector precedes it in draft.nodes.
+    expect(
+      within(actionRegion).getByRole('button', { name: 'Move Base up' }).hasAttribute('disabled'),
+    ).toBe(true);
+    fireEvent.click(within(actionRegion).getByRole('button', { name: 'Move Base down' }));
+    await waitFor(() =>
+      expect(draft()?.nodes?.map((n) => n.name)).toEqual(['Selector', 'Wait', 'Base']),
+    );
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('home page')).toBeNull();
+    confirm.mockRestore();
+  });
 });

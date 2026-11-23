@@ -11,8 +11,11 @@ import {
 import { commandContext } from '../../commands/registry';
 import { openSubtreeOfNode } from '../../commands/subtreeCommands';
 import { fetchWorkspace } from '../../lib/api';
+import { samePath } from '../../lib/paths';
 import { useRunStore } from '../../store/runStore';
 import { useSubtreeProblem, useSubtreeStore } from '../../store/subtreeStore';
+import { useTreeStore } from '../../store/treeStore';
+import { treeDirectory } from './TreeOverview';
 import styles from './PropertyPanel.module.css';
 import own from './SubtreeSection.module.css';
 import { t } from '../../i18n';
@@ -28,11 +31,33 @@ export function loadProjectTrees(projectDir: string): Promise<string[]> {
   if (!cached) {
     cached = fetchWorkspace(projectDir).then(
       (workspace) => workspace.trees.map((tree) => tree.relPath),
-      () => [],
+      () => {
+        treeLists.delete(projectDir);
+        return [];
+      },
     );
     treeLists.set(projectDir, cached);
   }
   return cached;
+}
+
+/** Resolves the project folder and its trees directly from the open tree path when subtreeStore has none yet. */
+async function loadProjectTreesForTree(
+  treePath: string,
+): Promise<{ trees: string[]; selfRelPath?: string }> {
+  try {
+    const local = await fetchWorkspace(treeDirectory(treePath));
+    const rootDir = local.projectDir ?? local.dir;
+    const workspace =
+      rootDir !== local.dir ? await fetchWorkspace(rootDir) : local;
+    const selfEntry = workspace.trees.find((tree) => samePath(tree.path, treePath));
+    return {
+      trees: workspace.trees.map((tree) => tree.relPath),
+      selfRelPath: selfEntry?.relPath,
+    };
+  } catch {
+    return { trees: [] };
+  }
 }
 
 /** Forgets the cached tree lists (tests, and after a picker refresh). */
@@ -56,6 +81,7 @@ export interface SubtreeSectionProps {
  * suggestions), its state, a preview of its top level and a button that opens it.
  */
 export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
+  const treePath = useTreeStore((state) => state.treePath);
   const projectDir = useSubtreeStore((state) => state.projectDir);
   const self = useSubtreeStore((state) => state.self);
   const loading = useSubtreeStore((state) => state.loading);
@@ -78,17 +104,21 @@ export function SubtreeSection({ node, type, onCommit }: SubtreeSectionProps) {
   }
 
   useEffect(() => {
-    if (!projectDir) {
-      return undefined;
-    }
     let active = true;
-    void loadProjectTrees(projectDir).then((list) => {
-      if (active) setTrees(list.filter((path) => path !== self));
-    });
+    if (projectDir) {
+      void loadProjectTrees(projectDir).then((list) => {
+        if (active) setTrees(list.filter((path) => path !== self));
+      });
+    } else if (treePath) {
+      void loadProjectTreesForTree(treePath).then(({ trees: list, selfRelPath }) => {
+        const exclude = self ?? selfRelPath;
+        if (active) setTrees(list.filter((path) => path !== exclude));
+      });
+    }
     return () => {
       active = false;
     };
-  }, [projectDir, self]);
+  }, [projectDir, self, treePath]);
 
   const commit = (value: string): void => {
     const next = value.trim();

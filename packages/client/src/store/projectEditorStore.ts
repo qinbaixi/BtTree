@@ -167,6 +167,26 @@ export function parseProjectText(text: string): { json?: string; error?: string 
   }
 }
 
+/** Structural equality of two selections without serializing to JSON. */
+function sameProjectSelection(
+  a: ProjectSelection | undefined,
+  b: ProjectSelection | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b || a.view !== b.view) {
+    return false;
+  }
+  if (a.view === 'type' && b.view === 'type') {
+    return a.kind === b.kind && a.name === b.name;
+  }
+  if ((a.view === 'custom' && b.view === 'custom') || (a.view === 'blackboard' && b.view === 'blackboard')) {
+    return a.name === b.name;
+  }
+  return true;
+}
+
 /** Keeps the selection when its type still exists in the draft; otherwise clears it. */
 export function keepSelection(
   draft: ProjectFile,
@@ -193,6 +213,8 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
     let savedKey: string | undefined;
     /** Canonical JSON of the text the last save attempted to write. */
     let attemptedJson: string | undefined;
+    /** Prevents edits made after save / undo / redo from merging into a pre-boundary undo step. */
+    let coalesceBlocked = false;
     /** Renames since the last load or save, in order (undo adds the reverse rename). */
     let renameLog: RefRename[] = [];
     const logRenames = (renames: RefRename[] | undefined, reverse = false): void => {
@@ -212,7 +234,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         meta = await deps.fetchMeta(path);
       } catch (err) {
         if (token === loadToken) {
-          set({ loading: false, loadError: errorText(err) });
+          set({ loading: false, saving: false, loadError: errorText(err) });
         }
         return;
       }
@@ -221,18 +243,21 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
       }
       const parsed = parseProjectText(meta.content);
       if (parsed.json === undefined) {
-        set({ loading: false, loadError: parsed.error ?? t('Invalid project file') });
+        set({ loading: false, saving: false, loadError: parsed.error ?? t('Invalid project file') });
         return;
       }
       const draft = JSON.parse(parsed.json) as ProjectFile;
       savedJson = parsed.json;
       savedKey = stableJson(draft);
+      attemptedJson = undefined;
+      coalesceBlocked = true;
       renameLog = [];
       set((state) => ({
         projectPath: meta.path,
         baseHash: meta.hash,
         draft,
         loading: false,
+        saving: false,
         loadError: undefined,
         dirty: false,
         conflict: false,
@@ -248,7 +273,10 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
 
     /** Shared by save and overwrite. `force` skips the stale-file check on the server. */
     const write = async (force: boolean): Promise<boolean> => {
-      const { projectPath, draft, baseHash } = get();
+      const { projectPath, draft, baseHash, saving } = get();
+      if (saving) {
+        return false;
+      }
       if (!projectPath || !draft || baseHash === undefined) {
         alerts.error(t('Unable to save before the project is loaded'));
         return false;
@@ -262,15 +290,23 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         return false;
       }
 
+      const token = loadToken;
       const snapshot = draft;
       const loggedRenames = renameLog.length;
-      attemptedJson = canonicalJson(snapshot);
+      const nextAttemptedJson = canonicalJson(snapshot);
+      attemptedJson = nextAttemptedJson;
       const attemptedKey = stableJson(snapshot);
+      // Do not coalesce subsequent edits into the pre-save undo entry.
+      coalesceBlocked = true;
       set({ saving: true, saveError: undefined });
       try {
         const { hash } = await deps.save(projectPath, { content: snapshot, baseHash, force });
-        savedJson = attemptedJson;
+        if (token !== loadToken) {
+          return false;
+        }
+        savedJson = nextAttemptedJson;
         savedKey = attemptedKey;
+        attemptedJson = undefined;
         const saved = renameLog.slice(0, loggedRenames);
         renameLog = renameLog.slice(loggedRenames);
         // Edits made while the request was running stay unsaved.
@@ -288,6 +324,10 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         alerts.success(t('Project saved'));
         return true;
       } catch (err) {
+        if (token !== loadToken) {
+          return false;
+        }
+        attemptedJson = undefined;
         if (err instanceof ApiError && err.status === 409) {
           set({ saving: false, conflict: true });
           return false;
@@ -314,8 +354,11 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         const token = ++loadToken;
         savedJson = undefined;
         savedKey = undefined;
+        attemptedJson = undefined;
+        coalesceBlocked = true;
         set({
           loading: true,
+          saving: false,
           loadError: undefined,
           projectPath: undefined,
           draft: undefined,
@@ -337,13 +380,14 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         const selectionAfter =
           nextSelection === undefined ? state.selection : (nextSelection ?? undefined);
         const last = state.undoStack[state.undoStack.length - 1];
-        // Merge into the previous step only while the selection stays on the same item.
+        // Merge into the previous step only while the selection stays on the same item and no save/undo intervened.
         const merge =
+          !coalesceBlocked &&
           options?.coalesceKey !== undefined &&
           last !== undefined &&
           last.coalesceKey === options.coalesceKey &&
-          canonicalJson(last.selectionAfter) === canonicalJson(state.selection) &&
-          canonicalJson(selectionAfter) === canonicalJson(last.selectionAfter);
+          sameProjectSelection(last.selectionAfter, state.selection) &&
+          sameProjectSelection(selectionAfter, last.selectionAfter);
 
         let undoStack: ProjectHistoryEntry[];
         if (merge && last) {
@@ -371,6 +415,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
           }
           undoStack = [...state.undoStack, entry].slice(-UNDO_STACK_LIMIT);
         }
+        coalesceBlocked = false;
         logRenames(options?.renames);
         set({
           draft: nextDraft,
@@ -389,6 +434,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         if (!entry || !state.draft) {
           return;
         }
+        coalesceBlocked = true;
         const nextDraft = applyPatches(state.draft, entry.inversePatches);
         logRenames(entry.renames && [...entry.renames].reverse(), true);
         set({
@@ -407,6 +453,7 @@ export function createProjectEditorStore(overrides: Partial<ProjectEditorDeps> =
         if (!entry || !state.draft) {
           return;
         }
+        coalesceBlocked = true;
         const nextDraft = applyPatches(state.draft, entry.patches);
         logRenames(entry.renames);
         set({

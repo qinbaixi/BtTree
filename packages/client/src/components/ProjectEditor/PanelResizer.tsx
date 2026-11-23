@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { getJson, setJson } from '../../lib/storage';
 import { t } from '../../i18n';
 import styles from './ProjectEditor.module.css';
@@ -16,14 +16,16 @@ export function clampPreviewWidth(width: number): number {
 }
 
 /** Width of the preview panel, persisted in localStorage. */
-export function usePreviewWidth(): [number, (width: number) => void] {
+export function usePreviewWidth(): [number, (width: number, persist?: boolean) => void] {
   const [width, setWidth] = useState(() =>
     clampPreviewWidth(getJson<number>(PREVIEW_WIDTH_STORAGE_KEY, PREVIEW_DEFAULT_WIDTH)),
   );
-  const update = (next: number) => {
+  const update = (next: number, persist = true) => {
     const clamped = clampPreviewWidth(next);
     setWidth(clamped);
-    setJson(PREVIEW_WIDTH_STORAGE_KEY, clamped);
+    if (persist) {
+      setJson(PREVIEW_WIDTH_STORAGE_KEY, clamped);
+    }
   };
   return [width, update];
 }
@@ -32,6 +34,8 @@ interface PanelResizerProps {
   /** Current size (px) of the panel: its width for a vertical handle, its height for a horizontal one. */
   value: number;
   onResize(value: number): void;
+  /** Called once when a drag finishes, on keyboard step, or on double click (for persistence). */
+  onCommit?(value: number): void;
   /** Vertical = handle on the left edge of a panel (col-resize), horizontal = on its top edge. */
   orientation?: 'vertical' | 'horizontal';
   min?: number;
@@ -51,6 +55,7 @@ const KEY_STEP = 20;
 export function PanelResizer({
   value,
   onResize,
+  onCommit,
   orientation = 'vertical',
   min = PREVIEW_MIN_WIDTH,
   max = PREVIEW_MAX_WIDTH,
@@ -59,28 +64,62 @@ export function PanelResizer({
   title = t('Drag to resize the preview'),
 }: PanelResizerProps) {
   const [dragging, setDragging] = useState(false);
+  const cleanupRef = useRef<(() => void) | undefined>(undefined);
   const horizontal = orientation === 'horizontal';
 
+  useEffect(() => () => cleanupRef.current?.(), []);
+
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || cleanupRef.current) {
+      return;
+    }
     event.preventDefault();
+    const pointerId = event.pointerId;
     const start = horizontal ? event.clientY : event.clientX;
     const startValue = value;
+    let lastValue = startValue;
+    let moved = false;
     const handle = event.currentTarget;
-    handle.setPointerCapture(event.pointerId);
+    handle.setPointerCapture?.(pointerId);
     setDragging(true);
+
     const move = (moveEvent: globalThis.PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) {
+        return;
+      }
       const now = horizontal ? moveEvent.clientY : moveEvent.clientX;
-      onResize(startValue + (start - now));
+      const next = Math.round(Math.min(max, Math.max(min, startValue + (start - now))));
+      if (next !== lastValue) {
+        lastValue = next;
+        moved = true;
+        onResize(next);
+      }
     };
-    const up = () => {
-      setDragging(false);
+    const cleanup = (commit: boolean) => {
       handle.removeEventListener('pointermove', move);
       handle.removeEventListener('pointerup', up);
-      handle.removeEventListener('pointercancel', up);
+      handle.removeEventListener('pointercancel', cancel);
+      handle.removeEventListener('lostpointercapture', cancel);
+      cleanupRef.current = undefined;
+      setDragging(false);
+      if (commit && moved) {
+        onCommit?.(lastValue);
+      }
     };
+    const up = (upEvent: globalThis.PointerEvent) => {
+      if (upEvent.pointerId !== pointerId) {
+        return;
+      }
+      cleanup(true);
+    };
+    const cancel = () => {
+      cleanup(true);
+    };
+    cleanupRef.current = () => cleanup(false);
     handle.addEventListener('pointermove', move);
     handle.addEventListener('pointerup', up);
-    handle.addEventListener('pointercancel', up);
+    handle.addEventListener('pointercancel', cancel);
+    handle.addEventListener('lostpointercapture', cancel);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -88,10 +127,14 @@ export function PanelResizer({
     const shrink = horizontal ? 'ArrowDown' : 'ArrowRight';
     if (event.key === grow) {
       event.preventDefault();
-      onResize(value + KEY_STEP);
+      const next = value + KEY_STEP;
+      onResize(next);
+      onCommit?.(next);
     } else if (event.key === shrink) {
       event.preventDefault();
-      onResize(value - KEY_STEP);
+      const next = value - KEY_STEP;
+      onResize(next);
+      onCommit?.(next);
     }
   };
 
@@ -110,7 +153,10 @@ export function PanelResizer({
       }`}
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
-      onDoubleClick={() => onResize(defaultValue)}
+      onDoubleClick={() => {
+        onResize(defaultValue);
+        onCommit?.(defaultValue);
+      }}
     />
   );
 }

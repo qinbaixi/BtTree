@@ -540,4 +540,51 @@ describe('projectEditorStore renames', () => {
     await store.getState().reload();
     expect(store.getState().draft?.nodes?.[1].name).toBe('Wait');
   });
+
+  it('ignores concurrent saves while a save is already in flight', async () => {
+    const { store, save } = setup();
+    await store.getState().load(PATH);
+    let release: (() => void) | undefined;
+    save.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ hash: 'hash-2' });
+        }),
+    );
+    rename(store, 'Wait', 'Pause');
+    const first = store.getState().save();
+    const second = await store.getState().save();
+    expect(second).toBe(false);
+    expect(save).toHaveBeenCalledTimes(1);
+    release?.();
+    expect(await first).toBe(true);
+    expect(store.getState().savedRenames).toEqual([{ kind: 'node', from: 'Wait', to: 'Pause' }]);
+  });
+
+  it('does not coalesce post-save edits into a pre-save undo step', async () => {
+    const { store } = setup();
+    await store.getState().load(PATH);
+    const key = { coalesceKey: 'icon:node:Selector' };
+    store.getState().apply(
+      'Set icon',
+      (d) => {
+        d.nodes![0].icon = 'a';
+      },
+      undefined,
+      key,
+    );
+    await store.getState().save();
+    store.getState().apply(
+      'Set icon',
+      (d) => {
+        d.nodes![0].icon = 'ab';
+      },
+      undefined,
+      key,
+    );
+    expect(store.getState().undoStack).toHaveLength(2);
+    store.getState().undo();
+    expect(store.getState().draft?.nodes?.[0].icon).toBe('a');
+    expect(store.getState().dirty).toBe(false);
+  });
 });

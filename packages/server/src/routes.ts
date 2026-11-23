@@ -26,13 +26,15 @@ import {
   findProjectFile,
   getProject,
   isPathInDir,
+  isProjectConfigOrPluginPath,
+  isRealPathInDir,
   PLUGIN_FILE_NAME,
   type PluginContext,
   type PluginStatus,
   type Project,
   type ProjectOptions,
 } from './project';
-import { revoke, trust } from './pluginTrust';
+import { revokeMany, trustMany } from './pluginTrust';
 import { registerProjectUpgradeRoutes } from './projectUpgradeRoutes';
 import { registerReferenceRoutes } from './referenceRoutes';
 import { registerSampleRoutes } from './samples';
@@ -95,10 +97,17 @@ async function loadProjectOr404(path: string, options: ProjectOptions = {}): Pro
   return project;
 }
 
-async function requireProjectFor(treePath: string, options: ProjectOptions = {}): Promise<Project> {
+async function requireProjectFor(
+  treePath: string,
+  options: ProjectOptions = {},
+  rejectConfigAndPlugin = false,
+): Promise<Project> {
   const project = await getProject(treePath, options);
-  if (!project || !isPathInDir(treePath, project.dir)) {
+  if (!project || !isPathInDir(treePath, project.dir) || !(await isRealPathInDir(treePath, project.dir))) {
     throw new HttpError(403, 'Path must be in project');
+  }
+  if (rejectConfigAndPlugin && isProjectConfigOrPluginPath(treePath, project.dir)) {
+    throw new HttpError(403, 'Path is reserved for project configuration or plugins');
   }
   return project;
 }
@@ -144,11 +153,16 @@ async function resolveInitialDir(raw: unknown): Promise<string | undefined> {
   return undefined;
 }
 
-function buildContext(project: Project, treePath: string, tree: TreeNodeJson): PluginContext {
+function buildContext(
+  project: Project,
+  treePath: string,
+  tree: TreeNodeJson,
+  parsedProject?: ProjectFile,
+): PluginContext {
   return {
     tree,
     path: treePath,
-    project: JSON.parse(project.content) as ProjectFile,
+    project: parsedProject ?? (JSON.parse(project.content) as ProjectFile),
     projectPath: project.path,
   };
 }
@@ -157,18 +171,20 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   const router = Router();
   const picker = options.picker ?? createPicker();
   const projectOptions: ProjectOptions = { trustAllPlugins: options.trustAllPlugins };
+  const metaProjectOptions: ProjectOptions = { ...projectOptions, loadPlugin: false };
+  const hookProjectOptions: ProjectOptions = { ...projectOptions, loadExporters: false };
 
   router.get('/health', (_req, res) => {
     res.json({ ok: true });
   });
 
   router.get('/project', async (req, res) => {
-    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), metaProjectOptions);
     res.type('application/json').send(project.content);
   });
 
   router.get('/project/meta', async (req, res) => {
-    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), metaProjectOptions);
     res.json({ path: project.path, hash: sha256(project.content), content: project.content });
   });
 
@@ -179,7 +195,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
   // Plugin trust state of the project that applies to a tree or project path.
   router.get('/plugin', async (req, res) => {
-    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), metaProjectOptions);
     res.json(pluginResponse(project));
   });
 
@@ -200,7 +216,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
    */
   router.put('/project', async (req, res) => {
     const body = objectBody(req.body);
-    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), projectOptions);
+    const project = await loadProjectOr404(requireAbsolutePath(req.query.path), metaProjectOptions);
 
     const content = body.content;
     if (typeof content !== 'object' || content === null || Array.isArray(content)) {
@@ -246,7 +262,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
   router.get('/tree', async (req, res) => {
     const treePath = requireAbsolutePath(req.query.path);
-    const project = await requireProjectFor(treePath, projectOptions);
+    const project = await requireProjectFor(treePath, hookProjectOptions, true);
 
     let raw: string;
     try {
@@ -279,27 +295,27 @@ export function createApiRouter(options: RouterOptions = {}): Router {
 
   router.post('/tree', async (req, res) => {
     const treePath = requireAbsolutePath(req.query.path);
-    const project = await requireProjectFor(treePath, projectOptions);
+    const project = await requireProjectFor(treePath, hookProjectOptions, true);
 
     const body: unknown = req.body;
     if (typeof body !== 'object' || body === null || Array.isArray(body)) {
       throw new HttpError(400, 'Tree must be a JSON object');
     }
 
-    let tree = body as TreeNodeJson;
-    if (project.plugin?.onTreeSave) {
-      const ctx = buildContext(project, treePath, tree);
-      const result = await project.plugin.onTreeSave(ctx);
-      if (result === false) {
-        throw new HttpError(409, 'Save was forbidden by tree project plugin');
-      }
-      if (typeof result === 'string') {
-        throw new HttpError(409, result);
-      }
-      tree = ctx.tree;
-    }
-
     await withFileLock(treePath, async () => {
+      let tree = body as TreeNodeJson;
+      if (project.plugin?.onTreeSave) {
+        const ctx = buildContext(project, treePath, tree);
+        const result = await project.plugin.onTreeSave(ctx);
+        if (result === false) {
+          throw new HttpError(409, 'Save was forbidden by tree project plugin');
+        }
+        if (typeof result === 'string') {
+          throw new HttpError(409, result);
+        }
+        tree = ctx.tree;
+      }
+
       let original: string | undefined;
       try {
         original = await readFile(treePath, 'utf8');
@@ -322,37 +338,35 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   });
 
   /** Trust decisions. The body names a path in the project; the project's plugin is the subject. */
-  const pluginDecision = (apply: (pluginPath: string) => Promise<void>) => {
+  const pluginDecision = (apply: (pluginPaths: readonly string[]) => Promise<void>) => {
     return async (req: Request, res: Response): Promise<void> => {
       const body = objectBody(req.body);
       const project = await loadProjectOr404(
         requireAbsolutePath(body.path, 'path'),
-        projectOptions,
+        metaProjectOptions,
       );
       if (!project.pluginStatus) {
         throw new HttpError(404, 'No plugin found');
       }
       try {
-        // owl-bt.js and the exporter files are trusted (or revoked) together.
-        for (const file of project.pluginFiles ?? [join(project.dir, PLUGIN_FILE_NAME)]) {
-          await apply(file);
-        }
+        // owl-bt.js and the exporter files are trusted (or revoked) together without executing them.
+        await apply(project.pluginFiles ?? [join(project.dir, PLUGIN_FILE_NAME)]);
       } catch (err) {
         if (isErrno(err, 'ENOENT')) {
           throw new HttpError(404, 'No plugin found');
         }
         throw err;
       }
-      res.json(pluginResponse(await loadProjectOr404(project.path, projectOptions)));
+      res.json(pluginResponse(await loadProjectOr404(project.path, metaProjectOptions)));
     };
   };
   router.post(
     '/plugin/trust',
-    pluginDecision((pluginPath) => trust(pluginPath)),
+    pluginDecision((pluginPaths) => trustMany(pluginPaths)),
   );
   router.post(
     '/plugin/revoke',
-    pluginDecision((pluginPath) => revoke(pluginPath)),
+    pluginDecision((pluginPaths) => revokeMany(pluginPaths)),
   );
 
   router.post('/dialog/pick', async (req, res) => {
@@ -386,7 +400,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   router.post('/tree/create', async (req, res) => {
     const body = objectBody(req.body);
     const treePath = withJsonExtension(resolve(requireAbsolutePath(body.path, 'path')));
-    await requireProjectFor(treePath, projectOptions);
+    await requireProjectFor(treePath, metaProjectOptions, true);
 
     await mkdir(dirname(treePath), { recursive: true });
     const created = await writeNewFile(treePath, await readTemplate('tree.json'));
@@ -405,7 +419,7 @@ export function createApiRouter(options: RouterOptions = {}): Router {
   router.post('/subtrees', async (req, res) => {
     const body = objectBody(req.body);
     const treePath = requireAbsolutePath(body.path, 'path');
-    const project = await requireProjectFor(treePath, projectOptions);
+    const project = await requireProjectFor(treePath, hookProjectOptions);
     const compiled = parseAndCompileProject(project.content);
     if (!compiled.project) {
       throw new HttpError(422, `Invalid project file: ${compiled.error ?? 'unknown error'}`);
@@ -434,10 +448,11 @@ export function createApiRouter(options: RouterOptions = {}): Router {
       }
     }
     const plugin = project.plugin;
+    const parsedProject = plugin?.onTreeLoad ? (JSON.parse(project.content) as ProjectFile) : undefined;
     const library = await loadSubtreeLibrary(project.dir, compiled.project, refs, {
       transform: plugin?.onTreeLoad
         ? async (path, tree) => {
-            const ctx = buildContext(project, path, tree);
+            const ctx = buildContext(project, path, tree, parsedProject);
             await plugin.onTreeLoad?.(ctx);
             return ctx.tree;
           }

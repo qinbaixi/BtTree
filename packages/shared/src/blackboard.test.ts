@@ -131,4 +131,26 @@ describe('blackboard declarations', () => {
     expect(plain.blackboard).toBeUndefined();
     expect(isUndeclaredBlackboardKey(plain, prop, 'Other')).toBe(false);
   });
+
+  it('rejects reserved expression literals and __proto__ as key names', () => {
+    const file = sample();
+    for (const bad of ['true', 'false', 'null', '__proto__']) {
+      expect(() => addBlackboardKey(file, { name: bad, type: 'string' })).toThrow();
+    }
+  });
+
+  it('renames keys in scenario.expect.blackboard too', () => {
+    const file = sample();
+    file.scenarios = [
+      {
+        name: 'Test',
+        blackboard: { Enemy: true },
+        expect: { result: 'success', blackboard: { Enemy: false } },
+      },
+    ];
+    const res = renameBlackboardKey(file, 'Enemy', 'Foe');
+    expect(res.scenarios).toBe(1);
+    expect(file.scenarios[0].blackboard).toEqual({ Foe: true });
+    expect(file.scenarios[0].expect?.blackboard).toEqual({ Foe: false });
+  });
 });

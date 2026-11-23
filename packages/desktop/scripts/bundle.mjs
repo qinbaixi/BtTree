@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const desktopDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const serverEntry = resolve(desktopDir, '../server/src/index.ts');
+const serverEntry = resolve(desktopDir, '../server/src/lib.ts');
 const outFile = resolve(desktopDir, 'dist/main.cjs');
 const preloadFile = resolve(desktopDir, 'dist/preload.cjs');
 

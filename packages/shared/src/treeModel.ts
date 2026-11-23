@@ -37,11 +37,29 @@ export function createIdGen(prefix = 'n'): IdGen {
   };
 }
 
+/** Sets an own enumerable property safely even when `key === '__proto__'`. */
+export function setOwnProperty(
+  target: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  if (key === '__proto__') {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    target[key] = value;
+  }
+}
+
 function toPropertyRecord(list: PropertyValueJson[] | undefined): Record<string, unknown> {
   const record: Record<string, unknown> = {};
   if (Array.isArray(list)) {
     for (const prop of list) {
-      record[prop.name] = prop.value;
+      setOwnProperty(record, prop.name, prop.value);
     }
   }
   return record;
@@ -58,7 +76,7 @@ function pickExtra(json: object, knownKeys: ReadonlySet<string>): Record<string,
   const extra: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(json)) {
     if (!knownKeys.has(key) && !key.startsWith('$')) {
-      extra[key] = value;
+      setOwnProperty(extra, key, value);
     }
   }
   return extra;
@@ -67,7 +85,7 @@ function pickExtra(json: object, knownKeys: ReadonlySet<string>): Record<string,
 function copyExtra(extra: Record<string, unknown>, target: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(extra)) {
     if (value !== undefined) {
-      target[key] = value;
+      setOwnProperty(target, key, value);
     }
   }
 }
@@ -79,7 +97,7 @@ function cloneValue(value: unknown): unknown {
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
-      out[key] = cloneValue(inner);
+      setOwnProperty(out, key, cloneValue(inner));
     }
     return out;
   }

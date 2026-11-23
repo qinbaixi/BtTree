@@ -265,4 +265,17 @@ describe('API routes', () => {
     const res = await request(app()).get('/api/nope');
     expect(res.status).toBe(404);
   });
+
+  it('rejects reading or overwriting owl-bt.json and owl-bt.js via /api/tree', async () => {
+    const projectFile = join(root, 'owl-bt.json');
+    const getRes = await request(app()).get('/api/tree').query({ path: projectFile });
+    expect(getRes.status).toBe(403);
+
+    const postRes = await request(app())
+      .post('/api/tree')
+      .query({ path: projectFile })
+      .set('Content-Type', 'application/json')
+      .send({ type: 'Selector' });
+    expect(postRes.status).toBe(403);
+  });
 });

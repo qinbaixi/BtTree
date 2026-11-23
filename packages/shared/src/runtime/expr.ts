@@ -81,6 +81,21 @@ function isIdentStart(ch: string): boolean {
   return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_';
 }
 
+const MAX_EXPR_DEPTH = 256;
+
+function unescapeChar(ch: string): string {
+  switch (ch) {
+    case 'n':
+      return '\n';
+    case 'r':
+      return '\r';
+    case 't':
+      return '\t';
+    default:
+      return ch;
+  }
+}
+
 function tokenize(src: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -104,7 +119,7 @@ function tokenize(src: string): Token[] {
       while (i < src.length) {
         const c = src[i];
         if (c === '\\' && i + 1 < src.length) {
-          text += src[i + 1];
+          text += unescapeChar(src[i + 1]);
           i += 2;
         } else if (c === ch) {
           closed = true;
@@ -159,6 +174,7 @@ const BINARY_LEVELS: BinaryOp[][] = [
 
 class Parser {
   private index = 0;
+  private depth = 0;
 
   constructor(private readonly tokens: Token[]) {}
 
@@ -168,6 +184,17 @@ class Parser {
 
   private next(): Token {
     return this.tokens[this.index++];
+  }
+
+  private enter(pos: number): void {
+    this.depth++;
+    if (this.depth > MAX_EXPR_DEPTH) {
+      throw new ExprError('Expression is too deeply nested', pos);
+    }
+  }
+
+  private leave(): void {
+    this.depth--;
   }
 
   parseExpr(): Expr {
@@ -186,11 +213,16 @@ class Parser {
       return this.parseUnary();
     }
     let left = this.parseLevel(level + 1);
+    let chain = 0;
     for (;;) {
       const token = this.peek();
       const op = BINARY_LEVELS[level].find((o) => token.type === 'op' && token.value === o);
       if (!op) {
         return left;
+      }
+      chain++;
+      if (this.depth + chain > MAX_EXPR_DEPTH) {
+        throw new ExprError('Expression is too deeply nested', token.pos);
       }
       this.next();
       const right = this.parseLevel(level + 1);
@@ -201,8 +233,11 @@ class Parser {
   private parseUnary(): Expr {
     const token = this.peek();
     if (token.type === 'op' && (token.value === '-' || token.value === '!')) {
+      this.enter(token.pos);
       this.next();
-      return { type: 'unary', op: token.value, operand: this.parseUnary(), pos: token.pos };
+      const operand = this.parseUnary();
+      this.leave();
+      return { type: 'unary', op: token.value, operand, pos: token.pos };
     }
     return this.parsePrimary();
   }
@@ -226,7 +261,9 @@ class Parser {
         return { type: 'ident', name: token.value, pos: token.pos };
       case 'op': {
         if (token.value === '(') {
+          this.enter(token.pos);
           const inner = this.parseLevel(0);
+          this.leave();
           const close = this.peek();
           if (close.type !== 'op' || close.value !== ')') {
             throw new ExprError("Expected ')'", close.pos);
@@ -247,6 +284,7 @@ class Parser {
     if (!fn) {
       throw new ExprError(`Unknown function '${name.value}'`, name.pos);
     }
+    this.enter(name.pos);
     this.next();
     const args: Expr[] = [];
     if (!(this.peek().type === 'op' && this.peek().value === ')')) {
@@ -265,6 +303,7 @@ class Parser {
       throw new ExprError("Expected ',' or ')'", close.pos);
     }
     this.next();
+    this.leave();
     if (args.length < fn.min || args.length > fn.max) {
       const count = fn.min === fn.max ? `${fn.min}` : `${fn.min} to ${fn.max}`;
       throw new ExprError(
@@ -292,35 +331,39 @@ export const CURVE_NAMES = [
   'inverseStep',
 ] as const;
 
-const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
+const clamp01 = (x: number): number => (x <= 0 ? 0 : x >= 1 ? 1 : x);
 
-const CURVES: Record<string, (x: number) => number> = {
-  linear: (x) => x,
-  inverselinear: (x) => 1 - x,
-  quadratic: (x) => x * x,
-  inversequadratic: (x) => 1 - x * x,
-  sqrt: (x) => Math.sqrt(x),
-  inversesqrt: (x) => 1 - Math.sqrt(x),
-  // Normalized so that curve(0) = 0 and curve(1) = 1.
-  logistic: (x) => logistic01(x),
-  inverselogistic: (x) => 1 - logistic01(x),
-  step: (x) => (x >= 0.5 ? 1 : 0),
-  inversestep: (x) => (x >= 0.5 ? 0 : 1),
-};
+const LOGISTIC_K = 10;
+const logisticRaw = (t: number): number => 1 / (1 + Math.exp(-LOGISTIC_K * (t - 0.5)));
+const LOGISTIC_LO = logisticRaw(0);
+const LOGISTIC_HI = logisticRaw(1);
 
 function logistic01(x: number): number {
-  const k = 10;
-  const f = (t: number) => 1 / (1 + Math.exp(-k * (t - 0.5)));
-  const lo = f(0);
-  const hi = f(1);
-  return (f(x) - lo) / (hi - lo);
+  return (logisticRaw(x) - LOGISTIC_LO) / (LOGISTIC_HI - LOGISTIC_LO);
 }
 
-/** Value of response curve `name` (case insensitive) at x (clamped to 0..1). Throws for unknown names. */
+const CURVES: ReadonlyMap<string, (x: number) => number> = new Map([
+  ['linear', (x) => x],
+  ['inverselinear', (x) => 1 - x],
+  ['quadratic', (x) => x * x],
+  ['inversequadratic', (x) => 1 - x * x],
+  ['sqrt', (x) => Math.sqrt(x)],
+  ['inversesqrt', (x) => 1 - Math.sqrt(x)],
+  // Normalized so that curve(0) = 0 and curve(1) = 1.
+  ['logistic', (x) => logistic01(x)],
+  ['inverselogistic', (x) => 1 - logistic01(x)],
+  ['step', (x) => (x >= 0.5 ? 1 : 0)],
+  ['inversestep', (x) => (x >= 0.5 ? 0 : 1)],
+]);
+
+/** Value of response curve `name` (case insensitive) at x (clamped to 0..1). Throws for unknown names or NaN. */
 export function curveValue(name: string, x: number): number {
-  const fn = CURVES[name.toLowerCase()];
+  const fn = CURVES.get(name.toLowerCase());
   if (!fn) {
     throw new Error(`Unknown curve '${name}' (expected one of ${CURVE_NAMES.join(', ')})`);
+  }
+  if (Number.isNaN(x)) {
+    throw new Error("Function 'curve' needs a valid number, got NaN");
   }
   return clamp01(fn(clamp01(x)));
 }
@@ -399,12 +442,16 @@ export const EXPRESSION_FUNCTIONS: readonly ExprFunction[] = [
     min: 3,
     max: 3,
     call: ([x, lo, hi], _ctx, pos) => {
+      const v = num('normalize', x, pos);
       const a = num('normalize', lo, pos);
       const b = num('normalize', hi, pos);
       if (a === b) {
         throw new ExprError("Function 'normalize' needs different min and max", pos);
       }
-      return clamp01((num('normalize', x, pos) - a) / (b - a));
+      if (!Number.isFinite(a) || !Number.isFinite(b) || Number.isNaN(v)) {
+        throw new ExprError("Function 'normalize' needs finite min, max and non-NaN value", pos);
+      }
+      return clamp01((v - a) / (b - a));
     },
   },
   {
@@ -425,8 +472,12 @@ export const EXPRESSION_FUNCTIONS: readonly ExprFunction[] = [
   },
 ];
 
+const FUNCTION_BY_NAME: ReadonlyMap<string, ExprFunction> = new Map(
+  EXPRESSION_FUNCTIONS.map((fn) => [fn.name, fn]),
+);
+
 function findFunction(name: string): ExprFunction | undefined {
-  return EXPRESSION_FUNCTIONS.find((fn) => fn.name === name);
+  return FUNCTION_BY_NAME.get(name);
 }
 
 /** Parses an expression. Throws ExprError with the position of the problem. */
@@ -444,7 +495,7 @@ export function parseExpression(src: string): Expr {
 export function parseAssignment(src: string): Assignment {
   const tokens = tokenize(src);
   const first = tokens[0];
-  if (first.type !== 'ident' || ['true', 'false', 'null'].includes(first.value)) {
+  if (first.type !== 'ident' || ['true', 'false', 'null', '__proto__'].includes(first.value)) {
     throw new ExprError('Assignment must start with a blackboard key', first.pos);
   }
   const eq = tokens[1];
@@ -487,10 +538,25 @@ function toNumber(value: unknown, op: string, pos: number): number {
 function looseEquals(a: unknown, b: unknown): boolean {
   const left = a === undefined ? null : a;
   const right = b === undefined ? null : b;
-  if (left !== null && right !== null && typeof left === 'object' && typeof right === 'object') {
-    return JSON.stringify(left) === JSON.stringify(right);
+  if (left === right) {
+    return true;
   }
-  return left === right;
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+  if (Array.isArray(left) !== Array.isArray(right)) {
+    return false;
+  }
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((item, i) => looseEquals(item, right[i]));
+  }
+  const ra = left as Record<string, unknown>;
+  const rb = right as Record<string, unknown>;
+  const keys = Object.keys(ra);
+  return (
+    keys.length === Object.keys(rb).length &&
+    keys.every((key) => Object.hasOwn(rb, key) && looseEquals(ra[key], rb[key]))
+  );
 }
 
 function evalBinary(expr: Extract<Expr, { type: 'binary' }>, ctx: EvalContext): unknown {

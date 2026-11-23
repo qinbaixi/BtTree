@@ -45,9 +45,9 @@ export interface ScenarioTestOutcome {
   blackboard: Record<string, unknown>;
 }
 
-/** True when the scenario has an `expect` object (even an empty one). */
+/** True when the scenario has an `expect` plain object (even an empty one). */
 export function hasExpectations(scenario: ScenarioJson): boolean {
-  return typeof scenario.expect === 'object' && scenario.expect !== null;
+  return isPlainObject(scenario.expect);
 }
 
 /** Effective tick budget of a scenario. */
@@ -103,27 +103,28 @@ export function runScenarioTest(
 ): ScenarioTestOutcome {
   const maxTicks = scenarioMaxTicks(scenario);
   const manual: ManualResult = scenario.manual === 'failure' ? 'failure' : 'success';
-  const blackboard =
-    typeof scenario.blackboard === 'object' && scenario.blackboard !== null
-      ? scenario.blackboard
-      : {};
+  const blackboard = isPlainObject(scenario.blackboard) ? scenario.blackboard : {};
   const seed =
     typeof scenario.seed === 'number' && Number.isFinite(scenario.seed) ? scenario.seed : 1;
   const run = createRun(root, project, { ...options, blackboard, seed });
 
   const errors: string[] = [];
   let manualResolved = 0;
-  let state = run.snapshot();
-  while (state.tick < maxTicks && !state.finished) {
+  let tick = 0;
+  let finished: ManualResult | undefined;
+  while (tick < maxTicks && !finished) {
     for (let pending = run.pendingManual(); pending; pending = run.pendingManual()) {
       run.resolveManual(pending, manual);
       manualResolved++;
     }
-    state = run.tick();
-    for (const entry of state.log) {
+    const step = run.step();
+    tick = step.tick;
+    finished = step.finished;
+    for (const entry of step.log) {
       if (entry.kind === 'error') errors.push(`tick ${entry.tick}: ${entry.message}`);
     }
   }
+  const state = run.snapshot();
 
   const result: ScenarioRunResult = state.finished ?? 'running';
   const outcome: ScenarioTestOutcome = {
@@ -155,7 +156,7 @@ export function runScenarioTest(
   if (expect.ticks !== undefined && expect.ticks !== outcome.ticks) {
     failures.push(`expected ${expect.ticks} ticks, took ${outcome.ticks}`);
   }
-  if (typeof expect.blackboard === 'object' && expect.blackboard !== null) {
+  if (isPlainObject(expect.blackboard)) {
     outcome.mismatches = compareBlackboard(expect.blackboard, state.blackboard);
     for (const m of outcome.mismatches) {
       failures.push(
@@ -177,9 +178,16 @@ export function normalizeRelPath(path: string): string {
     .replace(/^(\.\/)+/, '');
 }
 
+// Collapses repeated wildcards (consecutive globstar segments and 3+ stars) so regexes cannot backtrack exponentially.
+function simplifyGlob(glob: string): string {
+  return normalizeRelPath(glob)
+    .replace(/\*{3,}/g, '**')
+    .replace(/(?:\*\*\/)+/g, '**/');
+}
+
 /** Converts a glob (`*`, `**`, `?`) to an anchored regular expression. Paths use `/`. */
 export function globToRegExp(glob: string): RegExp {
-  const pattern = normalizeRelPath(glob);
+  const pattern = simplifyGlob(glob);
   let out = '';
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i];
@@ -204,6 +212,98 @@ export function globToRegExp(glob: string): RegExp {
   return new RegExp(`^${out}$`);
 }
 
+type GlobToken = { kind: 'lit'; ch: string } | { kind: 'any' } | { kind: 'star' } | { kind: 'globstar' } | { kind: 'globstarSlash' };
+
+const GLOB_TOKEN_CACHE = new Map<string, GlobToken[]>();
+const GLOB_CACHE_LIMIT = 500;
+
+function compileGlobTokens(glob: string): GlobToken[] {
+  const pattern = simplifyGlob(glob);
+  let tokens = GLOB_TOKEN_CACHE.get(pattern);
+  if (tokens) {
+    return tokens;
+  }
+  tokens = [];
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '*') {
+      if (pattern[i + 1] === '*') {
+        i++;
+        if (pattern[i + 1] === '/') {
+          i++;
+          tokens.push({ kind: 'globstarSlash' });
+        } else {
+          tokens.push({ kind: 'globstar' });
+        }
+      } else {
+        tokens.push({ kind: 'star' });
+      }
+    } else if (c === '?') {
+      tokens.push({ kind: 'any' });
+    } else {
+      tokens.push({ kind: 'lit', ch: c });
+    }
+  }
+  if (GLOB_TOKEN_CACHE.size >= GLOB_CACHE_LIMIT) {
+    GLOB_TOKEN_CACHE.clear();
+  }
+  GLOB_TOKEN_CACHE.set(pattern, tokens);
+  return tokens;
+}
+
+/** Polynomial-time glob matcher (immune to exponential regex backtracking for any pattern). */
+export function matchGlob(glob: string, relPath: string): boolean {
+  const tokens = compileGlobTokens(glob);
+  const text = normalizeRelPath(relPath);
+  const m = tokens.length;
+  const n = text.length;
+  // dp[j] = whether tokens[0..i-1] match text[0..j-1].
+  let dp = new Uint8Array(n + 1);
+  dp[0] = 1;
+  for (let i = 0; i < m; i++) {
+    const tok = tokens[i];
+    const next = new Uint8Array(n + 1);
+    if (tok.kind === 'globstar') {
+      let seen = 0;
+      for (let j = 0; j <= n; j++) {
+        if (dp[j]) seen = 1;
+        next[j] = seen;
+      }
+    } else if (tok.kind === 'globstarSlash') {
+      // Matches empty string OR anything ending with '/'.
+      let seen = 0;
+      for (let j = 0; j <= n; j++) {
+        if (dp[j]) {
+          next[j] = 1;
+          seen = 1;
+        }
+        if (j > 0 && text[j - 1] === '/' && seen) {
+          next[j] = 1;
+        }
+      }
+    } else if (tok.kind === 'star') {
+      let active = 0;
+      for (let j = 0; j <= n; j++) {
+        if (j > 0 && text[j - 1] === '/') {
+          active = 0;
+        }
+        if (dp[j]) active = 1;
+        next[j] = active;
+      }
+    } else if (tok.kind === 'any') {
+      for (let j = 1; j <= n; j++) {
+        if (dp[j - 1] && text[j - 1] !== '/') next[j] = 1;
+      }
+    } else {
+      for (let j = 1; j <= n; j++) {
+        if (dp[j - 1] && text[j - 1] === tok.ch) next[j] = 1;
+      }
+    }
+    dp = next;
+  }
+  return dp[n] === 1;
+}
+
 /** The `trees` patterns of a scenario as a list (empty = every tree). */
 export function scenarioTreePatterns(scenario: ScenarioJson): string[] {
   const raw = scenario.trees;
@@ -218,7 +318,7 @@ export function scenarioAppliesTo(scenario: ScenarioJson, relPath: string): bool
     return true;
   }
   const path = normalizeRelPath(relPath);
-  return patterns.some((p) => globToRegExp(p).test(path));
+  return patterns.some((p) => matchGlob(p, path));
 }
 
 // ---------- validation ----------
@@ -278,8 +378,8 @@ export function validateScenarioTestFields(scenario: ScenarioJson): ScenarioIssu
     error('expect.result', "expect.result must be 'success', 'failure' or 'running'");
   }
   if (ticks !== undefined) {
-    if (typeof ticks !== 'number' || !Number.isInteger(ticks) || ticks < 0) {
-      error('expect.ticks', 'expect.ticks must be an integer >= 0');
+    if (typeof ticks !== 'number' || !Number.isInteger(ticks) || ticks < 1) {
+      error('expect.ticks', 'expect.ticks must be an integer >= 1');
     } else if (ticks > scenarioMaxTicks(scenario)) {
       error(
         'expect.ticks',

@@ -196,4 +196,26 @@ describe('functions', () => {
   it('keeps identifiers named like functions as blackboard keys', () => {
     expect(evaluateText('min + 1', { get: () => 2, prop: () => null })).toBe(3);
   });
+
+  it('interprets standard string escapes, rejects prototype curves/assignments, enforces depth limit and key-order-independent equality', () => {
+    expect(run('"a\\nb\\tc\\rd"')).toBe('a\nb\tc\rd');
+    expect(() => run("curve('constructor', 0.5)")).toThrow(/Unknown curve/);
+    expect(() => run("curve('__proto__', 0.5)")).toThrow(/Unknown curve/);
+    expect(() => run("curve('inverseStep', sqrt(-1))")).toThrow(ExprError);
+    expect(() => parseAssignment('__proto__ = 1')).toThrow(ExprError);
+    expect(() => parseExpression('('.repeat(300) + '1' + ')'.repeat(300))).toThrow(/deeply nested/);
+    expect(() => parseExpression('1' + '+1'.repeat(300))).toThrow(/deeply nested/);
+    expect(
+      evaluateText('A == B', {
+        get: (k) => (k === 'A' ? { x: 1, y: 2 } : { y: 2, x: 1 }),
+        prop: () => null,
+      }),
+    ).toBe(true);
+    expect(
+      evaluateText('A == B', {
+        get: (k) => (k === 'A' ? [NaN] : [null]),
+        prop: () => null,
+      }),
+    ).toBe(false);
+  });
 });

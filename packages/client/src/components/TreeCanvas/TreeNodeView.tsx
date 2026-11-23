@@ -212,6 +212,62 @@ function ItemView({
   );
 }
 
+/**
+ * Custom memo comparator so global per-tick `subStatuses` and per-query `searchHits` references
+ * only re-render the nodes whose own item statuses or search hits actually changed.
+ */
+function areTreeNodeViewPropsEqual(prev: TreeNodeViewProps, next: TreeNodeViewProps): boolean {
+  if (
+    prev.node !== next.node ||
+    prev.project !== next.project ||
+    prev.x !== next.x ||
+    prev.y !== next.y ||
+    prev.selected !== next.selected ||
+    prev.selectedSubId !== next.selectedSubId ||
+    prev.interactive !== next.interactive ||
+    prev.runActive !== next.runActive ||
+    prev.runStatus !== next.runStatus ||
+    prev.runScore !== next.runScore ||
+    prev.breakpoint !== next.breakpoint ||
+    prev.exportIds !== next.exportIds ||
+    prev.childCount !== next.childCount ||
+    prev.collapsed !== next.collapsed ||
+    prev.hiddenCount !== next.hiddenCount ||
+    prev.searchCurrent !== next.searchCurrent
+  ) {
+    return false;
+  }
+  const node = next.node;
+  if (prev.subStatuses !== next.subStatuses && next.runActive) {
+    for (const dec of node.decorators) {
+      if (prev.subStatuses?.[dec.id] !== next.subStatuses?.[dec.id]) {
+        return false;
+      }
+    }
+    for (const svc of node.services) {
+      if (prev.subStatuses?.[svc.id] !== next.subStatuses?.[svc.id]) {
+        return false;
+      }
+    }
+  }
+  if (prev.searchHits !== next.searchHits) {
+    if ((prev.searchHits?.has(node.id) ?? false) !== (next.searchHits?.has(node.id) ?? false)) {
+      return false;
+    }
+    for (const dec of node.decorators) {
+      if ((prev.searchHits?.has(dec.id) ?? false) !== (next.searchHits?.has(dec.id) ?? false)) {
+        return false;
+      }
+    }
+    for (const svc of node.services) {
+      if ((prev.searchHits?.has(svc.id) ?? false) !== (next.searchHits?.has(svc.id) ?? false)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 export const TreeNodeView = memo(function TreeNodeView({
   node,
   project,
@@ -378,7 +434,7 @@ export const TreeNodeView = memo(function TreeNodeView({
           data-collapse-toggle={collapsed ? 'collapsed' : 'expanded'}
           onClick={(event) => {
             event.stopPropagation();
-            if (!canvas.isPanned()) {
+            if (event.detail === 0 || !canvas.isPanned()) {
               collapseStore.getState().toggle(node.id);
             }
           }}
@@ -389,4 +445,4 @@ export const TreeNodeView = memo(function TreeNodeView({
       )}
     </div>
   );
-});
+}, areTreeNodeViewPropsEqual);

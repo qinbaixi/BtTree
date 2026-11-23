@@ -54,12 +54,28 @@ export function setLanguage(language: Language): void {
   }
 }
 
+let hasUnsavedChanges: (() => boolean) | undefined;
+
+/** Registers a check called before `switchLanguage` reloads the page. */
+export function setUnsavedChangesCheck(check: (() => boolean) | undefined): void {
+  hasUnsavedChanges = check;
+}
+
 /** Persists the language and reloads the page so that every text is rendered again. */
 export function switchLanguage(language: Language): void {
-  setStorageItem(LANGUAGE_STORAGE_KEY, language);
-  if (language !== current) {
-    window.location.reload();
+  if (language === current) {
+    setStorageItem(LANGUAGE_STORAGE_KEY, language);
+    return;
   }
+  if (
+    hasUnsavedChanges?.() &&
+    typeof window !== 'undefined' &&
+    !window.confirm(t('You have unsaved changes. Switch language and reload without saving?'))
+  ) {
+    return;
+  }
+  setStorageItem(LANGUAGE_STORAGE_KEY, language);
+  window.location.reload();
 }
 
 export type TranslateParams = Readonly<Record<string, string | number>>;

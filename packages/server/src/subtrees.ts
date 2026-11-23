@@ -9,11 +9,12 @@ import {
   type TreeNodeJson,
 } from '@owlbt/shared';
 import { isErrno } from './errors';
-import { isPathInDir } from './project';
+import { isPathInDir, isRealPathInDir } from './project';
 import { MAX_TREE_FILE_BYTES } from './workspace';
 
 /** Most tree files one resolution loads (the open tree's references and theirs, recursively). */
 export const MAX_SUBTREE_FILES = 200;
+const SUBTREE_CONCURRENCY = 8;
 
 const UTF8_BOM = String.fromCharCode(0xfeff);
 
@@ -107,25 +108,39 @@ export async function loadSubtreeLibrary(
 
   let loaded = 0;
   while (queue.length > 0 && loaded < MAX_SUBTREE_FILES) {
-    const ref = queue.shift() as string;
-    const path = resolve(projectDir, ref);
-    if (!isPathInDir(path, projectDir)) {
-      library[ref] = {
-        error: 'outside',
-        message: 'Referenced tree must be inside the project folder',
-      };
-      continue;
+    const batch: string[] = [];
+    while (queue.length > 0 && batch.length < SUBTREE_CONCURRENCY && loaded + batch.length < MAX_SUBTREE_FILES) {
+      batch.push(queue.shift() as string);
     }
-    loaded++;
-    let pending = options.cache?.get(path);
-    if (!pending) {
-      pending = readEntry(ref, path, options);
-      options.cache?.set(path, pending);
-    }
-    const entry = await pending;
-    library[ref] = entry;
-    if ('tree' in entry) {
-      collectSubtreeRefsJson(entry.tree, project).forEach(enqueue);
+    const results = await Promise.all(
+      batch.map(async (ref) => {
+        const path = resolve(projectDir, ref);
+        if (!isPathInDir(path, projectDir) || !(await isRealPathInDir(path, projectDir))) {
+          return {
+            ref,
+            counted: false,
+            entry: {
+              error: 'outside',
+              message: 'Referenced tree must be inside the project folder',
+            } as SubtreeEntry,
+          };
+        }
+        let pending = options.cache?.get(path);
+        if (!pending) {
+          pending = readEntry(ref, path, options);
+          options.cache?.set(path, pending);
+        }
+        return { ref, counted: true, entry: await pending };
+      }),
+    );
+    for (const item of results) {
+      if (item.counted) {
+        loaded++;
+      }
+      library[item.ref] = item.entry;
+      if ('tree' in item.entry) {
+        collectSubtreeRefsJson(item.entry.tree, project).forEach(enqueue);
+      }
     }
   }
   return library;

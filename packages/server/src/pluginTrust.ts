@@ -1,6 +1,8 @@
+import { realpathSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { isErrno } from './errors';
 import { withFileLock, writeFileAtomic } from './fileLock';
 import { sha256 } from './projectFile';
 
@@ -32,10 +34,17 @@ export function trustFilePath(env: NodeJS.ProcessEnv = process.env): string {
   return fromEnv ? resolve(fromEnv) : join(homedir(), '.owlbt', 'trusted-plugins.json');
 }
 
-/** Absolute, normalised plugin path used as the key of a trust entry. */
+const CASE_INSENSITIVE_FS = process.platform === 'win32' || process.platform === 'darwin';
+
+/** Absolute, canonicalised plugin path used as the key of a trust entry (follows symlinks). */
 export function normalizePluginPath(pluginPath: string): string {
-  const absolute = resolve(pluginPath);
-  return process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+  let canonical: string;
+  try {
+    canonical = realpathSync(pluginPath);
+  } catch {
+    canonical = resolve(pluginPath);
+  }
+  return CASE_INSENSITIVE_FS ? canonical.toLowerCase() : canonical;
 }
 
 function isEntry(value: unknown): value is TrustEntry {
@@ -51,11 +60,19 @@ function isEntry(value: unknown): value is TrustEntry {
   );
 }
 
-/** The entries of the trust file. A missing, unreadable or corrupt file gives no entries. */
-export async function readTrustEntries(file: string = trustFilePath()): Promise<TrustEntry[]> {
+async function readTrustEntriesInternal(file: string, strictIo: boolean): Promise<TrustEntry[]> {
+  let raw: string;
+  try {
+    raw = await readFile(file, 'utf8');
+  } catch (err) {
+    if (strictIo && !isErrno(err, 'ENOENT')) {
+      throw err;
+    }
+    return [];
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(await readFile(file, 'utf8'));
+    parsed = JSON.parse(raw);
   } catch {
     return [];
   }
@@ -66,9 +83,29 @@ export async function readTrustEntries(file: string = trustFilePath()): Promise<
   return Array.isArray(plugins) ? plugins.filter(isEntry) : [];
 }
 
+/** The entries of the trust file. A missing, unreadable or corrupt file gives no entries. */
+export async function readTrustEntries(file: string = trustFilePath()): Promise<TrustEntry[]> {
+  return readTrustEntriesInternal(file, false);
+}
+
 async function writeTrustEntries(entries: TrustEntry[], file: string): Promise<void> {
   await mkdir(dirname(file), { recursive: true });
   await writeFileAtomic(file, `${JSON.stringify({ plugins: entries }, null, 2)}\n`);
+}
+
+/** Evaluates trust status against already-read trust entries (avoids redundant disk reads). */
+export function trustStatusFromEntries(
+  pluginPath: string,
+  content: string,
+  entries: readonly TrustEntry[],
+): TrustStatus {
+  const key = normalizePluginPath(pluginPath);
+  const entry = entries.find((item) => item.path === key);
+  if (entry === undefined) {
+    return { trusted: false, changed: false };
+  }
+  const trusted = entry.sha256 === sha256(content);
+  return { trusted, changed: !trusted };
 }
 
 /** Trust status of the plugin with the given current content. */
@@ -77,13 +114,7 @@ export async function trustStatus(
   content: string,
   file: string = trustFilePath(),
 ): Promise<TrustStatus> {
-  const key = normalizePluginPath(pluginPath);
-  const entry = (await readTrustEntries(file)).find((item) => item.path === key);
-  if (entry === undefined) {
-    return { trusted: false, changed: false };
-  }
-  const trusted = entry.sha256 === sha256(content);
-  return { trusted, changed: !trusted };
+  return trustStatusFromEntries(pluginPath, content, await readTrustEntries(file));
 }
 
 /** True when the current content of the plugin is the content the user trusted. */
@@ -95,25 +126,47 @@ export async function isTrusted(
   return (await trustStatus(pluginPath, content, file)).trusted;
 }
 
+/** Trusts one or more plugin files atomically as they are on disk now. Replaces earlier entries for those paths. */
+export async function trustMany(
+  pluginPaths: readonly string[],
+  file: string = trustFilePath(),
+): Promise<void> {
+  await withFileLock(file, async () => {
+    const nextEntries: TrustEntry[] = [];
+    for (const pluginPath of pluginPaths) {
+      const content = await readFile(pluginPath, 'utf8');
+      nextEntries.push({ path: normalizePluginPath(pluginPath), sha256: sha256(content) });
+    }
+    const keys = new Set(nextEntries.map((entry) => entry.path));
+    const entries = (await readTrustEntriesInternal(file, true)).filter(
+      (item) => !keys.has(item.path),
+    );
+    entries.push(...nextEntries);
+    await writeTrustEntries(entries, file);
+  });
+}
+
 /** Trusts the plugin as it is on disk now. Replaces any earlier entry for the path. */
 export async function trust(pluginPath: string, file: string = trustFilePath()): Promise<void> {
-  const content = await readFile(pluginPath, 'utf8');
-  const key = normalizePluginPath(pluginPath);
+  await trustMany([pluginPath], file);
+}
+
+/** Removes the trust entries of one or more plugin files atomically. */
+export async function revokeMany(
+  pluginPaths: readonly string[],
+  file: string = trustFilePath(),
+): Promise<void> {
+  const keys = new Set(pluginPaths.map(normalizePluginPath));
   await withFileLock(file, async () => {
-    const entries = (await readTrustEntries(file)).filter((item) => item.path !== key);
-    entries.push({ path: key, sha256: sha256(content) });
-    await writeTrustEntries(entries, file);
+    const entries = await readTrustEntriesInternal(file, true);
+    const kept = entries.filter((item) => !keys.has(item.path));
+    if (kept.length !== entries.length) {
+      await writeTrustEntries(kept, file);
+    }
   });
 }
 
 /** Removes the trust entry of the plugin. Does nothing when there is none. */
 export async function revoke(pluginPath: string, file: string = trustFilePath()): Promise<void> {
-  const key = normalizePluginPath(pluginPath);
-  await withFileLock(file, async () => {
-    const entries = await readTrustEntries(file);
-    const kept = entries.filter((item) => item.path !== key);
-    if (kept.length !== entries.length) {
-      await writeTrustEntries(kept, file);
-    }
-  });
+  await revokeMany([pluginPath], file);
 }

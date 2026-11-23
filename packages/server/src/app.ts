@@ -44,6 +44,14 @@ export function createApp(options: AppOptions = {}): express.Express {
   const app = express();
   app.disable('x-powered-by');
 
+  // Prevent clickjacking (e.g. framing the local UI to trigger plugin trust) and MIME sniffing.
+  app.use((_req, res, next) => {
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    next();
+  });
+
   // Host and Origin checks cover every route, including the static client.
   app.use(localGuard(allowedHostnames(options.allowedHosts)));
   app.use(

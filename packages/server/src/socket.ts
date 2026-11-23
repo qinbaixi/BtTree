@@ -65,10 +65,14 @@ export function attachProjectWatch(io: Server, registry: FileWatcherRegistry): v
         fail('No project found');
         return;
       }
-      watchedFile = projectPath;
-      registry.addListener(projectPath, socket.id, (payload) => {
-        socket.emit(PROJECT_RELOAD_EVENT, payload);
-      });
+      try {
+        registry.addListener(projectPath, socket.id, (payload) => {
+          socket.emit(PROJECT_RELOAD_EVENT, payload);
+        });
+        watchedFile = projectPath;
+      } catch (err) {
+        fail(err instanceof Error ? err.message : String(err));
+      }
     })();
   });
 }

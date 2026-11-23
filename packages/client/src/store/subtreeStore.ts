@@ -57,6 +57,21 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** Key-order-independent comparison of two subtree libraries. */
+function librariesEqual(a: SubtreeLibrary, b: SubtreeLibrary): boolean {
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  if (keysA.length !== keysB.length) {
+    return false;
+  }
+  for (const key of keysA) {
+    if (!Object.hasOwn(b, key) || JSON.stringify(a[key]) !== JSON.stringify(b[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function createSubtreeStore(overrides: Partial<SubtreeStoreDeps> = {}) {
   const deps: SubtreeStoreDeps = { ...defaultDeps, ...overrides };
 
@@ -99,7 +114,7 @@ export function createSubtreeStore(overrides: Partial<SubtreeStoreDeps> = {}) {
         }
         const before = get().library;
         const library = full ? result.library : { ...before, ...result.library };
-        const changed = JSON.stringify(before) !== JSON.stringify(library);
+        const changed = !librariesEqual(before, library);
         const self = result.self ?? undefined;
         set({
           treePath,
@@ -141,8 +156,9 @@ export function createSubtreeStore(overrides: Partial<SubtreeStoreDeps> = {}) {
       async refresh() {
         const refs = refsOfTree();
         if (refs.length === 0) {
+          token++;
           const changed = Object.keys(get().library).length > 0;
-          set({ library: {}, problems: new Map() });
+          set({ library: {}, problems: new Map(), loading: false, error: undefined });
           return changed;
         }
         return load(refs, true);
@@ -212,6 +228,10 @@ export function startSubtreeSync(
   });
   const unsubscribeProject = projects.subscribe((state, previous) => {
     if (state.project !== previous.project) {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       store.getState().recompute();
       void store.getState().refresh();
     }

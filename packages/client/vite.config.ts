@@ -6,6 +6,30 @@ const backend = 'http://127.0.0.1:9000';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('d3-')) {
+              return 'd3';
+            }
+            if (id.includes('socket.io-client') || id.includes('engine.io-client')) {
+              return 'socket';
+            }
+            if (
+              id.includes('react-dom') ||
+              id.includes('react-router') ||
+              /[\\/]react[\\/]/.test(id)
+            ) {
+              return 'react';
+            }
+          }
+          return undefined;
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     proxy: {
